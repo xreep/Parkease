@@ -1,4 +1,4 @@
-# SmartPark — Smart Parking Slot Rental & Availability Platform
+# ParkEase — Smart Parking Slot Rental & Availability Platform
 
 A web platform where private parking owners rent out unused slots and drivers find, reserve and pay for parking in advance — near metro stations, office complexes and commercial hubs across India.
 
@@ -58,9 +58,9 @@ Open http://localhost:5173.
 
 | Role | Email | Password |
 |---|---|---|
-| Admin | admin@smartpark.dev | Demo@1234 |
-| Owner (verified) | owner@smartpark.dev | Demo@1234 |
-| Driver | driver@smartpark.dev | Demo@1234 |
+| Admin | admin@parkease.dev | Demo@1234 |
+| Owner (verified) | owner@parkease.dev | Demo@1234 |
+| Driver | driver@parkease.dev | Demo@1234 |
 
 Change the password with the `DEMO_PASSWORD` environment variable (applies only when the demo accounts are first created).
 

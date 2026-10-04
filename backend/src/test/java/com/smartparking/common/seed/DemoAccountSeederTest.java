@@ -51,6 +51,6 @@ class DemoAccountSeederTest {
         assertThat(passwordEncoder.matches("Demo@1234", driver.getPasswordHash())).isTrue();
         assertThat(ownerProfiles.findById(owner.getId())).get()
                 .extracting(p -> p.getVerificationStatus()).isEqualTo(VerificationStatus.VERIFIED);
-        assertThat(users.findAll().stream().filter(u -> u.getEmail().endsWith("@smartpark.dev"))).hasSize(3);
+        assertThat(users.findAll().stream().filter(u -> u.getEmail().endsWith("@parkease.dev"))).hasSize(3);
     }
 }

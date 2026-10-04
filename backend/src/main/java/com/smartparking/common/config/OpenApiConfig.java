@@ -15,7 +15,7 @@ public class OpenApiConfig {
     OpenAPI smartParkingOpenApi() {
         return new OpenAPI()
                 .info(new Info()
-                        .title("SmartPark API")
+                        .title("ParkEase API")
                         .version("v1")
                         .description("Smart Parking Slot Rental & Availability Platform"))
                 .components(new Components().addSecuritySchemes("bearerAuth",
