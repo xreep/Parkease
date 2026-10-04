@@ -39,6 +39,7 @@ export function useStateDetail(slug: string) {
   return useQuery({
     queryKey: ['state', slug],
     queryFn: async () => (await api.get<StateDetail>(`/states/${slug}`)).data,
+    enabled: slug !== '',
     staleTime: Infinity,
   })
 }
