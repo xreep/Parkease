@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import MockAdapter from 'axios-mock-adapter'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -31,7 +31,7 @@ describe('RegisterPage', () => {
     expect(await screen.findByText('Passwords do not match')).toBeInTheDocument()
   })
 
-  it('registers an owner chosen via ?role=OWNER and shows server field errors', async () => {
+  it('registers an owner chosen via ?role=OWNER and shows the server error', async () => {
     mock.onPost('/auth/register').reply((config) => {
       const body = JSON.parse(config.data)
       expect(body.role).toBe('OWNER')
@@ -43,5 +43,21 @@ describe('RegisterPage', () => {
     await userEvent.click(screen.getByRole('button', { name: /create account/i }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('An account with this email already exists')
+  })
+
+  it('shows server field errors under the matching field', async () => {
+    mock.onPost('/auth/register').reply(400, {
+      code: 'VALIDATION_FAILED',
+      detail: 'Some fields are invalid',
+      fieldErrors: [{ field: 'email', message: 'must be a well-formed email address' }],
+    })
+    renderApp('/register')
+    await fill()
+
+    await userEvent.click(screen.getByRole('button', { name: /create account/i }))
+
+    const email = await screen.findByLabelText('Email')
+    await waitFor(() => expect(email).toHaveAccessibleDescription('must be a well-formed email address'))
+    expect(screen.getByRole('alert')).toHaveTextContent('Some fields are invalid')
   })
 })

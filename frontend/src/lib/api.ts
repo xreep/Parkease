@@ -1,4 +1,4 @@
-import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
+import axios, { isAxiosError, type AxiosError, type InternalAxiosRequestConfig } from 'axios'
 import { tokenStore } from './tokenStore'
 
 export const api = axios.create({
@@ -17,18 +17,27 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-let refreshing: Promise<string | null> | null = null
+type RefreshResult = { token: string } | { expired: true } | { failed: true }
 
-async function refreshAccessToken(): Promise<string | null> {
+let refreshing: Promise<RefreshResult> | null = null
+
+/**
+ * Only a 401/403 from the refresh endpoint means the session is really over.
+ * Network errors and 5xx are transient: keep the tokens so the user stays signed in.
+ */
+async function refreshAccessToken(): Promise<RefreshResult> {
   const refreshToken = tokenStore.getRefresh()
-  if (!refreshToken) return null
+  if (!refreshToken) return { expired: true }
   try {
     const { data } = await api.post<{ accessToken: string; refreshToken: string }>('/auth/refresh', { refreshToken })
     tokenStore.set(data.accessToken, data.refreshToken)
-    return data.accessToken
-  } catch {
-    tokenStore.clear()
-    return null
+    return { token: data.accessToken }
+  } catch (e) {
+    if (isAxiosError(e) && [401, 403].includes(e.response?.status ?? 0)) {
+      tokenStore.clear()
+      return { expired: true }
+    }
+    return { failed: true }
   }
 }
 
@@ -44,13 +53,15 @@ api.interceptors.response.use(
       refreshing ??= refreshAccessToken().finally(() => {
         refreshing = null
       })
-      const token = await refreshing
-      if (token) {
-        original.headers.Authorization = `Bearer ${token}`
+      const result = await refreshing
+      if ('token' in result) {
+        original.headers.Authorization = `Bearer ${result.token}`
         return api(original)
       }
-      tokenStore.clear()
-      onSessionExpired?.()
+      if ('expired' in result) {
+        tokenStore.clear()
+        onSessionExpired?.()
+      }
     }
     return Promise.reject(error)
   },

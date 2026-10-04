@@ -21,9 +21,9 @@ export function Navbar() {
   const [open, setOpen] = useState(false)
 
   async function handleLogout() {
+    navigate('/')
     await logout()
     setOpen(false)
-    navigate('/')
   }
 
   const links = (
@@ -37,7 +37,13 @@ export function Navbar() {
         </>
       ) : (
         <>
-          <NavLink to="/register?role=OWNER" className={linkClass} onClick={() => setOpen(false)}>List your space</NavLink>
+          <Link
+            to="/register?role=OWNER"
+            onClick={() => setOpen(false)}
+            className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+          >
+            List your space
+          </Link>
           <NavLink to="/login" className={linkClass} onClick={() => setOpen(false)}>Log in</NavLink>
           <Link
             to="/register"
@@ -64,6 +70,7 @@ export function Navbar() {
           <button
             type="button"
             aria-label={open ? 'Close menu' : 'Open menu'}
+            aria-expanded={open}
             onClick={() => setOpen((o) => !o)}
             className="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
           >

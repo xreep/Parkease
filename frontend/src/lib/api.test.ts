@@ -58,4 +58,35 @@ describe('api client', () => {
 
     expect(refreshSpy).not.toHaveBeenCalled()
   })
+
+  it('keeps tokens and does not expire the session when refresh fails transiently', async () => {
+    tokenStore.set('old', 'r1')
+    const onExpired = vi.fn()
+    setSessionExpiredHandler(onExpired)
+    mock.onGet('/me').reply(401, { code: 'UNAUTHORIZED' })
+    mock.onPost('/auth/refresh').networkError()
+
+    await expect(api.get('/me')).rejects.toBeTruthy()
+
+    expect(tokenStore.getAccess()).toBe('old')
+    expect(tokenStore.getRefresh()).toBe('r1')
+    expect(onExpired).not.toHaveBeenCalled()
+  })
+
+  it('shares one refresh between concurrent 401s and retries both', async () => {
+    tokenStore.set('old', 'r1')
+    mock.onGet('/me').reply((config) =>
+      config.headers?.Authorization === 'Bearer new' ? [200, { id: 1 }] : [401, { code: 'UNAUTHORIZED' }],
+    )
+    mock.onGet('/other').reply((config) =>
+      config.headers?.Authorization === 'Bearer new' ? [200, { id: 2 }] : [401, { code: 'UNAUTHORIZED' }],
+    )
+    mock.onPost('/auth/refresh').reply(200, { accessToken: 'new', refreshToken: 'r2' })
+
+    const [a, b] = await Promise.all([api.get('/me'), api.get('/other')])
+
+    expect(a.data).toEqual({ id: 1 })
+    expect(b.data).toEqual({ id: 2 })
+    expect(mock.history.post.filter((r) => r.url === '/auth/refresh')).toHaveLength(1)
+  })
 })
