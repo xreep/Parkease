@@ -141,6 +141,26 @@ class AuthControllerTest {
     }
 
     @Test
+    void reusingARotatedRefreshTokenRevokesAllSessions() throws Exception {
+        String oldRefresh = refreshToken(register(mvc, "reuse@example.com", "DRIVER"));
+        String rotated = postJson("/api/v1/auth/refresh", """
+                {"refreshToken":"%s"}""".formatted(oldRefresh))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String newRefresh = refreshToken(rotated);
+
+        postJson("/api/v1/auth/refresh", """
+                {"refreshToken":"%s"}""".formatted(oldRefresh))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_REFRESH_TOKEN"));
+
+        postJson("/api/v1/auth/refresh", """
+                {"refreshToken":"%s"}""".formatted(newRefresh))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_REFRESH_TOKEN"));
+    }
+
+    @Test
     void logoutRevokesTheRefreshToken() throws Exception {
         String refresh = refreshToken(register(mvc, "logout@example.com", "DRIVER"));
         String body = """

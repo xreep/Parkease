@@ -3,6 +3,7 @@ package com.smartparking.user;
 import static com.smartparking.support.AuthTestSupport.PASSWORD;
 import static com.smartparking.support.AuthTestSupport.accessToken;
 import static com.smartparking.support.AuthTestSupport.bearer;
+import static com.smartparking.support.AuthTestSupport.refreshToken;
 import static com.smartparking.support.AuthTestSupport.register;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -33,10 +34,13 @@ class MeControllerTest {
     UserRepository users;
 
     String auth;
+    String refresh;
 
     @BeforeEach
     void setUp() throws Exception {
-        auth = bearer(accessToken(register(mvc, "me@example.com", "DRIVER")));
+        String registered = register(mvc, "me@example.com", "DRIVER");
+        auth = bearer(accessToken(registered));
+        refresh = refreshToken(registered);
         emails.clear();
     }
 
@@ -75,6 +79,16 @@ class MeControllerTest {
     }
 
     @Test
+    void rejectsWhitespaceOnlyName() throws Exception {
+        mvc.perform(patch("/api/v1/me").header(HttpHeaders.AUTHORIZATION, auth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"   "}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors[0].field").value("name"));
+    }
+
+    @Test
     void changePasswordRequiresCurrentPassword() throws Exception {
         mvc.perform(post("/api/v1/me/password").header(HttpHeaders.AUTHORIZATION, auth)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -96,6 +110,11 @@ class MeControllerTest {
                         .content("""
                                 {"email":"me@example.com","password":"another123"}"""))
                 .andExpect(status().isOk());
+
+        mvc.perform(post("/api/v1/auth/refresh").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"refreshToken":"%s"}""".formatted(refresh)))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

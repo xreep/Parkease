@@ -40,7 +40,7 @@ public class AccountTokenService {
     }
 
     public void verifyEmail(String rawToken) {
-        consume(rawToken, EmailTokenPurpose.VERIFY_EMAIL).getUser().setEmailVerified(true);
+        consume(rawToken, EmailTokenPurpose.VERIFY_EMAIL).setEmailVerified(true);
     }
 
     public void requestPasswordReset(String email) {
@@ -54,7 +54,7 @@ public class AccountTokenService {
     }
 
     public void resetPassword(String rawToken, String newPassword) {
-        User user = consume(rawToken, EmailTokenPurpose.RESET_PASSWORD).getUser();
+        User user = consume(rawToken, EmailTokenPurpose.RESET_PASSWORD);
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         refreshTokens.revokeAllForUser(user.getId(), clock.instant());
     }
@@ -70,12 +70,19 @@ public class AccountTokenService {
         return raw;
     }
 
-    private EmailToken consume(String rawToken, EmailTokenPurpose purpose) {
+    /** Atomically marks the token used (so concurrent requests cannot both succeed) and returns its user. */
+    private User consume(String rawToken, EmailTokenPurpose purpose) {
         Instant now = clock.instant();
         EmailToken token = emailTokens.findByTokenHashAndPurpose(Tokens.sha256(rawToken), purpose)
-                .filter(t -> t.isUsable(now))
-                .orElseThrow(() -> ApiException.badRequest("INVALID_TOKEN", "This link is invalid or has expired"));
-        token.setUsedAt(now);
-        return token;
+                .orElseThrow(AccountTokenService::invalidToken);
+        Long userId = token.getUser().getId();
+        if (emailTokens.markUsedIfUsable(token.getId(), now) == 0) {
+            throw invalidToken();
+        }
+        return users.findById(userId).orElseThrow(AccountTokenService::invalidToken);
+    }
+
+    private static ApiException invalidToken() {
+        return ApiException.badRequest("INVALID_TOKEN", "This link is invalid or has expired");
     }
 }
