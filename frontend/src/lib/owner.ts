@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
+import { useCallback } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
 import type { ListingStatus, VerificationStatus } from './format'
 import { uploadFile } from './uploads'
@@ -185,4 +186,17 @@ export function useHours(id: number | undefined) {
 
 export function useBlocks(id: number | undefined) {
   return useQuery({ queryKey: ['owner', 'blocks', id], queryFn: () => listBlocks(id!), enabled: id !== undefined })
+}
+
+/** Returns a function that refetches the listing and the owner's listing list (after any edit). */
+export function useRefreshListing(id: number) {
+  const queryClient = useQueryClient()
+  return useCallback(
+    () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['owner', 'listing', id] }),
+        queryClient.invalidateQueries({ queryKey: ['owner', 'listings'] }),
+      ]).then(() => undefined),
+    [queryClient, id],
+  )
 }

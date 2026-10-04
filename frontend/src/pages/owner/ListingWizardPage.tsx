@@ -1,13 +1,14 @@
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { FormError } from '../../components/AuthCard'
 import { Spinner } from '../../components/ui/Spinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { errorMessage } from '../../lib/errors'
-import { useListing } from '../../lib/owner'
+import { useListing, useRefreshListing } from '../../lib/owner'
 import { ComingNextStep } from './wizard/ComingNextStep'
 import { LocationStep } from './wizard/LocationStep'
+import { PhotosStep } from './wizard/PhotosStep'
+import { SlotsStep } from './wizard/SlotsStep'
 
 const STEPS = ['Location', 'Photos', 'Slots', 'Pricing', 'Hours', 'Review'] as const
 
@@ -76,7 +77,7 @@ function NewListingWizard() {
 
 function EditListingWizard({ id }: { id: number }) {
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
+  const refresh = useRefreshListing(id)
   const [params] = useSearchParams()
   const step = parseStep(params.get('step'))
   const { data: listing, error, isPending } = useListing(id)
@@ -91,10 +92,7 @@ function EditListingWizard({ id }: { id: number }) {
   if (error) return <FormError message={errorMessage(error)} />
 
   async function onSaved(next?: number) {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['owner', 'listing', id] }),
-      queryClient.invalidateQueries({ queryKey: ['owner', 'listings'] }),
-    ])
+    await refresh()
     if (next !== undefined) navigate(`/owner/listings/${id}/edit?step=${next}`)
   }
 
@@ -118,7 +116,10 @@ function EditListingWizard({ id }: { id: number }) {
         )}
       </div>
       <Stepper current={step} listingId={id} />
-      {step === 1 ? <LocationStep {...stepProps} /> : <ComingNextStep label={STEPS[step - 1]} />}
+      {step === 1 && <LocationStep {...stepProps} />}
+      {step === 2 && <PhotosStep {...stepProps} />}
+      {step === 3 && <SlotsStep {...stepProps} />}
+      {step > 3 && <ComingNextStep label={STEPS[step - 1]} />}
     </div>
   )
 }

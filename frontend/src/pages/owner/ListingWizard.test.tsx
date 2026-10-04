@@ -1,10 +1,10 @@
 import '@testing-library/jest-dom/vitest'
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import MockAdapter from 'axios-mock-adapter'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../lib/api'
-import type { ListingDetail } from '../../lib/owner'
+import type { ListingDetail, Photo, Slot } from '../../lib/owner'
 import { tokenStore } from '../../lib/tokenStore'
 import { renderApp } from '../../test/renderApp'
 import { toast } from 'sonner'
@@ -211,6 +211,257 @@ describe('listing wizard', () => {
       const nav = await screen.findByRole('navigation', { name: 'Listing steps' })
       expect(within(nav).getByRole('link', { name: 'Hours' })).toHaveAttribute('href', '/owner/listings/7/edit?step=5')
       expect(within(nav).getByRole('link', { name: 'Pricing' })).toHaveAttribute('aria-current', 'step')
+    })
+  })
+
+  describe('step 2: photos', () => {
+    const photoA: Photo = { id: 11, url: '/files/a.jpg', sortOrder: 0 }
+    const photoB: Photo = { id: 12, url: '/files/b.jpg', sortOrder: 1 }
+    const withPhotos = (photos: Photo[]) => ({ ...listing, photos })
+
+    it('makes the second photo the cover by reordering', async () => {
+      mock.onGet('/owner/listings/7').reply(200, withPhotos([photoA, photoB]))
+      mock.onPut('/owner/listings/7/photos/order').reply(200, [])
+      renderApp('/owner/listings/7/edit?step=2')
+
+      expect(within(await screen.findByRole('listitem', { name: 'Photo 1' })).getByText('Cover')).toBeInTheDocument()
+      await userEvent.click(screen.getByRole('button', { name: 'Make photo 2 the cover' }))
+
+      await waitFor(() => expect(mock.history.put).toHaveLength(1))
+      expect(JSON.parse(mock.history.put[0].data)).toEqual({ photoIds: [12, 11] })
+    })
+
+    it('moves a photo right and left', async () => {
+      mock.onGet('/owner/listings/7').reply(200, withPhotos([photoA, photoB]))
+      mock.onPut('/owner/listings/7/photos/order').reply(200, [])
+      renderApp('/owner/listings/7/edit?step=2')
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Move photo 1 right' }))
+      await waitFor(() => expect(mock.history.put).toHaveLength(1))
+      expect(JSON.parse(mock.history.put[0].data)).toEqual({ photoIds: [12, 11] })
+      expect(screen.getByRole('button', { name: 'Move photo 1 left' })).toBeDisabled()
+    })
+
+    it('reorders by dragging one tile onto another', async () => {
+      mock.onGet('/owner/listings/7').reply(200, withPhotos([photoA, photoB]))
+      mock.onPut('/owner/listings/7/photos/order').reply(200, [])
+      renderApp('/owner/listings/7/edit?step=2')
+
+      const first = await screen.findByRole('listitem', { name: 'Photo 1' })
+      const second = screen.getByRole('listitem', { name: 'Photo 2' })
+      const dataTransfer = { setData: vi.fn(), effectAllowed: '', dropEffect: '' }
+      fireEvent.dragStart(first, { dataTransfer })
+      fireEvent.dragOver(second, { dataTransfer })
+      fireEvent.drop(second, { dataTransfer })
+
+      await waitFor(() => expect(mock.history.put).toHaveLength(1))
+      expect(JSON.parse(mock.history.put[0].data)).toEqual({ photoIds: [12, 11] })
+    })
+
+    it('deletes a photo', async () => {
+      mock.onGet('/owner/listings/7').replyOnce(200, withPhotos([photoA, photoB])).onGet('/owner/listings/7').reply(200, withPhotos([photoB]))
+      mock.onDelete('/owner/listings/7/photos/11').reply(204)
+      renderApp('/owner/listings/7/edit?step=2')
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Delete photo 1' }))
+
+      await waitFor(() => expect(mock.history.delete).toHaveLength(1))
+      await waitFor(() => expect(screen.queryByRole('listitem', { name: 'Photo 2' })).not.toBeInTheDocument())
+    })
+
+    it('uploads a chosen file', async () => {
+      const uploaded = { id: 13, url: '/files/c.jpg', sortOrder: 1 }
+      mock.onGet('/owner/listings/7').replyOnce(200, withPhotos([photoA])).onGet('/owner/listings/7').reply(200, withPhotos([photoA, uploaded]))
+      mock.onPost('/owner/listings/7/photos').reply(201, uploaded)
+      renderApp('/owner/listings/7/edit?step=2')
+
+      const input = await screen.findByLabelText('Photo files')
+      expect(input).toHaveAttribute('accept', 'image/jpeg,image/png,image/webp')
+      await userEvent.upload(input, new File(['jpeg'], 'gate.jpg', { type: 'image/jpeg' }))
+
+      await waitFor(() => expect(mock.history.post).toHaveLength(1))
+      const post = mock.history.post[0]
+      expect(post.url).toBe('/owner/listings/7/photos')
+      expect((post.data as FormData).get('file')).toBeInstanceOf(File)
+      expect(await screen.findByRole('listitem', { name: 'Photo 2' })).toBeInTheDocument()
+    })
+
+    it('skips files beyond the 8 photo limit', async () => {
+      const seven = Array.from({ length: 7 }, (_, i) => ({ id: 20 + i, url: `/files/${i}.jpg`, sortOrder: i }))
+      mock.onGet('/owner/listings/7').reply(200, withPhotos(seven))
+      mock.onPost('/owner/listings/7/photos').reply(201, { id: 30, url: '/files/x.jpg', sortOrder: 7 })
+      renderApp('/owner/listings/7/edit?step=2')
+
+      const files = ['a', 'b', 'c'].map((n) => new File(['x'], `${n}.jpg`, { type: 'image/jpeg' }))
+      await userEvent.upload(await screen.findByLabelText('Photo files'), files)
+
+      await waitFor(() => expect(mock.history.post).toHaveLength(1))
+      expect(toast.error).toHaveBeenCalledWith('A listing can have at most 8 photos')
+    })
+
+    it('needs a photo before continuing', async () => {
+      mock.onGet('/owner/listings/7').reply(200, withPhotos([]))
+      renderApp('/owner/listings/7/edit?step=2')
+
+      expect(await screen.findByText('Add at least one photo of the entrance and the parking area.')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
+      expect(screen.getByText('Add at least one photo to continue')).toBeInTheDocument()
+    })
+
+    it('continues to the slots step', async () => {
+      mock.onGet('/owner/listings/7').reply(200, withPhotos([photoA]))
+      renderApp('/owner/listings/7/edit?step=2')
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+
+      expect(await screen.findByRole('link', { name: 'Slots' })).toHaveAttribute('aria-current', 'step')
+    })
+
+    it('goes back to the location step', async () => {
+      mock.onGet('/owner/listings/7').reply(200, withPhotos([photoA]))
+      renderApp('/owner/listings/7/edit?step=2')
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Back' }))
+
+      expect(await screen.findByRole('link', { name: 'Location' })).toHaveAttribute('aria-current', 'step')
+    })
+  })
+
+  describe('step 3: slots', () => {
+    const slotA: Slot = { id: 31, label: 'A-01', vehicleType: 'FOUR_WHEELER', size: 'MEDIUM', active: true }
+    const slotB: Slot = { id: 32, label: 'B-01', vehicleType: 'TWO_WHEELER', size: 'SMALL', active: true }
+    const withSlots = (slots: Slot[]) => ({ ...listing, slots })
+
+    it('adds slots in bulk with a live preview', async () => {
+      mock.onGet('/owner/listings/7').reply(200, withSlots([]))
+      mock.onPost('/owner/listings/7/slots/bulk').reply(201, [])
+      renderApp('/owner/listings/7/edit?step=3')
+
+      const form = within(await screen.findByRole('form', { name: 'Add many slots' }))
+      expect(form.getByText('Creates A-01 to A-10')).toBeInTheDocument()
+      const prefix = form.getByLabelText('Label prefix')
+      await userEvent.clear(prefix)
+      await userEvent.type(prefix, 'B-')
+      const count = form.getByLabelText('How many')
+      await userEvent.clear(count)
+      await userEvent.type(count, '3')
+      await userEvent.selectOptions(form.getByLabelText('Vehicle type'), 'Two-wheeler')
+      await userEvent.selectOptions(form.getByLabelText('Size'), 'Small')
+      expect(form.getByText('Creates B-01 to B-03')).toBeInTheDocument()
+      await userEvent.click(form.getByRole('button', { name: 'Add slots' }))
+
+      await waitFor(() => expect(mock.history.post).toHaveLength(1))
+      expect(JSON.parse(mock.history.post[0].data)).toEqual({
+        prefix: 'B-', startNumber: 1, count: 3, vehicleType: 'TWO_WHEELER', size: 'SMALL',
+      })
+    })
+
+    it('adds a single slot', async () => {
+      mock.onGet('/owner/listings/7').reply(200, withSlots([]))
+      mock.onPost('/owner/listings/7/slots').reply(201, slotA)
+      renderApp('/owner/listings/7/edit?step=3')
+
+      const form = within(await screen.findByRole('form', { name: 'Add one slot' }))
+      await userEvent.type(form.getByLabelText('Slot label'), 'Bay 1')
+      await userEvent.selectOptions(form.getByLabelText('Vehicle type'), 'Car')
+      await userEvent.selectOptions(form.getByLabelText('Size'), 'Large')
+      await userEvent.click(form.getByRole('button', { name: 'Add slot' }))
+
+      await waitFor(() => expect(mock.history.post).toHaveLength(1))
+      expect(JSON.parse(mock.history.post[0].data)).toEqual({ label: 'Bay 1', vehicleType: 'FOUR_WHEELER', size: 'LARGE' })
+    })
+
+    it('shows the server message when a label is taken', async () => {
+      mock.onGet('/owner/listings/7').reply(200, withSlots([slotA]))
+      mock.onPost('/owner/listings/7/slots').reply(409, { code: 'SLOT_LABEL_TAKEN', detail: 'A slot named A-01 already exists' })
+      renderApp('/owner/listings/7/edit?step=3')
+
+      const form = within(await screen.findByRole('form', { name: 'Add one slot' }))
+      await userEvent.type(form.getByLabelText('Slot label'), 'A-01')
+      await userEvent.click(form.getByRole('button', { name: 'Add slot' }))
+
+      expect(await screen.findByText('A slot named A-01 already exists')).toBeInTheDocument()
+    })
+
+    it('validates the bulk form before sending', async () => {
+      mock.onGet('/owner/listings/7').reply(200, withSlots([]))
+      renderApp('/owner/listings/7/edit?step=3')
+
+      const form = within(await screen.findByRole('form', { name: 'Add many slots' }))
+      const count = form.getByLabelText('How many')
+      await userEvent.clear(count)
+      await userEvent.type(count, '51')
+      await userEvent.click(form.getByRole('button', { name: 'Add slots' }))
+
+      expect(await form.findByText('Add between 1 and 50 slots at a time')).toBeInTheDocument()
+      expect(mock.history.post).toHaveLength(0)
+    })
+
+    it('summarises the slots and lists them', async () => {
+      mock.onGet('/owner/listings/7').reply(200, withSlots([slotA, slotB]))
+      renderApp('/owner/listings/7/edit?step=3')
+
+      expect(await screen.findByText('2 slots · 1 car · 1 two-wheeler')).toBeInTheDocument()
+      const row = within(screen.getByRole('listitem', { name: 'Slot B-01' }))
+      expect(row.getByText('Two-wheeler · Small')).toBeInTheDocument()
+    })
+
+    it('deactivates a slot', async () => {
+      mock.onGet('/owner/listings/7').reply(200, withSlots([slotA]))
+      mock.onPut('/owner/listings/7/slots/31').reply(200, { ...slotA, active: false })
+      renderApp('/owner/listings/7/edit?step=3')
+
+      await userEvent.click(await screen.findByRole('checkbox', { name: 'Slot A-01 active' }))
+
+      await waitFor(() => expect(mock.history.put).toHaveLength(1))
+      expect(JSON.parse(mock.history.put[0].data)).toEqual({ label: 'A-01', vehicleType: 'FOUR_WHEELER', size: 'MEDIUM', active: false })
+    })
+
+    it('edits a slot in a dialog', async () => {
+      mock.onGet('/owner/listings/7').reply(200, withSlots([slotA]))
+      mock.onPut('/owner/listings/7/slots/31').reply(200, slotA)
+      renderApp('/owner/listings/7/edit?step=3')
+
+      await userEvent.click(within(await screen.findByRole('listitem', { name: 'Slot A-01' })).getByRole('button', { name: 'Edit' }))
+      const dialog = within(screen.getByRole('dialog', { name: 'Edit slot A-01' }))
+      const label = dialog.getByLabelText('Slot label')
+      await userEvent.clear(label)
+      await userEvent.type(label, 'A-1')
+      await userEvent.selectOptions(dialog.getByLabelText('Size'), 'Large')
+      await userEvent.click(dialog.getByRole('button', { name: 'Save changes' }))
+
+      await waitFor(() => expect(mock.history.put).toHaveLength(1))
+      expect(JSON.parse(mock.history.put[0].data)).toEqual({ label: 'A-1', vehicleType: 'FOUR_WHEELER', size: 'LARGE', active: true })
+    })
+
+    it('asks before deleting a slot', async () => {
+      mock.onGet('/owner/listings/7').reply(200, withSlots([slotA]))
+      mock.onDelete('/owner/listings/7/slots/31').reply(204)
+      renderApp('/owner/listings/7/edit?step=3')
+
+      await userEvent.click(within(await screen.findByRole('listitem', { name: 'Slot A-01' })).getByRole('button', { name: 'Delete' }))
+      const dialog = screen.getByRole('dialog', { name: 'Delete slot A-01?' })
+      expect(mock.history.delete).toHaveLength(0)
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Delete slot' }))
+
+      await waitFor(() => expect(mock.history.delete).toHaveLength(1))
+    })
+
+    it('needs an active slot before continuing', async () => {
+      mock.onGet('/owner/listings/7').reply(200, withSlots([{ ...slotA, active: false }]))
+      renderApp('/owner/listings/7/edit?step=3')
+
+      expect(await screen.findByRole('button', { name: 'Continue' })).toBeDisabled()
+      expect(screen.getByText('Add at least one slot to continue')).toBeInTheDocument()
+    })
+
+    it('continues to the pricing step', async () => {
+      mock.onGet('/owner/listings/7').reply(200, withSlots([slotA]))
+      renderApp('/owner/listings/7/edit?step=3')
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+
+      expect(await screen.findByRole('link', { name: 'Pricing' })).toHaveAttribute('aria-current', 'step')
     })
   })
 })
