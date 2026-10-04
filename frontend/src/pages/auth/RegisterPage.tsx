@@ -72,7 +72,7 @@ export function RegisterPage() {
   }
 
   return (
-    <AuthCard title="Create your account" subtitle="Join SmartPark in under a minute.">
+    <AuthCard title="Create your account" subtitle="Join ParkEase in under a minute.">
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
         <FormError message={formError} />
         <fieldset>

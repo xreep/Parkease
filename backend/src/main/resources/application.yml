@@ -36,7 +36,7 @@ app:
     port: ${MAIL_PORT:587}
     username: ${MAIL_USERNAME:}
     password: ${MAIL_PASSWORD:}
-    from: ${MAIL_FROM:SmartPark <no-reply@smartpark.local>}
+    from: ${MAIL_FROM:ParkEase <no-reply@parkease.local>}
 
 springdoc:
   swagger-ui:

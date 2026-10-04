@@ -5,7 +5,7 @@ export function Logo() {
     <Link to="/" className="flex items-center gap-2 font-extrabold tracking-tight">
       <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-600 text-lg text-white">P</span>
       <span className="text-lg">
-        Smart<span className="text-brand-600">Park</span>
+        Park<span className="text-brand-600">Ease</span>
       </span>
     </Link>
   )

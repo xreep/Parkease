@@ -56,7 +56,7 @@ export function LoginPage() {
         <Button type="submit" loading={isSubmitting} className="w-full">Log in</Button>
       </form>
       <p className="mt-6 text-center text-sm text-slate-500">
-        New to SmartPark?{' '}
+        New to ParkEase?{' '}
         <Link to="/register" className="font-semibold text-brand-700 hover:underline dark:text-brand-400">Create an account</Link>
       </p>
     </AuthCard>

@@ -22,9 +22,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Profile("dev")
 public class DemoAccountSeeder implements ApplicationRunner {
 
-    public static final String ADMIN_EMAIL = "admin@smartpark.dev";
-    public static final String OWNER_EMAIL = "owner@smartpark.dev";
-    public static final String DRIVER_EMAIL = "driver@smartpark.dev";
+    public static final String ADMIN_EMAIL = "admin@parkease.dev";
+    public static final String OWNER_EMAIL = "owner@parkease.dev";
+    public static final String DRIVER_EMAIL = "driver@parkease.dev";
 
     private final UserRepository users;
     private final OwnerProfileRepository ownerProfiles;
