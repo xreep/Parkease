@@ -1,5 +1,6 @@
 package com.smartparking.common.seed;
 
+import com.smartparking.owner.DocumentType;
 import com.smartparking.owner.OwnerProfile;
 import com.smartparking.owner.OwnerProfileRepository;
 import com.smartparking.owner.VerificationStatus;
@@ -59,7 +60,7 @@ public class DemoAccountSeeder implements ApplicationRunner {
                 .orElseGet(() -> ownerProfiles.save(OwnerProfile.forUser(owner)));
         if (profile.getVerificationStatus() != VerificationStatus.VERIFIED) {
             profile.setVerificationStatus(VerificationStatus.VERIFIED);
-            profile.setDocumentType("AADHAAR");
+            profile.setDocumentType(DocumentType.AADHAAR);
             profile.setPayoutUpi("priya.sharma@okaxis");
             profile.setPayoutAccountName("Priya Sharma");
             profile.setVerifiedAt(clock.instant());
