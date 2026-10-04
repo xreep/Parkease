@@ -1,0 +1,13 @@
+spring:
+  datasource:
+    url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/smartparking_test}
+    username: ${DB_USERNAME:${USER}}
+    password: ${DB_PASSWORD:}
+
+app:
+  bcrypt-strength: 4
+  auth-rate-limit-per-minute: 10000
+  jwt:
+    secret: dGVzdC1vbmx5LWp3dC1zZWNyZXQtc21hcnQtcGFya2luZy1wbGF0Zm9ybS0yMDI2
+  mail:
+    host: ""
