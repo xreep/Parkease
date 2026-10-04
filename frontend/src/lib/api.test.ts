@@ -8,6 +8,7 @@ describe('api client', () => {
 
   beforeEach(() => {
     localStorage.clear()
+    setSessionExpiredHandler(() => {})
     mock = new MockAdapter(api)
   })
 
