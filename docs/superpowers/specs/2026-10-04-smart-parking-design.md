@@ -1,0 +1,250 @@
+# Smart Parking Slot Rental & Availability Platform — Design Spec
+
+**Date:** 2026-10-04
+**Status:** Approved in brainstorming, pending written-spec review
+**Source:** Unified Mentor PRD (project id 11778)
+
+## 1. Summary
+
+A two-sided, location-based marketplace where private parking owners list unused slots (near metro stations, offices, commercial hubs) and drivers search, reserve and pay for them in advance. An admin verifies owners/listings, monitors bookings and disputes, manages payouts and generates reports. Web-only, desktop + mobile responsive, map-centric.
+
+Additions beyond the PRD (agreed): real Razorpay test-mode payments with refunds, in-app + email notifications, reviews/ratings, all-India seed data.
+
+## 2. Decisions
+
+| Topic | Decision |
+|---|---|
+| Repo structure | Monorepo: `backend/` (Spring Boot) + `frontend/` (React) + `docs/`. Optional single-JAR packaging that bundles the React build into Spring Boot. |
+| Backend | Spring Boot 3.3, Java 21, Maven wrapper |
+| Database | PostgreSQL 16 — local (Homebrew) for `dev`, Neon for `prod`; Flyway migrations |
+| Frontend | React 18 + Vite + TypeScript + Tailwind CSS |
+| Payments | Razorpay **test mode**, full flow (orders, checkout, signature verify, webhooks, refunds, invoices). Mock provider when keys absent. |
+| Notifications | In-app (bell) **and** email (SMTP: Gmail app password / Brevo / Resend). Console logging when SMTP absent. |
+| File storage | Cloudinary; local `uploads/` fallback when keys absent |
+| Maps | React-Leaflet + OpenStreetMap tiles + marker clustering; Nominatim geocoding |
+| Seed data | All 28 states + 8 UTs, capitals + major cities (~90–100 cities), ~250–300 listings at real landmarks |
+| Commission | 10% platform fee on base price; 18% GST on platform fee |
+| Deployment | Backend Docker → Render; DB → Neon; frontend → Vercel; CI → GitHub Actions |
+
+## 3. Roles
+
+- **DRIVER** — search, book, pay, cancel, review, dispute, manage vehicles.
+- **OWNER** — verify, list parking, manage slots/availability/blocks/pricing, approve bookings, view earnings and payouts.
+- **ADMIN** — verify owners and listings, manage users/locations, monitor bookings, resolve disputes, mark payouts, manage pricing guidelines, reports.
+
+A user has exactly one role. Registration offers DRIVER or OWNER; ADMIN is seeded only.
+
+## 4. Architecture
+
+### 4.1 Backend (`backend/`)
+
+- **Spring Web** — REST under `/api/v1/**`.
+- **Spring Security + JWT** — access token 15 min, refresh token 7 days (stored hashed in `refresh_tokens`, rotated on use, revocable). BCrypt strength 12. Method-level `@PreAuthorize` role checks plus ownership checks in services.
+- **Spring Data JPA (Hibernate) + PostgreSQL**, **Flyway** for schema.
+- **Bean Validation**; global `@RestControllerAdvice` returning RFC 7807 `ProblemDetail` with `code` and `fieldErrors`.
+- **springdoc-openapi** — Swagger UI at `/swagger-ui`.
+- **Pluggable providers**, selected by presence of config:
+  - `PaymentProvider` → `RazorpayPaymentProvider` | `MockPaymentProvider`
+  - `EmailSender` → `SmtpEmailSender` (Spring Mail + Thymeleaf HTML templates) | `LoggingEmailSender`
+  - `FileStorage` → `CloudinaryFileStorage` | `LocalFileStorage`
+- **@Scheduled** lifecycle jobs (every minute).
+- **OpenPDF** for invoice PDFs.
+- **Bucket4j** rate limiting on auth endpoints.
+- Profiles: `dev`, `prod`, `test`. All secrets via environment variables; `.env.example` documents them.
+
+Package-by-feature under `com.smartparking`:
+
+```
+auth · user · owner · vehicle · location (state/city) · listing · slot ·
+availability · search · pricing · booking · payment · invoice · earning ·
+notification · email · review · dispute · admin · report · storage · common
+```
+
+Each feature owns its controller, service, repository, entities and DTOs. `common` holds error handling, security config, base entities, utilities.
+
+### 4.2 Frontend (`frontend/`)
+
+- React Router with role-guarded route groups (`/driver/*`, `/owner/*`, `/admin/*`).
+- TanStack Query for server state; Axios instance with JWT attach + auto-refresh interceptor.
+- React Hook Form + Zod for forms.
+- React-Leaflet + `react-leaflet-cluster`; Nominatim geocoding (debounced, India-biased via `countrycodes=in`).
+- Recharts for dashboards.
+- Razorpay Checkout script loaded on demand.
+- Light/dark theme; responsive with bottom tab bar on mobile; skeletons and empty states.
+
+### 4.3 Search performance
+
+Bounding-box prefilter on indexed `lat`/`lng`, then exact Haversine distance ordering in SQL; availability filter via `NOT EXISTS` against overlapping bookings/blocks. Paginated. No PostGIS dependency (works identically on local Postgres and Neon). Target: <3 s end to end, typically <300 ms server time.
+
+## 5. Data Model
+
+All tables have `id` (bigint identity), `created_at`, `updated_at` unless noted.
+
+### Accounts
+- **users** — name, email (unique, lowercase), phone, password_hash, role (`DRIVER|OWNER|ADMIN`), status (`ACTIVE|SUSPENDED`), email_verified, avatar_url.
+- **owner_profiles** — user_id (PK/FK), verification_status (`UNSUBMITTED|PENDING|VERIFIED|REJECTED`), document_url, document_type, payout_upi, payout_bank_account, payout_ifsc, payout_account_name, rejection_reason, verified_at.
+- **vehicles** — user_id, type (`TWO_WHEELER|FOUR_WHEELER`), plate_number, make_model, is_default.
+- **refresh_tokens** — user_id, token_hash, expires_at, revoked_at.
+- **email_tokens** — user_id, token_hash, purpose (`VERIFY_EMAIL|RESET_PASSWORD`), expires_at, used_at.
+
+### Locations
+- **states** — name, code, type (`STATE|UT`).
+- **cities** — state_id, name, slug, lat, lng, is_capital. Unique (state_id, slug).
+
+### Listings
+- **parking_listings** — owner_id, city_id, title, description, address, pincode, lat, lng (indexed), listing_type (`METRO|OFFICE|COMMERCIAL|RESIDENTIAL|EVENT`), open_24x7 (boolean), amenities (text[]: `COVERED, CCTV, EV_CHARGING, SECURITY_GUARD, WHEELCHAIR_ACCESS, WELL_LIT`), rules (text), auto_approve, status (`DRAFT|PENDING_REVIEW|APPROVED|REJECTED|SUSPENDED`), rejection_reason, price_per_hour, price_per_day, price_per_month (numeric(10,2); hourly required, daily/monthly optional), cancellation_policy (`FLEXIBLE|MODERATE|STRICT`), avg_rating, review_count.
+- **listing_photos** — listing_id, url, public_id, sort_order.
+- **parking_slots** — listing_id, label, vehicle_type, size (`SMALL|MEDIUM|LARGE`), active.
+- **availability_rules** — listing_id, day_of_week (1–7), open_time, close_time. Absence of rules = closed; a `open_24x7` flag on the listing overrides rules.
+- **availability_blocks** — listing_id, slot_id (nullable = whole listing), start_time, end_time, reason.
+
+### Bookings
+- **bookings** — booking_code (unique, e.g. `PK-8F3K2Q`), driver_id, listing_id, slot_id, vehicle_id, start_time, end_time (timestamptz), pricing_mode (`HOURLY|DAILY|MONTHLY|MIXED`), base_amount, platform_fee, gst_amount, total_amount, status, hold_expires_at, approval_deadline, cancelled_by, cancel_reason, refund_amount, confirmed_at, completed_at.
+  - Status: `PENDING_PAYMENT → AWAITING_APPROVAL → CONFIRMED → ACTIVE → COMPLETED`; terminal also `CANCELLED`, `REJECTED`, `EXPIRED`.
+  - **Exclusion constraint** (`btree_gist`): no two rows with the same `slot_id` and overlapping `tstzrange(start_time, end_time)` where status ∈ {PENDING_PAYMENT, AWAITING_APPROVAL, CONFIRMED, ACTIVE}.
+- **booking_events** — booking_id, from_status, to_status, actor, note (audit trail / status timeline).
+
+### Payments
+- **payments** — booking_id, provider (`RAZORPAY|MOCK`), provider_order_id, provider_payment_id, provider_signature, amount, currency (`INR`), method, status (`CREATED|CAPTURED|FAILED|REFUNDED|PARTIALLY_REFUNDED`), failure_reason, raw_payload (jsonb).
+- **refunds** — payment_id, provider_refund_id, amount, status (`PENDING|PROCESSED|FAILED`), reason.
+- **owner_earnings** — booking_id, owner_id, gross (= base_amount), commission, net, status (`HELD|PENDING_PAYOUT|PAID|REVERSED`), payout_reference, paid_at.
+- **invoices** — invoice_number (unique, `INV-2026-000123`), booking_id, payment_id, pdf_url.
+- **webhook_events** — provider_event_id (unique), event_type, payload (jsonb), processed_at.
+
+### Other
+- **notifications** — user_id, type, title, body, link, read_at.
+- **reviews** — booking_id (unique), listing_id, driver_id, rating (1–5), comment.
+- **disputes** — booking_id, raised_by, category (`NO_ACCESS|SLOT_OCCUPIED|OVERSTAY|DAMAGE|PAYMENT|OTHER`), description, status (`OPEN|UNDER_REVIEW|RESOLVED`), admin_notes, resolution (`REFUND_FULL|REFUND_PARTIAL|NO_REFUND|WARNING`), resolution_amount, resolved_at.
+- **platform_settings** — key/value: `commission_percent=10`, `gst_percent=18`, `hold_minutes=10`, `approval_hours=2`, per-city-tier min/max hourly price guidelines (advisory warnings to owners, not hard limits).
+
+## 6. Core Logic
+
+### 6.1 Pricing (`PricingService`)
+For duration `d`:
+- `hourly = ceil(hours) × price_per_hour`
+- `daily = ceil(days) × price_per_day` (if set), also mixed: `full_days × daily + min(remaining_hours × hourly, daily)`
+- `monthly = ceil(d / 30 days) × price_per_month` (if set), plus mixed analog
+- `base_amount` = minimum of available options; `platform_fee = round(base × 10%)`; `gst = round(platform_fee × 18%)`; `total = base + platform_fee + gst`. All in INR with 2 decimals, rounding HALF_UP.
+- Minimum booking 1 hour, max 90 days. Start must be ≥ now + 0 min (rounded to 15-minute slots in UI).
+
+### 6.2 Availability
+A slot is available for `[s, e)` iff: slot active, listing APPROVED, listing open for the whole window (24×7 or every covered day/time within rules), no overlapping block (listing-wide or slot), no overlapping live booking. Booking creation picks the first available matching slot inside a transaction; the exclusion constraint is the final guarantee (violation → 409 `SLOT_UNAVAILABLE`).
+
+### 6.3 Booking + payment flow
+1. `POST /bookings` (listingId, vehicleId, start, end) → validates, prices, inserts `PENDING_PAYMENT` with `hold_expires_at = now + 10 min`, creates provider order → returns booking + `{orderId, amount, keyId}`.
+2. Frontend opens Razorpay Checkout.
+3. `POST /payments/verify` (bookingId, orderId, paymentId, signature) → HMAC-SHA256(`orderId|paymentId`, key_secret) check → payment CAPTURED → invoice generated → booking `CONFIRMED` (auto_approve) or `AWAITING_APPROVAL` with `approval_deadline = now + 2 h` → earning row `HELD` → notifications + emails to driver and owner.
+4. Webhook `POST /payments/webhook` — verifies `X-Razorpay-Signature` against webhook secret, dedupes by event id; handles `payment.captured` (same as step 3 if not yet done), `payment.failed`, `refund.processed`, `refund.failed`. Idempotent: confirmation logic runs once per booking.
+5. Payment failure/dismiss: booking stays `PENDING_PAYMENT` until hold expires; user may retry within hold.
+
+### 6.4 Owner approval
+Approve → `CONFIRMED`. Reject or deadline passes → `REJECTED` + full refund (including platform fee) + earning `REVERSED`.
+
+### 6.5 Cancellation & refunds
+Driver cancellation refund on `base_amount` by policy, hours-before-start `h`:
+
+| Policy | Refund |
+|---|---|
+| FLEXIBLE | h ≥ 1 → 100%; else 50% |
+| MODERATE | h ≥ 24 → 100%; 2 ≤ h < 24 → 50%; h < 2 → 0% |
+| STRICT | h ≥ 48 → 50%; else 0% |
+
+Platform fee + GST refunded only when owner/system/admin causes cancellation. Not cancellable once `ACTIVE`. Refund via `PaymentProvider.refund()`; earnings adjusted (`net` recomputed on retained amount, or `REVERSED` if zero). Owner may cancel a confirmed booking → full refund to driver.
+
+### 6.6 Scheduled jobs (every minute)
+- Expire `PENDING_PAYMENT` past `hold_expires_at` → `EXPIRED`.
+- Auto-reject `AWAITING_APPROVAL` past `approval_deadline` → refund.
+- `CONFIRMED` with `start_time ≤ now` → `ACTIVE`.
+- `ACTIVE` with `end_time ≤ now` → `COMPLETED`; earning `HELD → PENDING_PAYOUT`; review-request notification.
+- Reminder email/notification ~1 h before start (once).
+
+### 6.7 Payouts
+Admin views pending earnings grouped by owner, marks a batch paid with a reference (UTR); earnings → `PAID`; owner notified. Real money movement (Razorpay Route) is out of scope.
+
+### 6.8 Disputes
+Driver or owner raises on a booking (CONFIRMED/ACTIVE/COMPLETED, within 7 days of end). Admin moves to UNDER_REVIEW, adds notes, resolves with a resolution; refund resolutions trigger provider refund.
+
+### 6.9 Owner verification
+Owner uploads ID/property document → `PENDING`. Only `VERIFIED` owners can submit listings for review. Admin approves/rejects with reason. Listings then require admin approval (`PENDING_REVIEW → APPROVED|REJECTED`). Editing price/location of an approved listing keeps it live; owner can pause (→ DRAFT).
+
+## 7. API Surface (summary)
+
+| Area | Endpoints |
+|---|---|
+| Auth | `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/verify-email`, `/auth/forgot-password`, `/auth/reset-password`; `GET /me`, `PATCH /me` |
+| Locations | `GET /states`, `GET /states/{code}/cities`, `GET /cities?q=` |
+| Search | `GET /search?lat&lng&radiusKm&start&end&vehicleType&type&amenities&maxPrice&sort&page` ; `GET /listings/{id}`; `GET /listings/{id}/availability?from&to`; `GET /listings/{id}/quote?start&end` ; `GET /listings/{id}/reviews` |
+| Vehicles | CRUD `/me/vehicles` |
+| Bookings (driver) | `POST /bookings`, `GET /bookings`, `GET /bookings/{id}`, `POST /bookings/{id}/cancel`, `GET /bookings/{id}/refund-preview`, `POST /bookings/{id}/review`, `POST /bookings/{id}/disputes` |
+| Payments | `POST /payments/verify`, `POST /payments/webhook`, `POST /bookings/{id}/payments/retry`, `GET /me/payments`, `GET /invoices/{id}/pdf` |
+| Owner | `GET/PUT /owner/profile`, `POST /owner/verification`, CRUD `/owner/listings`, `/owner/listings/{id}/photos`, `/slots`, `/availability-rules`, `/blocks`, `POST /owner/listings/{id}/submit`; `GET /owner/bookings`, `POST /owner/bookings/{id}/approve|reject|cancel`; `GET /owner/earnings`, `GET /owner/stats` |
+| Notifications | `GET /notifications`, `POST /notifications/{id}/read`, `POST /notifications/read-all`, `GET /notifications/unread-count` |
+| Uploads | `POST /uploads` (multipart, image/pdf ≤5 MB) |
+| Admin | `GET /admin/stats`, `/admin/owners?status`, `POST /admin/owners/{id}/verify|reject`, `/admin/listings?status`, `POST /admin/listings/{id}/approve|reject|suspend`, `/admin/users`, `POST /admin/users/{id}/suspend|activate`, CRUD `/admin/states`, `/admin/cities`, `/admin/bookings`, `/admin/disputes`, `POST /admin/disputes/{id}/resolve`, `/admin/payments`, `/admin/payouts`, `POST /admin/payouts/mark-paid`, `GET/PUT /admin/settings`, `GET /admin/reports/usage|revenue?from&to&stateId&cityId&format=csv` |
+
+All prefixed `/api/v1`. Paginated list responses: `{content, page, size, totalElements, totalPages}`.
+
+## 8. Screens
+
+**Public:** Home (search hero, browse-by-state, featured cities, how it works, owner CTA) · Search results (list + filters | clustered map; mobile toggle) · Listing detail (gallery, map, slots, prices, availability calendar, rules, policy, reviews, sticky booking card with live quote) · State/city browse (`/in/:state/:city`) · Login · Register (driver/owner) · Forgot/reset password · Verify email.
+
+**Driver:** Checkout → Razorpay → Success (booking code, QR, receipt) · My bookings (Upcoming/Active/Past/Cancelled; status timeline, cancel with refund preview, directions, dispute, review) · Vehicles · Payments & receipts · Notifications · Profile.
+
+**Owner:** Overview (earnings, occupancy, upcoming, pending approvals, charts) · Listings + 6-step wizard (location pin → photos → slots → pricing & rules → schedule → submit) · Calendar (bookings + blocks per slot) · Booking requests · Bookings history · Earnings & payouts · Verification · Payout details.
+
+**Admin:** KPI dashboard (users/owners, listings, conversion rate, utilization, revenue, top cities/states, trends) · Owner verification queue · Listing approval queue · Users · States & cities · Bookings monitor · Disputes · Payments/refunds/payouts · Pricing guidelines · Reports (CSV export).
+
+**KPI definitions:**
+- Booking conversion = bookings reaching CONFIRMED ÷ bookings created (period).
+- Slot utilization = booked slot-hours (CONFIRMED/ACTIVE/COMPLETED) ÷ available slot-hours (period, approved listings).
+- Revenue = sum of platform_fee (platform) and GMV = sum of total_amount, net of refunds.
+
+## 9. Security
+
+JWT + BCrypt(12); role + ownership checks; Bucket4j on `/auth/**` (e.g. 10 req/min/IP); CORS allowlist from env; secrets only in env; Razorpay signature verification on verify + webhook; server-side amounts only; upload MIME/size validation; Bean Validation on all inputs; JPA parameterized queries; suspended users cannot log in; password reset tokens single-use, 30-minute expiry.
+
+## 10. Error Handling
+
+`ProblemDetail` JSON: `{type, title, status, detail, code, fieldErrors[]}`. Domain codes include `SLOT_UNAVAILABLE` (409), `HOLD_EXPIRED` (410), `PAYMENT_VERIFICATION_FAILED` (400), `OWNER_NOT_VERIFIED` (403), `INVALID_TIME_RANGE` (400), `NOT_CANCELLABLE` (409). Frontend maps them to toasts or inline field errors. Payment/booking transitions are transactional and idempotent.
+
+## 11. Testing
+
+- **Unit (JUnit 5 + Mockito):** PricingService, RefundPolicy, availability evaluation, signature verification, booking state machine.
+- **Integration (`@SpringBootTest` + Testcontainers Postgres; fall back to local Postgres test DB if Docker unavailable — H2 cannot model the exclusion constraint):** booking create → verify → confirm; double-booking race → 409; webhook idempotency; cancellation refunds; scheduled transitions; role/ownership authorization.
+- **Frontend (Vitest + React Testing Library):** booking card quote, search filters, auth forms, route guards.
+- **Manual E2E:** full flow in the browser with a Razorpay test payment before declaring done.
+
+## 12. Seed Data (`dev` profile, idempotent)
+
+- 36 states/UTs; ~90–100 cities (all capitals + major cities) with real coordinates.
+- ~250–300 listings at real landmarks (metro/railway stations, IT parks, malls, markets), 2–4 per city, with 2–20 slots each, mixed vehicle types, realistic city-tier pricing (₹10–₹80/h), photos from a small curated set.
+- ~30 owners (verified, a few pending), ~50 drivers with vehicles, ~500 historical bookings across statuses with matching payments/earnings/reviews, a few disputes.
+- Demo accounts: admin, owner, driver — credentials documented in README only.
+
+## 13. Deployment
+
+- Backend: multi-stage Dockerfile → Render (free); env vars from `.env.example`.
+- DB: Neon (Flyway runs on startup).
+- Frontend: Vercel (`VITE_API_URL`).
+- Cloudinary for files; Razorpay webhook URL pointed at Render backend.
+- GitHub Actions: build + test backend and frontend on push.
+- Optional `-Pbundle` Maven profile builds the frontend and serves it from Spring Boot as a single JAR.
+
+## 14. Build Phases
+
+1. Scaffold, config, auth, users, states/cities, seed locations
+2. Owner verification, listings, slots, availability, uploads
+3. Search + map + listing detail
+4. Booking, pricing, Razorpay payments, webhooks, invoices
+5. Lifecycle jobs, cancellation/refunds, notifications, email
+6. Owner dashboard, earnings, reviews, driver pages
+7. Admin panel, reports, disputes, payouts, settings
+8. Full seed data, polish, tests, docs, deployment
+
+## 15. Out of Scope
+
+Native mobile apps; IoT sensors; gate/barrier automation; real payout money movement (Razorpay Route); live navigation; dynamic pricing; transit integrations; multi-language UI.
+
+## 16. User Prerequisites
+
+Install Java 21 and PostgreSQL 16 (Homebrew). Optional accounts/keys: Razorpay (test), Cloudinary, Neon, Render, Vercel, SMTP. All optional services fall back to mocks for local development.
