@@ -1,5 +1,4 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { isAxiosError } from 'axios'
 import { api, setSessionExpiredHandler } from '../lib/api'
 import { tokenStore } from '../lib/tokenStore'
 import type { AuthResponse, RegisterInput, User } from './types'
@@ -25,9 +24,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     api
       .get<User>('/me')
       .then((res) => setUser(res.data))
-      .catch((e) => {
-        // Only a rejected token ends the session; network/5xx errors keep it for a later retry.
-        if (isAxiosError(e) && [401, 403].includes(e.response?.status ?? 0)) tokenStore.clear()
+      .catch(() => {
+        // Leave user null. Only the api interceptor clears tokens (on a rejected refresh),
+        // so a transient failure never destroys a still-valid session.
       })
       .finally(() => setLoading(false))
   }, [])
