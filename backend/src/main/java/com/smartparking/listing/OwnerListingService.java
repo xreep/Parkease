@@ -10,11 +10,14 @@ import com.smartparking.listing.dto.ListingSummaryDto;
 import com.smartparking.listing.dto.PricingRequest;
 import com.smartparking.location.City;
 import com.smartparking.location.CityRepository;
+import com.smartparking.owner.OwnerProfileService;
 import com.smartparking.slot.ParkingSlotRepository;
 import com.smartparking.storage.FileStorage;
 import com.smartparking.user.UserRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
@@ -39,6 +42,8 @@ public class OwnerListingService {
     private final UserRepository users;
     private final FileStorage storage;
     private final ListingMapper mapper;
+    private final OwnerProfileService ownerProfiles;
+    private final Clock clock;
 
     /** The owner's listing, or 404 (also for other owners' listings, so existence is not leaked). */
     @Transactional(readOnly = true)
@@ -114,6 +119,54 @@ public class OwnerListingService {
         listing.getAmenities().clear();
         listing.getAmenities().addAll(r.amenities());
         listing.setRules(r.rules() == null || r.rules().isBlank() ? null : r.rules().trim());
+        return detail(listings.save(listing));
+    }
+
+    @Transactional
+    public ListingDetailDto submit(Long ownerId, Long listingId) {
+        ParkingListing listing = requireOwned(ownerId, listingId);
+        if (listing.getStatus() != ListingStatus.DRAFT && listing.getStatus() != ListingStatus.REJECTED) {
+            throw ApiException.conflict("INVALID_STATUS", "Only draft or rejected listings can be submitted");
+        }
+        if (!ownerProfiles.isVerified(ownerId)) {
+            throw ApiException.forbidden("OWNER_NOT_VERIFIED", "Verify your identity before submitting listings");
+        }
+        List<String> missing = new ArrayList<>();
+        if (photos.countByListingId(listingId) == 0) missing.add("PHOTOS");
+        if (slots.countByListingIdAndActiveTrue(listingId) == 0) missing.add("SLOTS");
+        if (listing.getPricePerHour() == null) missing.add("PRICING");
+        if (!listing.isOpen24x7() && rules.findByListingIdOrderByDayOfWeekAsc(listingId).isEmpty()) {
+            missing.add("AVAILABILITY");
+        }
+        if (!missing.isEmpty()) {
+            throw ApiException.badRequest("LISTING_INCOMPLETE", "Complete all steps before submitting")
+                    .with("missing", missing);
+        }
+        listing.setStatus(ListingStatus.PENDING_REVIEW);
+        listing.setSubmittedAt(clock.instant());
+        listing.setRejectionReason(null);
+        return detail(listings.save(listing));
+    }
+
+    @Transactional
+    public ListingDetailDto pause(Long ownerId, Long listingId) {
+        return transition(ownerId, listingId, ListingStatus.APPROVED, ListingStatus.PAUSED,
+                "Only approved listings can be paused");
+    }
+
+    @Transactional
+    public ListingDetailDto resume(Long ownerId, Long listingId) {
+        return transition(ownerId, listingId, ListingStatus.PAUSED, ListingStatus.APPROVED,
+                "Only paused listings can be resumed");
+    }
+
+    private ListingDetailDto transition(Long ownerId, Long listingId, ListingStatus from, ListingStatus to,
+                                        String message) {
+        ParkingListing listing = requireOwned(ownerId, listingId);
+        if (listing.getStatus() != from) {
+            throw ApiException.conflict("INVALID_STATUS", message);
+        }
+        listing.setStatus(to);
         return detail(listings.save(listing));
     }
 
