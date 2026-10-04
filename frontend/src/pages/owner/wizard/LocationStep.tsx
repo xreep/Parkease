@@ -197,7 +197,7 @@ function LocationForm({ listing, onSaved, states }: Props & { states: StateSumma
               Find address on map
             </Button>
           </div>
-          <LocationPicker value={pin} center={center} zoom={zoom} onChange={placePin} />
+          <LocationPicker value={pin} center={center} zoom={zoom} onChange={placePin} readOnly={readOnly} />
           {errors.pin?.message && <p className="text-sm text-red-600 dark:text-red-400">{errors.pin.message}</p>}
         </div>
 

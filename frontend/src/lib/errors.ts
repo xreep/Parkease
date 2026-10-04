@@ -34,3 +34,10 @@ export function toProblem(error: unknown): Problem {
 export function errorMessage(error: unknown): string {
   return toProblem(error).detail
 }
+
+/** The `missing` array on a LISTING_INCOMPLETE problem (empty for any other error). */
+export function missingParts(error: unknown): string[] {
+  if (!isAxiosError(error)) return []
+  const missing = (error.response?.data as { missing?: unknown } | undefined)?.missing
+  return Array.isArray(missing) ? missing.filter((m): m is string => typeof m === 'string') : []
+}

@@ -5,9 +5,11 @@ import { Spinner } from '../../components/ui/Spinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { errorMessage } from '../../lib/errors'
 import { useListing, useRefreshListing } from '../../lib/owner'
-import { ComingNextStep } from './wizard/ComingNextStep'
+import { HoursStep } from './wizard/HoursStep'
 import { LocationStep } from './wizard/LocationStep'
 import { PhotosStep } from './wizard/PhotosStep'
+import { PricingStep } from './wizard/PricingStep'
+import { ReviewStep } from './wizard/ReviewStep'
 import { SlotsStep } from './wizard/SlotsStep'
 
 const STEPS = ['Location', 'Photos', 'Slots', 'Pricing', 'Hours', 'Review'] as const
@@ -119,7 +121,9 @@ function EditListingWizard({ id }: { id: number }) {
       {step === 1 && <LocationStep {...stepProps} />}
       {step === 2 && <PhotosStep {...stepProps} />}
       {step === 3 && <SlotsStep {...stepProps} />}
-      {step > 3 && <ComingNextStep label={STEPS[step - 1]} />}
+      {step === 4 && <PricingStep {...stepProps} />}
+      {step === 5 && <HoursStep {...stepProps} />}
+      {step === 6 && <ReviewStep {...stepProps} />}
     </div>
   )
 }
