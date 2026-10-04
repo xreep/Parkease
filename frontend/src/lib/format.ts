@@ -68,3 +68,14 @@ export const DOCUMENT_TYPE_LABELS = {
   PROPERTY_DOCUMENT: 'Property document',
   UTILITY_BILL: 'Utility bill',
 } as const
+
+export const VEHICLE_TYPE_LABELS = {
+  FOUR_WHEELER: 'Car',
+  TWO_WHEELER: 'Two-wheeler',
+} as const
+
+export const SLOT_SIZE_LABELS = {
+  SMALL: 'Small',
+  MEDIUM: 'Medium',
+  LARGE: 'Large',
+} as const
