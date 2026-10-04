@@ -5,6 +5,7 @@ import { AccountPage } from './pages/AccountPage'
 import { HomePage } from './pages/HomePage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { RoleHomePage } from './pages/RoleHomePage'
+import { StatePage } from './pages/StatePage'
 import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage'
 import { LoginPage } from './pages/auth/LoginPage'
 import { RegisterPage } from './pages/auth/RegisterPage'
@@ -16,6 +17,7 @@ export default function App() {
     <Routes>
       <Route element={<AppLayout />}>
         <Route index element={<HomePage />} />
+        <Route path="in/:stateSlug" element={<StatePage />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
         <Route path="forgot-password" element={<ForgotPasswordPage />} />
