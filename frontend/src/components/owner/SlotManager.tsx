@@ -58,7 +58,8 @@ type BulkValues = z.infer<typeof bulkSchema>
 
 /** Mirrors the server: numbers are zero-padded to 2 digits, or 3 when the last number reaches 100. */
 function bulkPreview(prefix: string, start: number, count: number): string | null {
-  if (!prefix.trim() || !Number.isInteger(start) || !Number.isInteger(count) || start < 1 || count < 1) return null
+  if (!prefix.trim() || !Number.isInteger(start) || !Number.isInteger(count)) return null
+  if (start < 1 || start > 999 || count < 1 || count > 50) return null
   const last = start + count - 1
   const width = last >= 100 ? 3 : 2
   const label = (n: number) => `${prefix.trim()}${String(n).padStart(width, '0')}`
@@ -122,7 +123,7 @@ function AddOneForm({ listingId, onChanged }: { listingId: number; onChanged: ()
 
 function AddManyForm({ listingId, onChanged }: { listingId: number; onChanged: () => Promise<void> }) {
   const [formError, setFormError] = useState<string | null>(null)
-  const { register, handleSubmit, control, formState: { errors, isSubmitting } } = useForm<BulkValues>({
+  const { register, handleSubmit, control, setValue, formState: { errors, isSubmitting } } = useForm<BulkValues>({
     resolver: zodResolver(bulkSchema),
     defaultValues: { prefix: 'A-', startNumber: 1, count: 10, vehicleType: 'FOUR_WHEELER', size: 'MEDIUM' },
   })
@@ -133,7 +134,8 @@ function AddManyForm({ listingId, onChanged }: { listingId: number; onChanged: (
     setFormError(null)
     try {
       const created = await addSlotsBulk(listingId, { ...values, prefix: values.prefix.trim() })
-      toast.success(`Added ${created.length || values.count} slots`)
+      toast.success(`Added ${created.length} ${created.length === 1 ? 'slot' : 'slots'}`)
+      setValue('startNumber', values.startNumber + values.count)
       await onChanged()
     } catch (error) {
       setFormError(toProblem(error).detail)

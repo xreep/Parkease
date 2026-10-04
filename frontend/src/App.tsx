@@ -12,6 +12,7 @@ import { RegisterPage } from './pages/auth/RegisterPage'
 import { ResetPasswordPage } from './pages/auth/ResetPasswordPage'
 import { VerifyEmailPage } from './pages/auth/VerifyEmailPage'
 import { ListingWizardPage } from './pages/owner/ListingWizardPage'
+import { MyListingsPage } from './pages/owner/MyListingsPage'
 import { OwnerHomePage } from './pages/owner/OwnerHomePage'
 import { OwnerLayout } from './pages/owner/OwnerLayout'
 import { OwnerVerificationPage } from './pages/owner/OwnerVerificationPage'
@@ -32,6 +33,7 @@ export default function App() {
         <Route path="owner" element={<RequireRole roles={['OWNER']}><OwnerLayout /></RequireRole>}>
           <Route index element={<OwnerHomePage />} />
           <Route path="verification" element={<OwnerVerificationPage />} />
+          <Route path="listings" element={<MyListingsPage />} />
           <Route path="listings/new" element={<ListingWizardPage />} />
           <Route path="listings/:id/edit" element={<ListingWizardPage />} />
         </Route>
