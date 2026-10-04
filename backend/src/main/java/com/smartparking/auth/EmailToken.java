@@ -37,8 +37,4 @@ public class EmailToken extends BaseEntity {
     private Instant expiresAt;
 
     private Instant usedAt;
-
-    public boolean isUsable(Instant now) {
-        return usedAt == null && expiresAt.isAfter(now);
-    }
 }

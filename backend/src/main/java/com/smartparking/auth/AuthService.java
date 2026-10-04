@@ -3,6 +3,7 @@ package com.smartparking.auth;
 import com.smartparking.auth.dto.AuthResponse;
 import com.smartparking.auth.dto.LoginRequest;
 import com.smartparking.auth.dto.RegisterRequest;
+import com.smartparking.user.ChangePasswordRequest;
 import com.smartparking.common.error.ApiException;
 import com.smartparking.common.security.AuthUser;
 import com.smartparking.common.security.JwtProperties;
@@ -17,6 +18,7 @@ import com.smartparking.user.UserDto;
 import com.smartparking.user.UserRepository;
 import com.smartparking.user.UserStatus;
 import java.time.Clock;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -34,7 +36,12 @@ public class AuthService {
     private final JwtProperties jwtProperties;
     private final Clock clock;
     private final AccountTokenService accountTokens;
+    /** BCrypt only uses the first 72 bytes and rejects longer input when hashing. */
+    private static final int MAX_PASSWORD_BYTES = 72;
+
     /** Compared against when the email is unknown so login timing does not reveal which emails exist. */
+    private static final String DUMMY_PASSWORD = "dummy-password-1";
+
     private final String dummyHash;
 
     public AuthService(UserRepository users, OwnerProfileRepository ownerProfiles,
@@ -49,7 +56,7 @@ public class AuthService {
         this.jwtProperties = jwtProperties;
         this.clock = clock;
         this.accountTokens = accountTokens;
-        this.dummyHash = passwordEncoder.encode("dummy-password-1");
+        this.dummyHash = passwordEncoder.encode(DUMMY_PASSWORD);
     }
 
     public AuthResponse register(RegisterRequest request) {
@@ -77,11 +84,28 @@ public class AuthService {
     public AuthResponse login(LoginRequest request) {
         User user = users.findByEmail(Emails.normalize(request.email())).orElse(null);
         String hash = user != null ? user.getPasswordHash() : dummyHash;
-        boolean matches = passwordEncoder.matches(request.password(), hash);
+        // An over-long password can never be a real one; still pay for a hash comparison to keep timing uniform.
+        boolean tooLong = request.password().getBytes(StandardCharsets.UTF_8).length > MAX_PASSWORD_BYTES;
+        boolean matches = passwordEncoder.matches(tooLong ? DUMMY_PASSWORD : request.password(), hash) && !tooLong;
         if (user == null || !matches) {
             throw ApiException.unauthorized("INVALID_CREDENTIALS", "Invalid email or password");
         }
         ensureActive(user);
+        return issueTokens(user);
+    }
+
+    /**
+     * Changing the password ends every session, including the caller's, and outstanding reset links die too,
+     * so the caller gets a fresh session back instead of being logged out when the access token expires.
+     */
+    public AuthResponse changePassword(Long userId, ChangePasswordRequest request) {
+        User user = users.findById(userId).orElseThrow(() -> ApiException.notFound("User not found"));
+        if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
+            throw ApiException.badRequest("WRONG_PASSWORD", "Your current password is incorrect");
+        }
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        refreshTokens.revokeAllForUser(userId, clock.instant());
+        accountTokens.invalidateResetLinks(userId);
         return issueTokens(user);
     }
 

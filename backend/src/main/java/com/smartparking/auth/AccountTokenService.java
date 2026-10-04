@@ -57,6 +57,12 @@ public class AccountTokenService {
         User user = consume(rawToken, EmailTokenPurpose.RESET_PASSWORD);
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         refreshTokens.revokeAllForUser(user.getId(), clock.instant());
+        invalidateResetLinks(user.getId());
+    }
+
+    /** Marks every outstanding password-reset link of the user as used. */
+    public void invalidateResetLinks(Long userId) {
+        emailTokens.invalidateAll(userId, EmailTokenPurpose.RESET_PASSWORD, clock.instant());
     }
 
     private String create(User user, EmailTokenPurpose purpose, Duration ttl) {
