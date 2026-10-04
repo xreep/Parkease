@@ -90,4 +90,24 @@ describe('api client', () => {
     expect(b.data).toEqual({ id: 2 })
     expect(mock.history.post.filter((r) => r.url === '/auth/refresh')).toHaveLength(1)
   })
+
+  it('retries with the stored token without refreshing when another tab already refreshed', async () => {
+    tokenStore.set('old', 'r1')
+    mock.onGet('/me').reply((config) => {
+      if (config.headers?.Authorization === 'Bearer old') {
+        // Simulates another tab rotating the tokens while this request was in flight.
+        tokenStore.set('fresh', 'r2')
+        return [401, { code: 'UNAUTHORIZED' }]
+      }
+      return config.headers?.Authorization === 'Bearer fresh' ? [200, { id: 1 }] : [401, {}]
+    })
+    mock.onPost('/auth/refresh').reply(200, { accessToken: 'never', refreshToken: 'never' })
+
+    const res = await api.get('/me')
+
+    expect(res.data).toEqual({ id: 1 })
+    expect(mock.history.post.filter((r) => r.url === '/auth/refresh')).toHaveLength(0)
+    expect(tokenStore.getAccess()).toBe('fresh')
+    expect(tokenStore.getRefresh()).toBe('r2')
+  })
 })

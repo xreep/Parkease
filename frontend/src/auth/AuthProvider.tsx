@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, startTransition, useContext, useEffect, useState, type ReactNode } from 'react'
 import { api, setSessionExpiredHandler } from '../lib/api'
 import { tokenStore } from '../lib/tokenStore'
 import type { AuthResponse, RegisterInput, User } from './types'
@@ -45,7 +45,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout: async () => {
       const refreshToken = tokenStore.getRefresh()
       tokenStore.clear()
-      setUser(null)
+      // A transition, like the caller's navigate('/'), so the route change wins over RequireRole's redirect.
+      startTransition(() => setUser(null))
       if (refreshToken) await api.post('/auth/logout', { refreshToken }).catch(() => undefined)
     },
     setUser,

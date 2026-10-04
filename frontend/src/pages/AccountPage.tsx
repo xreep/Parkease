@@ -7,9 +7,10 @@ import { FormError } from '../components/AuthCard'
 import { Button } from '../components/ui/Button'
 import { TextField } from '../components/ui/TextField'
 import { useAuth } from '../auth/AuthProvider'
-import type { User } from '../auth/types'
+import type { AuthResponse, User } from '../auth/types'
 import { api } from '../lib/api'
 import { errorMessage } from '../lib/errors'
+import { tokenStore } from '../lib/tokenStore'
 
 const profileSchema = z.object({
   name: z.string().trim().min(2, 'Enter your full name').max(100),
@@ -72,6 +73,7 @@ function ProfileForm({ user }: { user: User }) {
 }
 
 function PasswordForm() {
+  const { setUser } = useAuth()
   const [formError, setFormError] = useState<string | null>(null)
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<PasswordValues>({
     resolver: zodResolver(passwordSchema),
@@ -80,9 +82,15 @@ function PasswordForm() {
   async function onSubmit(values: PasswordValues) {
     setFormError(null)
     try {
-      await api.post('/me/password', { currentPassword: values.currentPassword, newPassword: values.newPassword })
+      // The server revokes every refresh token, including this one, and returns a fresh session.
+      const { data } = await api.post<AuthResponse>('/me/password', {
+        currentPassword: values.currentPassword,
+        newPassword: values.newPassword,
+      })
+      tokenStore.set(data.accessToken, data.refreshToken)
+      setUser(data.user)
       reset()
-      toast.success('Password changed')
+      toast.success('Password changed. Other devices have been signed out.')
     } catch (error) {
       setFormError(errorMessage(error))
     }
