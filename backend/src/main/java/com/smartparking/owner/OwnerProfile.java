@@ -37,8 +37,12 @@ public class OwnerProfile {
     @Column(nullable = false)
     private VerificationStatus verificationStatus = VerificationStatus.UNSUBMITTED;
 
-    private String documentUrl;
-    private String documentType;
+    @Enumerated(EnumType.STRING)
+    private DocumentType documentType;
+
+    private String documentKey;
+    private String documentContentType;
+    private Instant documentSubmittedAt;
     private String payoutUpi;
     private String payoutBankAccount;
     private String payoutIfsc;
