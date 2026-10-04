@@ -49,6 +49,7 @@ public class DemoAccountSeeder implements ApplicationRunner {
         log.info("Demo accounts ready: {}, {}, {}", ADMIN_EMAIL, OWNER_EMAIL, DRIVER_EMAIL);
     }
 
+    @Transactional
     public void seed() {
         ensureUser(ADMIN_EMAIL, "Platform Admin", "9000000001", Role.ADMIN);
         User owner = ensureUser(OWNER_EMAIL, "Priya Sharma", "9000000002", Role.OWNER);

@@ -10,7 +10,11 @@ import org.springframework.mock.web.MockHttpServletResponse;
 class AuthRateLimitFilterTest {
 
     MockHttpServletResponse call(AuthRateLimitFilter filter, String uri, String ip) throws Exception {
-        MockHttpServletRequest request = new MockHttpServletRequest("POST", uri);
+        return call(filter, "POST", uri, ip);
+    }
+
+    MockHttpServletResponse call(AuthRateLimitFilter filter, String method, String uri, String ip) throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest(method, uri);
         request.setRemoteAddr(ip);
         MockHttpServletResponse response = new MockHttpServletResponse();
         filter.doFilter(request, response, new MockFilterChain());
@@ -38,6 +42,15 @@ class AuthRateLimitFilterTest {
 
         for (int i = 0; i < 5; i++) {
             assertThat(call(filter, "/api/v1/states", "1.1.1.1").getStatus()).isEqualTo(200);
+        }
+    }
+
+    @Test
+    void neverBlocksCorsPreflightRequests() throws Exception {
+        AuthRateLimitFilter filter = new AuthRateLimitFilter(1);
+
+        for (int i = 0; i < 3; i++) {
+            assertThat(call(filter, "OPTIONS", "/api/v1/auth/login", "1.1.1.1").getStatus()).isEqualTo(200);
         }
     }
 }
