@@ -1,5 +1,7 @@
 package com.smartparking.user;
 
+import com.smartparking.auth.AuthService;
+import com.smartparking.auth.dto.AuthResponse;
 import com.smartparking.common.security.AuthUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class MeController {
 
     private final UserService userService;
+    private final AuthService authService;
 
     @GetMapping
     public UserDto me(@AuthenticationPrincipal AuthUser principal) {
@@ -32,10 +35,9 @@ public class MeController {
     }
 
     @PostMapping("/password")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void changePassword(@AuthenticationPrincipal AuthUser principal,
-                               @Valid @RequestBody ChangePasswordRequest request) {
-        userService.changePassword(principal.id(), request);
+    public AuthResponse changePassword(@AuthenticationPrincipal AuthUser principal,
+                                       @Valid @RequestBody ChangePasswordRequest request) {
+        return authService.changePassword(principal.id(), request);
     }
 
     @PostMapping("/resend-verification")

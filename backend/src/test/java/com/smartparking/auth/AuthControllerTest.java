@@ -114,6 +114,30 @@ class AuthControllerTest {
     }
 
     @Test
+    void loginWithOverlongPasswordIs401NotServerError() throws Exception {
+        register(mvc, "long@example.com", "DRIVER");
+
+        login("long@example.com", "a1".repeat(40))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
+        login("ghost@example.com", "a1".repeat(40))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
+    }
+
+    @Test
+    void registerRejectsPasswordOver72BytesEvenWhenUnder72Characters() throws Exception {
+        // "a1" + 28 Devanagari letters: 30 characters but 86 UTF-8 bytes.
+        String password = "a1" + "\\u0915".repeat(28);
+        postJson("/api/v1/auth/register", """
+                {"name":"Ravi","email":"bytes@example.com","password":"%s","phone":"9876543210","role":"DRIVER"}"""
+                .formatted(password))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.fieldErrors[0].field").value("password"));
+    }
+
+    @Test
     void suspendedUserCannotLogIn() throws Exception {
         register(mvc, "suspended@example.com", "DRIVER");
         User user = users.findByEmail("suspended@example.com").orElseThrow();

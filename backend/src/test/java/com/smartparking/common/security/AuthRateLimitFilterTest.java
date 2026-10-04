@@ -53,4 +53,16 @@ class AuthRateLimitFilterTest {
             assertThat(call(filter, "OPTIONS", "/api/v1/auth/login", "1.1.1.1").getStatus()).isEqualTo(200);
         }
     }
+
+    @Test
+    void neverBlocksRefreshOrLogout() throws Exception {
+        AuthRateLimitFilter filter = new AuthRateLimitFilter(1);
+
+        for (int i = 0; i < 20; i++) {
+            assertThat(call(filter, "/api/v1/auth/refresh", "1.1.1.1").getStatus()).isEqualTo(200);
+            assertThat(call(filter, "/api/v1/auth/logout", "1.1.1.1").getStatus()).isEqualTo(200);
+        }
+        // and they do not consume the login bucket
+        assertThat(call(filter, "/api/v1/auth/login", "1.1.1.1").getStatus()).isEqualTo(200);
+    }
 }

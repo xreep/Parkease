@@ -99,12 +99,19 @@ class MeControllerTest {
     }
 
     @Test
-    void changePasswordWorksWithCorrectCurrentPassword() throws Exception {
-        mvc.perform(post("/api/v1/me/password").header(HttpHeaders.AUTHORIZATION, auth)
+    void changePasswordReturnsFreshSessionAndRevokesTheOldOne() throws Exception {
+        String body = mvc.perform(post("/api/v1/me/password").header(HttpHeaders.AUTHORIZATION, auth)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"currentPassword":"%s","newPassword":"another123"}""".formatted(PASSWORD)))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.refreshToken").isNotEmpty())
+                .andExpect(jsonPath("$.expiresIn").isNumber())
+                .andExpect(jsonPath("$.user.email").value("me@example.com"))
+                .andReturn().getResponse().getContentAsString();
+        String newRefresh = refreshToken(body);
+        assertThat(newRefresh).isNotEqualTo(refresh);
 
         mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -115,6 +122,22 @@ class MeControllerTest {
                         .content("""
                                 {"refreshToken":"%s"}""".formatted(refresh)))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void refreshTokenFromPasswordChangeStillWorks() throws Exception {
+        String body = mvc.perform(post("/api/v1/me/password").header(HttpHeaders.AUTHORIZATION, auth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"currentPassword":"%s","newPassword":"another123"}""".formatted(PASSWORD)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        mvc.perform(post("/api/v1/auth/refresh").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"refreshToken":"%s"}""".formatted(refreshToken(body))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").isNotEmpty());
     }
 
     @Test

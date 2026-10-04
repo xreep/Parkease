@@ -12,7 +12,7 @@ import java.time.Duration;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
- * Limits /api/v1/auth/** to N requests per minute per client IP (brute-force protection).
+ * Limits /api/v1/auth/** (except refresh and logout) to N requests per minute per client IP (brute-force protection).
  * In-memory per instance; good enough for a single backend instance.
  */
 public class AuthRateLimitFilter extends OncePerRequestFilter {
@@ -29,8 +29,13 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
+        String uri = request.getRequestURI();
         return "OPTIONS".equalsIgnoreCase(request.getMethod())
-                || !request.getRequestURI().startsWith("/api/v1/auth/");
+                || !uri.startsWith("/api/v1/auth/")
+                // Refresh tokens are 256-bit random values, so these two cannot be brute-forced; limiting
+                // them would only lock out legitimate sessions that share an IP (and the login budget).
+                || uri.equals("/api/v1/auth/refresh")
+                || uri.equals("/api/v1/auth/logout");
     }
 
     @Override

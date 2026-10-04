@@ -90,6 +90,26 @@ class AccountEmailFlowTest {
     }
 
     @Test
+    void usingOneResetLinkInvalidatesTheOtherOutstandingLinks() throws Exception {
+        register(mvc, "twice@example.com", "DRIVER");
+        postJson("/api/v1/auth/forgot-password", """
+                {"email":"twice@example.com"}""").andExpect(status().isAccepted());
+        String first = RecordingEmailSender.tokenFrom(emails.lastTo("twice@example.com"));
+        postJson("/api/v1/auth/forgot-password", """
+                {"email":"twice@example.com"}""").andExpect(status().isAccepted());
+        String second = RecordingEmailSender.tokenFrom(emails.lastTo("twice@example.com"));
+        assertThat(second).isNotEqualTo(first);
+
+        postJson("/api/v1/auth/reset-password", """
+                {"token":"%s","password":"newpass123"}""".formatted(second)).andExpect(status().isNoContent());
+
+        postJson("/api/v1/auth/reset-password", """
+                {"token":"%s","password":"hijack123"}""".formatted(first))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_TOKEN"));
+    }
+
+    @Test
     void resetPasswordRejectsWeakPassword() throws Exception {
         postJson("/api/v1/auth/reset-password", """
                 {"token":"whatever","password":"short"}""")
