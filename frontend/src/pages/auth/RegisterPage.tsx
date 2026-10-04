@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
@@ -29,6 +29,7 @@ const schema = z
   .refine((v) => v.password === v.confirmPassword, { message: 'Passwords do not match', path: ['confirmPassword'] })
 type FormValues = z.infer<typeof schema>
 type ServerField = 'name' | 'email' | 'phone' | 'password'
+const SERVER_FIELDS: readonly string[] = ['name', 'email', 'phone', 'password']
 
 const roleOptions = [
   { value: 'DRIVER', title: 'I need parking', body: 'Find and book slots', Icon: Car },
@@ -41,13 +42,13 @@ export function RegisterPage() {
   const [params] = useSearchParams()
   const [formError, setFormError] = useState<string | null>(null)
   const {
-    register, handleSubmit, watch, setError,
+    register, handleSubmit, control, setError,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { role: params.get('role') === 'OWNER' ? 'OWNER' : 'DRIVER', phone: '' },
   })
-  const role = watch('role')
+  const role = useWatch({ control, name: 'role' })
 
   async function onSubmit(values: FormValues) {
     setFormError(null)
@@ -63,7 +64,9 @@ export function RegisterPage() {
       navigate(homeFor(user.role), { replace: true })
     } catch (error) {
       const problem = toProblem(error)
-      problem.fieldErrors.forEach((f) => setError(f.field as ServerField, { message: f.message }))
+      problem.fieldErrors
+        .filter((f) => SERVER_FIELDS.includes(f.field))
+        .forEach((f) => setError(f.field as ServerField, { message: f.message }))
       setFormError(problem.detail)
     }
   }
