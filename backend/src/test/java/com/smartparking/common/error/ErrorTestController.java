@@ -2,6 +2,7 @@ package com.smartparking.common.error;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -28,6 +29,11 @@ class ErrorTestController {
     @GetMapping("/number")
     int number(@RequestParam int value) {
         return value;
+    }
+
+    @GetMapping("/extra")
+    void extra() {
+        throw ApiException.badRequest("LISTING_INCOMPLETE", "Missing").with("missing", List.of("PHOTOS", "SLOTS"));
     }
 
     @GetMapping("/boom")
