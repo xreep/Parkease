@@ -15,7 +15,7 @@ Additions beyond the PRD (agreed): real Razorpay test-mode payments with refunds
 | Topic | Decision |
 |---|---|
 | Repo structure | Monorepo: `backend/` (Spring Boot) + `frontend/` (React) + `docs/`. Optional single-JAR packaging that bundles the React build into Spring Boot. |
-| Backend | Spring Boot 3.3, Java 21, Maven wrapper |
+| Backend | Spring Boot 4.1.x (Spring Framework 7, Spring Security 7, Hibernate 7, Jackson 3), Java 21, Maven wrapper |
 | Database | PostgreSQL 16 — local (Homebrew) for `dev`, Neon for `prod`; Flyway migrations |
 | Frontend | React 18 + Vite + TypeScript + Tailwind CSS |
 | Payments | Razorpay **test mode**, full flow (orders, checkout, signature verify, webhooks, refunds, invoices). Mock provider when keys absent. |
@@ -38,7 +38,7 @@ A user has exactly one role. Registration offers DRIVER or OWNER; ADMIN is seede
 
 ### 4.1 Backend (`backend/`)
 
-- **Spring Web** — REST under `/api/v1/**`.
+- **Spring Web MVC** — REST under `/api/v1/**`.
 - **Spring Security + JWT** — access token 15 min, refresh token 7 days (stored hashed in `refresh_tokens`, rotated on use, revocable). BCrypt strength 12. Method-level `@PreAuthorize` role checks plus ownership checks in services.
 - **Spring Data JPA (Hibernate) + PostgreSQL**, **Flyway** for schema.
 - **Bean Validation**; global `@RestControllerAdvice` returning RFC 7807 `ProblemDetail` with `code` and `fieldErrors`.
