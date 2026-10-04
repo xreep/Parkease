@@ -38,6 +38,13 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void oversizedUploadIsPayloadTooLarge() throws Exception {
+        mvc.perform(get("/api/v1/test-errors/too-large"))
+                .andExpect(status().isPayloadTooLarge())
+                .andExpect(jsonPath("$.code").value("FILE_TOO_LARGE"));
+    }
+
+    @Test
     void validationErrorsListFields() throws Exception {
         mvc.perform(post("/api/v1/test-errors/validation")
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))

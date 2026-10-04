@@ -57,6 +57,35 @@ class PrivateFileControllerTest {
     }
 
     @Test
+    void privateFilesAreNotReachableThroughTheStaticUploadsPath() throws Exception {
+        StoredFile stored = storage.storePrivate(new ValidatedUpload(PNG, "image/png", "png"), "owner-documents");
+        String file = stored.key().substring("local/private/owner-documents/".length());
+
+        mvc.perform(get("/uploads/private/owner-documents/" + file)).andExpect(status().isNotFound());
+        mvc.perform(get("/uploads/public/../private/owner-documents/" + file))
+                .andExpect(status().is4xxClientError());
+    }
+
+    @Test
+    void validlySignedUrlForPublicKeyIsNotFound() throws Exception {
+        StoredFile stored = storage.storePublic(new ValidatedUpload(PNG, "image/png", "png"), "listing-photos");
+        long expires = clock.instant().getEpochSecond() + 300;
+        String url = "/api/v1/files/private?key=" + URLEncoder.encode(stored.key(), StandardCharsets.UTF_8)
+                + "&expires=" + expires + "&sig=" + signer.sign(stored.key(), expires);
+
+        mvc.perform(get(URI.create(url))).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void missingParametersAreForbidden() throws Exception {
+        mvc.perform(get("/api/v1/files/private"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("INVALID_SIGNATURE"));
+        mvc.perform(get("/api/v1/files/private").param("key", "local/private/owner-documents/x.png"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void publicFilesAreServedWithoutAuth() throws Exception {
         StoredFile stored = storage.storePublic(new ValidatedUpload(PNG, "image/png", "png"), "listing-photos");
         String path = URI.create(stored.url()).getRawPath();

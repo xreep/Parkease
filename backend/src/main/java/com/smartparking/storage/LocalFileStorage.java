@@ -19,6 +19,8 @@ public class LocalFileStorage implements FileStorage {
     private static final Pattern SAFE_KEY =
             Pattern.compile("^local/(public|private)/[a-z0-9-]+/[0-9a-f-]{36}\\.(jpg|png|webp|pdf)$");
 
+    private static final Pattern SAFE_FOLDER = Pattern.compile("[a-z0-9-]+");
+
     private final Path root;
     private final String publicBaseUrl;
     private final UrlSigner signer;
@@ -57,6 +59,9 @@ public class LocalFileStorage implements FileStorage {
 
     @Override
     public SignedUrl privateUrl(String key, Duration ttl) {
+        if (key == null || !key.startsWith("local/private/")) {
+            throw new IllegalArgumentException("Not a private local key");
+        }
         Instant expiresAt = clock.instant().plus(ttl);
         long expires = expiresAt.getEpochSecond();
         String url = publicBaseUrl + "/api/v1/files/private?key=" + URLEncoder.encode(key, StandardCharsets.UTF_8)
@@ -72,6 +77,9 @@ public class LocalFileStorage implements FileStorage {
     }
 
     private String write(String visibility, String folder, ValidatedUpload upload) {
+        if (folder == null || !SAFE_FOLDER.matcher(folder).matches()) {
+            throw new IllegalArgumentException("Invalid folder name");
+        }
         String key = "local/" + visibility + "/" + folder + "/" + UUID.randomUUID() + "." + upload.extension();
         Path path = root.resolve(key.substring("local/".length()));
         try {

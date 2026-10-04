@@ -1,6 +1,7 @@
 package com.smartparking.storage;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -46,7 +47,7 @@ class LocalFileStorageTest {
     }
 
     @Test
-    void deleteRemovesFileAndIgnoresUnknownKeys() {
+    void deleteRemovesFileAndIgnoresUnknownKeys() throws Exception {
         LocalFileStorage s = storage();
         StoredFile f = s.storePublic(new ValidatedUpload(PNG, "image/png", "png"), "listing-photos");
 
@@ -55,13 +56,41 @@ class LocalFileStorageTest {
         s.delete("cloudinary/upload/abc.png");
         s.delete("local/public/../../etc/passwd");
 
+        // A traversal key whose target resolves inside the root must not delete the sentinel file.
+        Path sentinel = dir.resolve("private/secret.txt");
+        Files.createDirectories(sentinel.getParent());
+        Files.writeString(sentinel, "keep me");
+        s.delete("local/public/../private/secret.txt");
+        assertThat(Files.exists(sentinel)).isTrue();
+
         assertThat(Files.exists(dir.resolve(f.key().substring("local/".length())))).isFalse();
     }
 
     @Test
     void resolvesOnlySafePrivateKeys() {
         LocalFileStorage s = storage();
+        StoredFile pub = s.storePublic(new ValidatedUpload(PNG, "image/png", "png"), "listing-photos");
+        StoredFile priv = s.storePrivate(new ValidatedUpload(PNG, "image/png", "png"), "owner-documents");
+
+        // UUID-shaped public key: exists on disk but is not private.
+        assertThat(s.resolvePrivate(pub.key())).isEmpty();
+        assertThat(s.resolvePrivate(priv.key())).isPresent();
         assertThat(s.resolvePrivate("local/private/../public/x.png")).isEmpty();
         assertThat(s.resolvePrivate("local/public/listing-photos/x.png")).isEmpty();
+        assertThat(s.resolvePrivate(null)).isEmpty();
+    }
+
+    @Test
+    void rejectsUnsafeFoldersAndNonPrivateKeysForSignedUrls() {
+        LocalFileStorage s = storage();
+        ValidatedUpload upload = new ValidatedUpload(PNG, "image/png", "png");
+        assertThatThrownBy(() -> s.storePublic(upload, "../etc")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> s.storePrivate(upload, "Owner Docs")).isInstanceOf(IllegalArgumentException.class);
+
+        StoredFile pub = s.storePublic(upload, "listing-photos");
+        assertThatThrownBy(() -> s.privateUrl(pub.key(), Duration.ofMinutes(5)))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> s.privateUrl(null, Duration.ofMinutes(5)))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

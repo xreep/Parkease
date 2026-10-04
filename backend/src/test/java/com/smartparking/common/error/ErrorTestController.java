@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 @RestController
 @RequestMapping("/api/v1/test-errors")
@@ -34,6 +35,11 @@ class ErrorTestController {
     @GetMapping("/extra")
     void extra() {
         throw ApiException.badRequest("LISTING_INCOMPLETE", "Missing").with("missing", List.of("PHOTOS", "SLOTS"));
+    }
+
+    @GetMapping("/too-large")
+    void tooLarge() {
+        throw new MaxUploadSizeExceededException(5L * 1024 * 1024);
     }
 
     @GetMapping("/boom")
