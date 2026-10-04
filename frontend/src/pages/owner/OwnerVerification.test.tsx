@@ -130,4 +130,55 @@ describe('owner verification', () => {
     await waitFor(() => expect(open).toHaveBeenCalledWith('https://files.test/doc?sig=1', '_blank', 'noopener'))
     open.mockRestore()
   })
+
+  const withBank: OwnerProfile = {
+    ...unsubmitted, payoutUpi: 'ravi@okaxis', payoutAccountName: 'Ravi Kumar', payoutIfsc: 'HDFC0001234',
+    payoutBankAccountLast4: '9012',
+  }
+
+  it('omits bankAccount when a saved account is left untouched', async () => {
+    mock.onGet('/owner/profile').reply(200, withBank)
+    mock.onPut('/owner/profile/payout').reply(200, withBank)
+    renderApp('/owner/verification')
+
+    const upi = await screen.findByLabelText('UPI ID')
+    expect(screen.getByText('Leave blank to keep •••• 9012')).toBeInTheDocument()
+    await userEvent.clear(upi)
+    await userEvent.type(upi, 'ravi.new@okaxis')
+    await userEvent.click(screen.getByRole('button', { name: 'Save payout details' }))
+
+    await waitFor(() => expect(mock.history.put).toHaveLength(1))
+    const body = JSON.parse(mock.history.put[0].data)
+    expect(body.upiId).toBe('ravi.new@okaxis')
+    expect(body).not.toHaveProperty('bankAccount')
+  })
+
+  it('sends an empty bankAccount when removing the saved account', async () => {
+    mock.onGet('/owner/profile').reply(200, withBank)
+    mock.onPut('/owner/profile/payout').reply(200, { ...withBank, payoutBankAccountLast4: null })
+    renderApp('/owner/verification')
+
+    await userEvent.click(await screen.findByLabelText('Remove saved bank account'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save payout details' }))
+
+    await waitFor(() => expect(mock.history.put).toHaveLength(1))
+    expect(JSON.parse(mock.history.put[0].data)).toMatchObject({ bankAccount: '' })
+  })
+
+  it('accepts a saved account plus IFSC without a UPI ID, but not once it is removed', async () => {
+    const bankOnly = { ...withBank, payoutUpi: null }
+    mock.onGet('/owner/profile').reply(200, bankOnly)
+    mock.onPut('/owner/profile/payout').reply(200, bankOnly)
+    renderApp('/owner/verification')
+
+    await userEvent.click(await screen.findByLabelText('Remove saved bank account'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save payout details' }))
+    expect(await screen.findByText('Add a UPI ID, or a bank account with IFSC.')).toBeInTheDocument()
+    expect(mock.history.put).toHaveLength(0)
+
+    await userEvent.click(screen.getByLabelText('Remove saved bank account'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save payout details' }))
+    await waitFor(() => expect(mock.history.put).toHaveLength(1))
+    expect(JSON.parse(mock.history.put[0].data)).not.toHaveProperty('bankAccount')
+  })
 })

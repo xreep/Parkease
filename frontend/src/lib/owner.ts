@@ -28,7 +28,8 @@ export type OwnerProfile = {
   payoutBankAccountLast4: string | null
 }
 
-export type PayoutBody = { upiId: string; bankAccount: string; ifsc: string; accountName: string }
+/** bankAccount: omitted keeps the saved account, "" clears it, a value replaces it. */
+export type PayoutBody = { upiId: string; bankAccount?: string; ifsc: string; accountName: string }
 
 export type Photo = { id: number; url: string; sortOrder: number }
 export type Slot = { id: number; label: string; vehicleType: VehicleType; size: SlotSize; active: boolean }
