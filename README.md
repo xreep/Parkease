@@ -62,7 +62,7 @@ Open http://localhost:5173.
 | Owner (verified) | owner@smartpark.dev | Demo@1234 |
 | Driver | driver@smartpark.dev | Demo@1234 |
 
-Change the password with the `DEMO_PASSWORD` environment variable.
+Change the password with the `DEMO_PASSWORD` environment variable (applies only when the demo accounts are first created).
 
 ### Emails in development
 
