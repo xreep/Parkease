@@ -28,7 +28,7 @@ createdb smartparking_dev
 createdb smartparking_test
 ```
 
-Add to `~/.zshrc` (the project's initial setup already appended these two `export` lines on the author's machine, so no action is needed there):
+Add to `~/.zshrc`:
 
 ```bash
 export JAVA_HOME="$(brew --prefix openjdk@21)"

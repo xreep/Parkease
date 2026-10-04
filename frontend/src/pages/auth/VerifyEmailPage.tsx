@@ -16,6 +16,7 @@ export function VerifyEmailPage() {
   const { user, setUser } = useAuth()
   const [status, setStatus] = useState<Status>(token ? { state: 'loading' } : { state: 'failed', message: 'This verification link is incomplete.' })
   const started = useRef(false)
+  const refreshed = useRef(false)
 
   useEffect(() => {
     // Tokens are single-use: guard against StrictMode running this effect twice.
@@ -28,7 +29,8 @@ export function VerifyEmailPage() {
   }, [token])
 
   useEffect(() => {
-    if (status.state === 'done' && user && !user.emailVerified) {
+    if (status.state === 'done' && user && !user.emailVerified && !refreshed.current) {
+      refreshed.current = true
       api.get<User>('/me').then((res) => setUser(res.data)).catch(() => undefined)
     }
   }, [status.state, user, setUser])
@@ -46,7 +48,7 @@ export function VerifyEmailPage() {
       <AuthCard title="Verification failed">
         <div className="flex gap-3 text-sm text-slate-600 dark:text-slate-300">
           <XCircle className="h-6 w-6 shrink-0 text-red-500" />
-          <p>{status.message} You can request a new link from your account page.</p>
+          <p>{status.message} Log in and use the “Resend email” link in the banner to get a new one.</p>
         </div>
       </AuthCard>
     )

@@ -33,7 +33,7 @@ export function ResetPasswordPage() {
     return (
       <AuthCard title="Invalid link">
         <p className="text-sm text-slate-600 dark:text-slate-300">This reset link is incomplete.</p>
-        <Link to="/forgot-password" className="mt-4 inline-block text-sm font-semibold text-brand-700 hover:underline">Request a new link</Link>
+        <Link to="/forgot-password" className="mt-4 inline-block text-sm font-semibold text-brand-700 hover:underline dark:text-brand-400">Request a new link</Link>
       </AuthCard>
     )
   }
