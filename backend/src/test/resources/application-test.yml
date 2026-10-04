@@ -11,3 +11,5 @@ app:
     secret: dGVzdC1vbmx5LWp3dC1zZWNyZXQtc21hcnQtcGFya2luZy1wbGF0Zm9ybS0yMDI2
   mail:
     host: ""
+  storage:
+    local-dir: target/test-uploads
