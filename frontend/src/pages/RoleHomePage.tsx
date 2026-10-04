@@ -1,17 +1,17 @@
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
 import type { Role } from '../auth/types'
 
-const copy: Record<Role, { label: string; body: string }> = {
+const copy: Record<Exclude<Role, 'OWNER'>, { label: string; body: string }> = {
   DRIVER: { label: 'Driver', body: 'Search for parking near your destination and manage your bookings here.' },
-  OWNER: { label: 'Parking owner', body: 'List your parking spaces, set prices and track your earnings here.' },
   ADMIN: { label: 'Administrator', body: 'Verify owners and listings, monitor bookings and view reports here.' },
 }
 
-/** Landing page per role; later phases replace each with a full dashboard. */
+/** Landing page for drivers and admins (owners have their own area); later phases replace each with a full dashboard. */
 export function RoleHomePage() {
   const { user } = useAuth()
   if (!user) return null
+  if (user.role === 'OWNER') return <Navigate to="/owner" replace />
   const { label, body } = copy[user.role]
   return (
     <section className="mx-auto max-w-4xl px-4 py-12 sm:px-6">
