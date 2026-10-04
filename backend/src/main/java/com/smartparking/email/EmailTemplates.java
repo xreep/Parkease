@@ -22,6 +22,31 @@ public final class EmailTemplates {
                 "Reset password", link);
     }
 
+    public static EmailMessage ownerVerified(User user, String link) {
+        return build(user, "You're verified – ParkEase",
+                "Your identity has been verified. You can now submit parking listings for approval.",
+                "List your parking", link);
+    }
+
+    public static EmailMessage ownerRejected(User user, String reason, String link) {
+        return build(user, "Verification needs attention – ParkEase",
+                "We could not verify your document. Reason: " + reason + ". "
+                        + "Please upload a clearer or different document.",
+                "Upload again", link);
+    }
+
+    public static EmailMessage listingApproved(User user, String title, String link) {
+        return build(user, "Your listing is live – ParkEase",
+                "Good news! \"" + title + "\" has been approved and drivers can now find it.",
+                "View your listings", link);
+    }
+
+    public static EmailMessage listingRejected(User user, String title, String reason, String link) {
+        return build(user, "Listing needs changes – ParkEase",
+                "\"" + title + "\" was not approved. Reason: " + reason + ". Update it and submit again.",
+                "Edit listing", link);
+    }
+
     private static EmailMessage build(User user, String subject, String body, String cta, String link) {
         String firstName = user.getName().split("\\s+")[0];
         String text = "Hi " + firstName + ",\n\n" + body + "\n\n" + cta + ": " + link + "\n\n— Team ParkEase";
