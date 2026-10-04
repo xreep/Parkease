@@ -1,7 +1,9 @@
 package com.smartparking.common.error;
 
+import java.sql.SQLException;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
+import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -47,7 +49,16 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     ResponseEntity<ProblemDetail> handleIntegrity(DataIntegrityViolationException ex) {
-        log.warn("Data integrity violation: {}", ex.getMostSpecificCause().getMessage());
+        Throwable cause = ex.getMostSpecificCause();
+        String sqlState = cause instanceof SQLException sql ? sql.getSQLState() : null;
+        String constraint = null;
+        for (Throwable t = ex; t != null && constraint == null; t = t.getCause()) {
+            if (t instanceof ConstraintViolationException cve) {
+                constraint = cve.getConstraintName();
+            }
+        }
+        // Never log the exception message: Postgres includes the offending values (e.g. emails).
+        log.warn("Data integrity violation (sqlState={}, constraint={})", sqlState, constraint);
         return respond(problem(HttpStatus.CONFLICT, "CONFLICT", "The request conflicts with existing data"));
     }
 
