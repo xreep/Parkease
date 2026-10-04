@@ -1,5 +1,8 @@
 package com.smartparking.common.error;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import lombok.Getter;
 import org.springframework.http.HttpStatus;
 
@@ -9,11 +12,22 @@ public class ApiException extends RuntimeException {
 
     private final HttpStatus status;
     private final String code;
+    private final Map<String, Object> properties = new LinkedHashMap<>();
 
     public ApiException(HttpStatus status, String code, String message) {
         super(message);
         this.status = status;
         this.code = code;
+    }
+
+    /** Adds an extra property that is copied onto the problem detail response. */
+    public ApiException with(String name, Object value) {
+        properties.put(name, value);
+        return this;
+    }
+
+    public Map<String, Object> getProperties() {
+        return Collections.unmodifiableMap(properties);
     }
 
     public static ApiException badRequest(String code, String message) {
