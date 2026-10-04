@@ -42,6 +42,6 @@ public class StorageConfig implements WebMvcConfigurer {
             return;
         }
         Path publicDir = Path.of(properties.localDir()).toAbsolutePath().normalize().resolve("public");
-        registry.addResourceHandler("/uploads/public/**").addResourceLocations("file:" + publicDir + "/");
+        registry.addResourceHandler("/uploads/public/**").addResourceLocations(publicDir.toUri().toString());
     }
 }
