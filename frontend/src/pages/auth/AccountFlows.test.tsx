@@ -1,10 +1,13 @@
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import MockAdapter from 'axios-mock-adapter'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { toast } from 'sonner'
 import { api } from '../../lib/api'
 import { tokenStore } from '../../lib/tokenStore'
 import { renderApp } from '../../test/renderApp'
+
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() }, Toaster: () => null }))
 
 const unverified = {
   id: 3, name: 'Meera Iyer', email: 'meera@example.com', phone: null,
@@ -64,5 +67,23 @@ describe('account flows', () => {
 
     expect(await screen.findByDisplayValue('Meera R Iyer')).toBeInTheDocument()
     expect(JSON.parse(mock.history.patch[0].data)).toMatchObject({ name: 'Meera R Iyer' })
+  })
+
+  it('stores the fresh session returned by a password change', async () => {
+    tokenStore.set('a-old', 'r-old')
+    mock.onGet('/me').reply(200, unverified)
+    mock.onPost('/me/password').reply(200, { accessToken: 'a-new', refreshToken: 'r-new', expiresIn: 900, user: unverified })
+    renderApp('/account')
+
+    await userEvent.type(await screen.findByLabelText('Current password'), 'oldpass123')
+    await userEvent.type(screen.getByLabelText('New password'), 'newpass123')
+    await userEvent.type(screen.getByLabelText('Confirm new password'), 'newpass123')
+    await userEvent.click(screen.getByRole('button', { name: /change password/i }))
+
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith('Password changed. Other devices have been signed out.'),
+    )
+    expect(tokenStore.getAccess()).toBe('a-new')
+    expect(tokenStore.getRefresh()).toBe('r-new')
   })
 })

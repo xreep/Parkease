@@ -20,10 +20,10 @@ export function Navbar() {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
 
-  async function handleLogout() {
-    navigate('/')
-    await logout()
+  function handleLogout() {
     setOpen(false)
+    navigate('/')
+    void logout()
   }
 
   const links = (

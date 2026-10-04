@@ -2,7 +2,7 @@ import axios, { isAxiosError, type AxiosError, type InternalAxiosRequestConfig }
 import { tokenStore } from './tokenStore'
 
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? '/api/v1',
+  baseURL: import.meta.env.VITE_API_URL || '/api/v1',
 })
 
 let onSessionExpired: (() => void) | null = null
@@ -24,21 +24,44 @@ let refreshing: Promise<RefreshResult> | null = null
 /**
  * Only a 401/403 from the refresh endpoint means the session is really over.
  * Network errors and 5xx are transient: keep the tokens so the user stays signed in.
+ *
+ * Tabs share localStorage, and the backend revokes every session if a rotated refresh token is
+ * replayed. So a refresh is skipped when the stored access token differs from the one the failed
+ * request used (another tab/request already refreshed), and the real call runs under a
+ * cross-tab Web Lock with that check repeated inside it.
  */
-async function refreshAccessToken(): Promise<RefreshResult> {
-  const refreshToken = tokenStore.getRefresh()
-  if (!refreshToken) return { expired: true }
-  try {
-    const { data } = await api.post<{ accessToken: string; refreshToken: string }>('/auth/refresh', { refreshToken })
-    tokenStore.set(data.accessToken, data.refreshToken)
-    return { token: data.accessToken }
-  } catch (e) {
-    if (isAxiosError(e) && [401, 403].includes(e.response?.status ?? 0)) {
-      tokenStore.clear()
-      return { expired: true }
-    }
-    return { failed: true }
+async function refreshAccessToken(failedToken: string | null): Promise<RefreshResult> {
+  const alreadyRefreshed = (): RefreshResult | null => {
+    const current = tokenStore.getAccess()
+    return current && current !== failedToken ? { token: current } : null
   }
+
+  const run = async (): Promise<RefreshResult> => {
+    const reused = alreadyRefreshed()
+    if (reused) return reused
+    const refreshToken = tokenStore.getRefresh()
+    if (!refreshToken) return { expired: true }
+    try {
+      const { data } = await api.post<{ accessToken: string; refreshToken: string }>('/auth/refresh', { refreshToken })
+      tokenStore.set(data.accessToken, data.refreshToken)
+      return { token: data.accessToken }
+    } catch (e) {
+      if (isAxiosError(e) && [401, 403].includes(e.response?.status ?? 0)) {
+        tokenStore.clear()
+        return { expired: true }
+      }
+      return { failed: true }
+    }
+  }
+
+  const reused = alreadyRefreshed()
+  if (reused) return reused
+  return typeof navigator !== 'undefined' && navigator.locks ? navigator.locks.request('sp-refresh', run) : run()
+}
+
+function bearerToken(config: InternalAxiosRequestConfig): string | null {
+  const header = config.headers?.Authorization
+  return typeof header === 'string' && header.startsWith('Bearer ') ? header.slice(7) : null
 }
 
 type RetriableConfig = InternalAxiosRequestConfig & { _retry?: boolean }
@@ -50,7 +73,7 @@ api.interceptors.response.use(
     const isAuthCall = original?.url?.startsWith('/auth/') ?? false
     if (error.response?.status === 401 && original && !original._retry && !isAuthCall) {
       original._retry = true
-      refreshing ??= refreshAccessToken().finally(() => {
+      refreshing ??= refreshAccessToken(bearerToken(original)).finally(() => {
         refreshing = null
       })
       const result = await refreshing
