@@ -44,6 +44,8 @@ public class SecurityConfig {
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint(SecurityProblemWriter::unauthorized)
                         .accessDeniedHandler(SecurityProblemWriter::forbidden))
+                .addFilterBefore(new AuthRateLimitFilter(app.authRateLimitPerMinute()),
+                        UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(new JwtAuthenticationFilter(jwtService), UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
