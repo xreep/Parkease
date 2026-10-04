@@ -85,16 +85,28 @@ public class AuthService {
         return issueTokens(user);
     }
 
+    /** noRollbackFor: the reuse-detection revocation must persist even though a 401 is thrown. */
+    @Transactional(noRollbackFor = ApiException.class)
     public AuthResponse refresh(String rawRefreshToken) {
         Instant now = clock.instant();
         RefreshToken token = refreshTokens.findByTokenHash(Tokens.sha256(rawRefreshToken))
-                .filter(t -> t.isActive(now))
-                .orElseThrow(() -> ApiException.unauthorized("INVALID_REFRESH_TOKEN",
-                        "Your session has expired. Please log in again."));
-        User user = token.getUser();
-        ensureActive(user);
-        token.setRevokedAt(now);
+                .orElseThrow(AuthService::invalidRefreshToken);
+        Long userId = token.getUser().getId();
+        if (token.getRevokedAt() != null) {
+            // A rotated/revoked token is being presented again: assume theft and end every session.
+            refreshTokens.revokeAllForUser(userId, now);
+            throw invalidRefreshToken();
+        }
+        ensureActive(token.getUser());
+        if (refreshTokens.revokeIfActive(token.getId(), now) == 0) {
+            throw invalidRefreshToken();
+        }
+        User user = users.findById(userId).orElseThrow(AuthService::invalidRefreshToken);
         return issueTokens(user);
+    }
+
+    private static ApiException invalidRefreshToken() {
+        return ApiException.unauthorized("INVALID_REFRESH_TOKEN", "Your session has expired. Please log in again.");
     }
 
     public void logout(String rawRefreshToken) {

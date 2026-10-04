@@ -4,7 +4,6 @@ import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 
@@ -25,7 +24,7 @@ public class SmtpEmailSender implements EmailSender {
             helper.setSubject(message.subject());
             helper.setText(message.textBody(), message.htmlBody());
             mailSender.send(mime);
-        } catch (MessagingException | MailException ex) {
+        } catch (MessagingException | RuntimeException ex) {
             log.error("Failed to send email '{}' to {}", message.subject(), message.to(), ex);
         }
     }

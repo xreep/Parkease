@@ -1,7 +1,9 @@
 package com.smartparking.user;
 
 import com.smartparking.auth.AccountTokenService;
+import com.smartparking.auth.RefreshTokenRepository;
 import com.smartparking.common.error.ApiException;
+import java.time.Clock;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -15,6 +17,8 @@ public class UserService {
     private final UserRepository users;
     private final PasswordEncoder passwordEncoder;
     private final AccountTokenService accountTokens;
+    private final RefreshTokenRepository refreshTokens;
+    private final Clock clock;
 
     @Transactional(readOnly = true)
     public UserDto get(Long id) {
@@ -38,6 +42,7 @@ public class UserService {
             throw ApiException.badRequest("WRONG_PASSWORD", "Your current password is incorrect");
         }
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        refreshTokens.revokeAllForUser(user.getId(), clock.instant());
     }
 
     public void resendVerification(Long id) {
