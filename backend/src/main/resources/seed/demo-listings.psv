@@ -1,0 +1,56 @@
+# owner|stateSlug|citySlug|title|address|pincode|lat|lng|type|hour|day|month|2W|4W|24x7|amenities|photo
+south|andhra-pradesh|vijayawada|Benz Circle Commercial Parking|Benz Circle, MG Road, Vijayawada|520010|16.4997|80.6560|COMMERCIAL|30|200|3500|4|8|false|CCTV;WELL_LIT|1
+south|andhra-pradesh|visakhapatnam|RK Beach Road Parking|Beach Road near RK Beach, Visakhapatnam|530002|17.7145|83.3233|COMMERCIAL|25|180|3000|6|10|false|WELL_LIT;SECURITY_GUARD|2
+northeast|arunachal-pradesh|itanagar|Ganga Market Parking|Ganga Market, Itanagar|791111|27.0866|93.6100|COMMERCIAL|15|100|1800|3|6|false|WELL_LIT|3
+northeast|assam|guwahati|Paltan Bazaar Station Parking|Station Road, Paltan Bazaar, Guwahati|781008|26.1806|91.7520|METRO|20|150|2500|6|12|true|CCTV;SECURITY_GUARD;WELL_LIT|4
+east|bihar|patna|Patna Junction Parking|Fraser Road near Patna Junction, Patna|800001|25.6036|85.1372|METRO|20|150|2500|6|12|true|CCTV;SECURITY_GUARD|5
+central|chhattisgarh|raipur|Pandri Market Parking|Pandri Cloth Market, Raipur|492004|21.2565|81.6560|COMMERCIAL|15|100|1800|4|8|false|WELL_LIT|6
+west|goa|panaji|Church Square Parking|18th June Road near Church Square, Panaji|403001|15.4986|73.8290|COMMERCIAL|40|250|4000|4|6|false|CCTV;WELL_LIT|1
+west|gujarat|ahmedabad|SG Highway Office Parking|Near Iscon Cross Roads, SG Highway, Ahmedabad|380054|23.0258|72.5070|OFFICE|30|200|3500|8|10|false|COVERED;CCTV;EV_CHARGING|2
+west|gujarat|surat|Ring Road Textile Market Parking|Ring Road, Surat|395002|21.1882|72.8370|COMMERCIAL|20|150|2500|4|10|false|CCTV|3
+north|haryana|gurugram|Cyber City Office Parking|DLF Cyber City, Gurugram|122002|28.4949|77.0887|OFFICE|60|400|6000|10|6|false|COVERED;CCTV;EV_CHARGING;SECURITY_GUARD|4
+north|himachal-pradesh|shimla|Cart Road Lift Parking|Near Lift, Cart Road, Shimla|171001|31.1033|77.1722|COMMERCIAL|50|300|5000|2|8|true|COVERED;SECURITY_GUARD|5
+east|jharkhand|ranchi|Firayalal Chowk Parking|Main Road near Firayalal Chowk, Ranchi|834001|23.3615|85.3250|COMMERCIAL|20|120|2200|4|8|false|CCTV|6
+south|karnataka|bengaluru|MG Road Metro Parking|Near MG Road Metro Station, Bengaluru|560001|12.9756|77.6066|METRO|40|250|4500|8|12|true|COVERED;CCTV;SECURITY_GUARD;WELL_LIT|1
+south|karnataka|bengaluru|Whitefield ITPL Office Parking|ITPL Main Road, Whitefield, Bengaluru|560066|12.9855|77.7363|OFFICE|35|220|4000|12|8|false|COVERED;CCTV;EV_CHARGING|2
+south|karnataka|mysuru|Palace South Gate Parking|Near Palace South Gate, Mysuru|570001|12.3027|76.6553|COMMERCIAL|20|120|2000|4|10|false|WELL_LIT;SECURITY_GUARD|3
+south|kerala|kochi|Edappally Junction Parking|NH 66 near Edappally, Kochi|682024|10.0261|76.3083|COMMERCIAL|30|200|3500|6|10|false|COVERED;CCTV|4
+south|kerala|thiruvananthapuram|Technopark Phase 1 Parking|Technopark, Kazhakkoottam, Thiruvananthapuram|695581|8.5581|76.8816|OFFICE|25|150|3000|8|8|false|CCTV;EV_CHARGING|5
+central|madhya-pradesh|indore|Rajwada Market Parking|Near Rajwada, Indore|452004|22.7187|75.8558|COMMERCIAL|20|120|2200|4|10|false|CCTV;WELL_LIT|6
+central|madhya-pradesh|bhopal|MP Nagar Zone 1 Parking|MP Nagar Zone 1, Bhopal|462011|23.2330|77.4343|OFFICE|20|120|2200|6|8|false|CCTV|1
+west|maharashtra|mumbai|Andheri Metro Station Parking|Near Andheri Metro Station, Andheri East, Mumbai|400069|19.1197|72.8468|METRO|60|400|7000|10|10|true|COVERED;CCTV;SECURITY_GUARD;WELL_LIT|2
+west|maharashtra|mumbai|BKC Office Parking|G Block, Bandra Kurla Complex, Mumbai|400051|19.0660|72.8692|OFFICE|80|500|9000|12|6|false|COVERED;CCTV;EV_CHARGING;SECURITY_GUARD|3
+west|maharashtra|pune|Hinjewadi Phase 1 Office Parking|Rajiv Gandhi Infotech Park, Hinjewadi, Pune|411057|18.5913|73.7389|OFFICE|30|200|3500|12|10|false|COVERED;CCTV;EV_CHARGING|4
+west|maharashtra|nagpur|Sitabuldi Main Road Parking|Sitabuldi, Nagpur|440012|21.1458|79.0821|COMMERCIAL|20|120|2200|4|10|false|CCTV|5
+northeast|manipur|imphal|Thangal Bazar Parking|Thangal Bazar near Ima Keithel, Imphal|795001|24.8090|93.9380|COMMERCIAL|15|100|1800|2|8|false|WELL_LIT|6
+northeast|meghalaya|shillong|Police Bazar Parking|Police Bazar, Shillong|793001|25.5760|91.8826|COMMERCIAL|30|180|3000|4|6|false|CCTV;SECURITY_GUARD|1
+northeast|mizoram|aizawl|Bara Bazar Parking|Bara Bazar, Aizawl|796001|23.7250|92.7180|COMMERCIAL|15|100|1800|2|6|false|WELL_LIT|2
+northeast|nagaland|kohima|Kohima Town Parking|Near Kohima War Cemetery, Kohima|797001|25.6700|94.1060|COMMERCIAL|15|100|1800|2|6|false|WELL_LIT|3
+east|odisha|bhubaneswar|Master Canteen Station Parking|Station Square, Bhubaneswar|751001|20.2700|85.8430|METRO|20|120|2200|6|10|true|CCTV;SECURITY_GUARD|4
+north|punjab|amritsar|Golden Temple Heritage Street Parking|Near Golden Temple Plaza, Amritsar|143006|31.6220|74.8770|COMMERCIAL|25|150|2500|6|12|true|COVERED;CCTV;SECURITY_GUARD|5
+north|punjab|ludhiana|Ferozepur Road Parking|Ferozepur Road, Ludhiana|141001|30.9010|75.8150|COMMERCIAL|20|150|2500|6|10|false|CCTV|6
+north|rajasthan|jaipur|MI Road Commercial Parking|Mirza Ismail Road, Jaipur|302001|26.9170|75.8070|COMMERCIAL|25|150|2500|6|10|false|CCTV;WELL_LIT|1
+north|rajasthan|udaipur|City Palace Parking|Near City Palace Gate, Udaipur|313001|24.5770|73.6830|COMMERCIAL|30|180|3000|4|10|false|SECURITY_GUARD|2
+northeast|sikkim|gangtok|MG Marg Parking|Near MG Marg, Gangtok|737101|27.3290|88.6120|COMMERCIAL|40|250|4000|2|6|false|COVERED;SECURITY_GUARD|3
+south|tamil-nadu|chennai|Guindy Metro Parking|Near Guindy Metro Station, Chennai|600032|13.0094|80.2133|METRO|30|200|3500|8|12|true|COVERED;CCTV;SECURITY_GUARD|4
+south|tamil-nadu|chennai|T Nagar Shopping Parking|Usman Road, T Nagar, Chennai|600017|13.0418|80.2341|COMMERCIAL|40|250|4500|6|12|false|CCTV;WELL_LIT|5
+south|tamil-nadu|coimbatore|Gandhipuram Bus Stand Parking|Gandhipuram, Coimbatore|641012|11.0168|76.9675|METRO|20|120|2200|6|10|true|CCTV|6
+south|telangana|hyderabad|HITEC City Office Parking|Cyber Towers, HITEC City, Hyderabad|500081|17.4504|78.3810|OFFICE|40|250|4500|12|10|false|COVERED;CCTV;EV_CHARGING;SECURITY_GUARD|1
+south|telangana|hyderabad|Ameerpet Metro Parking|Near Ameerpet Metro Station, Hyderabad|500016|17.4375|78.4482|METRO|30|200|3500|8|12|true|CCTV;SECURITY_GUARD|2
+northeast|tripura|agartala|Post Office Chowmuhani Parking|Post Office Chowmuhani, Agartala|799001|23.8340|91.2790|COMMERCIAL|15|100|1800|2|6|false|WELL_LIT|3
+north|uttar-pradesh|lucknow|Hazratganj Market Parking|Hazratganj, Lucknow|226001|26.8500|80.9460|COMMERCIAL|25|150|2500|6|12|false|CCTV;WELL_LIT|4
+north|uttar-pradesh|noida|Sector 18 Metro Parking|Near Noida Sector 18 Metro Station, Noida|201301|28.5707|77.3261|METRO|40|250|4500|10|12|true|COVERED;CCTV;SECURITY_GUARD|5
+north|uttar-pradesh|varanasi|Godowlia Ghat Road Parking|Godowlia, Varanasi|221001|25.3100|83.0090|COMMERCIAL|20|120|2000|4|10|false|SECURITY_GUARD|6
+north|uttarakhand|dehradun|Rajpur Road Parking|Rajpur Road near Clock Tower, Dehradun|248001|30.3250|78.0430|COMMERCIAL|20|120|2200|4|8|false|CCTV|1
+east|west-bengal|kolkata|Park Street Metro Parking|Near Park Street Metro Station, Kolkata|700016|22.5530|88.3520|METRO|40|250|4500|8|12|true|COVERED;CCTV;SECURITY_GUARD|2
+east|west-bengal|kolkata|Salt Lake Sector V Office Parking|Sector V, Salt Lake, Kolkata|700091|22.5735|88.4331|OFFICE|30|200|3500|10|8|false|COVERED;CCTV;EV_CHARGING|3
+south|andaman-and-nicobar-islands|sri-vijaya-puram|Aberdeen Bazaar Parking|Aberdeen Bazaar, Sri Vijaya Puram|744101|11.6670|92.7420|COMMERCIAL|20|120|2000|2|6|false|WELL_LIT|4
+north|chandigarh|chandigarh|Sector 17 Plaza Parking|Sector 17 Plaza, Chandigarh|160017|30.7398|76.7827|COMMERCIAL|20|120|2200|8|12|false|CCTV;WELL_LIT|5
+west|dadra-and-nagar-haveli-and-daman-and-diu|daman|Moti Daman Fort Road Parking|Fort Road, Moti Daman, Daman|396220|20.4150|72.8330|COMMERCIAL|15|100|1800|2|6|false|WELL_LIT|6
+north|delhi|new-delhi|Rajiv Chowk Metro Parking|Connaught Place near Rajiv Chowk Metro, New Delhi|110001|28.6328|77.2197|METRO|60|400|7000|10|12|true|COVERED;CCTV;SECURITY_GUARD;WELL_LIT|1
+north|delhi|new-delhi|Saket Mall Parking|Press Enclave Marg near Select Citywalk, Saket, New Delhi|110017|28.5286|77.2190|COMMERCIAL|50|300|5500|8|12|false|COVERED;CCTV;EV_CHARGING|2
+north|jammu-and-kashmir|srinagar|Lal Chowk Parking|Residency Road near Lal Chowk, Srinagar|190001|34.0700|74.8090|COMMERCIAL|20|120|2200|4|8|false|SECURITY_GUARD|3
+north|jammu-and-kashmir|jammu|Raghunath Bazaar Parking|Raghunath Bazaar, Jammu|180001|32.7300|74.8640|COMMERCIAL|20|120|2200|4|8|false|CCTV|4
+north|ladakh|leh|Leh Main Bazaar Parking|Main Bazaar, Leh|194101|34.1650|77.5850|COMMERCIAL|30|180|3000|2|6|false|WELL_LIT|5
+south|lakshadweep|kavaratti|Kavaratti Jetty Parking|Near Kavaratti Jetty, Kavaratti|682555|10.5630|72.6370|COMMERCIAL|10|60|1200|4|2|false|WELL_LIT|6
+south|puducherry|puducherry|Promenade Beach Parking|Goubert Avenue near Promenade, Puducherry|605001|11.9340|79.8350|COMMERCIAL|25|150|2500|4|10|false|CCTV;WELL_LIT|1
