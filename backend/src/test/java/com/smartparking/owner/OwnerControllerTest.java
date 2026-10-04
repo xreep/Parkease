@@ -56,6 +56,48 @@ class OwnerControllerTest {
                 .andExpect(jsonPath("$.payoutIfsc").value("HDFC0001234"));
     }
 
+    private static final String FULL_PAYOUT = """
+            {"upiId":"ravi.k@okaxis","bankAccount":"123456789012","ifsc":"HDFC0001234","accountName":"Ravi Kumar"}""";
+
+    @Test
+    void payoutWithoutBankAccountKeyKeepsStoredAccount() throws Exception {
+        String auth = unverifiedOwner(mvc, "o2a@example.com");
+        savePayout(auth, FULL_PAYOUT).andExpect(status().isOk());
+        savePayout(auth, """
+                {"upiId":"ravi.new@okaxis","ifsc":"HDFC0001234","accountName":"Ravi Kumar"}""")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.payoutUpi").value("ravi.new@okaxis"))
+                .andExpect(jsonPath("$.payoutBankAccountLast4").value("9012"));
+    }
+
+    @Test
+    void blankBankAccountClearsStoredAccount() throws Exception {
+        String auth = unverifiedOwner(mvc, "o2b@example.com");
+        savePayout(auth, FULL_PAYOUT).andExpect(status().isOk());
+        savePayout(auth, """
+                {"upiId":"ravi.k@okaxis","bankAccount":"","ifsc":"","accountName":"Ravi Kumar"}""")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.payoutBankAccountLast4").isEmpty());
+    }
+
+    @Test
+    void storedAccountWithIfscSatisfiesBankOnlyPayout() throws Exception {
+        String auth = unverifiedOwner(mvc, "o2c@example.com");
+        savePayout(auth, """
+                {"bankAccount":"123456789012","ifsc":"HDFC0001234","accountName":"Ravi Kumar"}""")
+                .andExpect(status().isOk());
+        savePayout(auth, """
+                {"ifsc":"HDFC0001234","accountName":"Ravi K"}""")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.payoutAccountName").value("Ravi K"))
+                .andExpect(jsonPath("$.payoutBankAccountLast4").value("9012"));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions savePayout(String auth, String body) throws Exception {
+        return mvc.perform(put("/api/v1/owner/profile/payout").header(HttpHeaders.AUTHORIZATION, auth)
+                .contentType(MediaType.APPLICATION_JSON).content(body));
+    }
+
     @Test
     void payoutNeedsUpiOrBankWithIfsc() throws Exception {
         String auth = unverifiedOwner(mvc, "o3@example.com");

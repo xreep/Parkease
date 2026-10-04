@@ -1,13 +1,22 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { errorMessage } from '../../lib/errors'
+import { FormError } from '../AuthCard'
 import { Button } from './Button'
 import { TextArea } from './TextArea'
 
-export type DialogProps = { open: boolean; title: string; onClose: () => void; children: ReactNode }
+export type DialogProps = {
+  open: boolean
+  title: string
+  onClose: () => void
+  children: ReactNode
+  /** While busy, clicking the backdrop does not dismiss the dialog. */
+  busy?: boolean
+}
 
-export function Dialog({ open, title, onClose, children }: DialogProps) {
+export function Dialog({ open, title, onClose, children, busy = false }: DialogProps) {
   const titleId = useId()
   const panelRef = useRef<HTMLDivElement>(null)
   const onCloseRef = useRef(onClose)
@@ -53,7 +62,7 @@ export function Dialog({ open, title, onClose, children }: DialogProps) {
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/50 p-4 sm:items-center" onMouseDown={(e) => {
-      if (e.target === e.currentTarget) onClose()
+      if (e.target === e.currentTarget && !busy) onClose()
     }}>
       <div
         ref={panelRef}
@@ -83,13 +92,30 @@ export type ReasonDialogProps = {
   onClose: () => void
 }
 
-function ReasonForm({ confirmLabel, onConfirm, onClose }: Omit<ReasonDialogProps, 'open' | 'title'>) {
+type ReasonFormProps = Omit<ReasonDialogProps, 'open' | 'title'> & { onBusyChange: (busy: boolean) => void }
+
+function ReasonForm({ confirmLabel, onConfirm, onClose, onBusyChange }: ReasonFormProps) {
+  const [formError, setFormError] = useState<string | null>(null)
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<ReasonValues>({
     resolver: zodResolver(reasonSchema),
     defaultValues: { reason: '' },
   })
+
+  async function submit({ reason }: ReasonValues) {
+    setFormError(null)
+    onBusyChange(true)
+    try {
+      await onConfirm(reason)
+    } catch (error) {
+      setFormError(errorMessage(error))
+    } finally {
+      onBusyChange(false)
+    }
+  }
+
   return (
-    <form onSubmit={handleSubmit(({ reason }) => onConfirm(reason))} noValidate className="space-y-4">
+    <form onSubmit={handleSubmit(submit)} noValidate className="space-y-4">
+      <FormError message={formError} />
       <TextArea label="Reason" rows={4} error={errors.reason?.message} {...register('reason')} />
       <div className="flex justify-end gap-2">
         <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
@@ -101,9 +127,10 @@ function ReasonForm({ confirmLabel, onConfirm, onClose }: Omit<ReasonDialogProps
 
 /** Asks for a required reason (max 500 chars). The form remounts on each open, so it starts empty. */
 export function ReasonDialog({ open, title, confirmLabel, onConfirm, onClose }: ReasonDialogProps) {
+  const [busy, setBusy] = useState(false)
   return (
-    <Dialog open={open} title={title} onClose={onClose}>
-      <ReasonForm confirmLabel={confirmLabel} onConfirm={onConfirm} onClose={onClose} />
+    <Dialog open={open} title={title} onClose={onClose} busy={busy}>
+      <ReasonForm confirmLabel={confirmLabel} onConfirm={onConfirm} onClose={onClose} onBusyChange={setBusy} />
     </Dialog>
   )
 }

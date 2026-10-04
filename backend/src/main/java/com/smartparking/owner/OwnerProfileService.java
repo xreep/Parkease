@@ -33,14 +33,15 @@ public class OwnerProfileService {
 
     @Transactional
     public OwnerProfileDto updatePayout(Long ownerId, PayoutRequest r) {
+        OwnerProfile profile = requireProfile(ownerId);
         String upi = blankToNull(r.upiId());
-        String account = blankToNull(r.bankAccount());
+        // bankAccount is tri-state: null keeps the stored account, blank clears it, a value replaces it.
+        String account = r.bankAccount() == null ? profile.getPayoutBankAccount() : blankToNull(r.bankAccount());
         String ifsc = blankToNull(r.ifsc());
         if (upi == null && (account == null || ifsc == null)) {
             throw ApiException.badRequest("PAYOUT_DETAILS_REQUIRED",
                     "Provide a UPI ID, or a bank account number with its IFSC code");
         }
-        OwnerProfile profile = requireProfile(ownerId);
         profile.setPayoutUpi(upi);
         profile.setPayoutBankAccount(account);
         profile.setPayoutIfsc(ifsc);
