@@ -59,6 +59,21 @@ public class OwnerListingController {
         return service.updatePricing(principal.id(), id, request);
     }
 
+    @PostMapping("/{id}/submit")
+    public ListingDetailDto submit(@AuthenticationPrincipal AuthUser principal, @PathVariable Long id) {
+        return service.submit(principal.id(), id);
+    }
+
+    @PostMapping("/{id}/pause")
+    public ListingDetailDto pause(@AuthenticationPrincipal AuthUser principal, @PathVariable Long id) {
+        return service.pause(principal.id(), id);
+    }
+
+    @PostMapping("/{id}/resume")
+    public ListingDetailDto resume(@AuthenticationPrincipal AuthUser principal, @PathVariable Long id) {
+        return service.resume(principal.id(), id);
+    }
+
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@AuthenticationPrincipal AuthUser principal, @PathVariable Long id) {
