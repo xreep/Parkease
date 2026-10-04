@@ -33,12 +33,14 @@ public class AuthService {
     private final JwtService jwtService;
     private final JwtProperties jwtProperties;
     private final Clock clock;
+    private final AccountTokenService accountTokens;
     /** Compared against when the email is unknown so login timing does not reveal which emails exist. */
     private final String dummyHash;
 
     public AuthService(UserRepository users, OwnerProfileRepository ownerProfiles,
                        RefreshTokenRepository refreshTokens, PasswordEncoder passwordEncoder,
-                       JwtService jwtService, JwtProperties jwtProperties, Clock clock) {
+                       JwtService jwtService, JwtProperties jwtProperties, Clock clock,
+                       AccountTokenService accountTokens) {
         this.users = users;
         this.ownerProfiles = ownerProfiles;
         this.refreshTokens = refreshTokens;
@@ -46,6 +48,7 @@ public class AuthService {
         this.jwtService = jwtService;
         this.jwtProperties = jwtProperties;
         this.clock = clock;
+        this.accountTokens = accountTokens;
         this.dummyHash = passwordEncoder.encode("dummy-password-1");
     }
 
@@ -67,6 +70,7 @@ public class AuthService {
         if (user.getRole() == Role.OWNER) {
             ownerProfiles.save(OwnerProfile.forUser(user));
         }
+        accountTokens.sendEmailVerification(user);
         return issueTokens(user);
     }
 
