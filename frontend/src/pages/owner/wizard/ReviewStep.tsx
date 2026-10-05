@@ -4,11 +4,10 @@ import { toast } from 'sonner'
 import { FormError } from '../../../components/AuthCard'
 import { Button } from '../../../components/ui/Button'
 import { errorMessage, missingParts, toProblem } from '../../../lib/errors'
-import { AMENITY_LABELS, DAY_NAMES, formatINR, LISTING_TYPE_LABELS } from '../../../lib/format'
-import { pauseListing, resumeListing, submitListing, useOwnerProfile, type CancellationPolicy } from '../../../lib/owner'
+import { AmenityFacts, HoursFacts, PhotoFacts, PricingFacts, SlotFacts } from '../../../components/listing/ListingFacts'
+import { LISTING_TYPE_LABELS } from '../../../lib/format'
+import { pauseListing, resumeListing, submitListing, useOwnerProfile } from '../../../lib/owner'
 import type { StepProps } from './types'
-
-const POLICY_LABELS: Record<CancellationPolicy, string> = { FLEXIBLE: 'Flexible', MODERATE: 'Moderate', STRICT: 'Strict' }
 
 const MISSING_LINKS: Record<string, { label: string; step: number }> = {
   PHOTOS: { label: 'Add photos', step: 2 },
@@ -41,15 +40,6 @@ export function ReviewStep({ listing, onSaved }: StepProps) {
   const [missing, setMissing] = useState<string[]>([])
 
   const verified = profile?.verificationStatus === 'VERIFIED'
-  const activeSlots = listing.slots.filter((s) => s.active)
-  const cars = activeSlots.filter((s) => s.vehicleType === 'FOUR_WHEELER').length
-  const twoWheelers = activeSlots.length - cars
-  const hours = [...listing.hours].sort((a, b) => a.dayOfWeek - b.dayOfWeek)
-  const prices = [
-    ['hr', listing.pricePerHour],
-    ['day', listing.pricePerDay],
-    ['month', listing.pricePerMonth],
-  ] as const
 
   async function submit() {
     setBusy('submit')
@@ -93,60 +83,23 @@ export function ReviewStep({ listing, onSaved }: StepProps) {
         </SummaryCard>
 
         <SummaryCard title="Photos" listingId={listing.id} step={2}>
-          {listing.photos.length === 0 ? (
-            <p className="text-slate-500">No photos yet</p>
-          ) : (
-            <ul className="flex flex-wrap gap-2" aria-label="Photos">
-              {listing.photos.map((p, i) => (
-                <li key={p.id}>
-                  <img src={p.url} alt={`Parking photo ${i + 1}`} className="h-16 w-24 rounded-lg object-cover" />
-                </li>
-              ))}
-            </ul>
-          )}
+          <PhotoFacts listing={listing} />
         </SummaryCard>
 
         <SummaryCard title="Slots" listingId={listing.id} step={3}>
-          <p>{`${activeSlots.length} ${activeSlots.length === 1 ? 'slot' : 'slots'} · ${cars} car · ${twoWheelers} two-wheeler`}</p>
+          <SlotFacts listing={listing} />
         </SummaryCard>
 
         <SummaryCard title="Pricing" listingId={listing.id} step={4}>
-          {listing.pricePerHour === null ? (
-            <p className="text-slate-500">No pricing yet</p>
-          ) : (
-            <>
-              {prices.map(([unit, value]) => value !== null && <p key={unit}>{`${formatINR(value)}/${unit}`}</p>)}
-              {listing.cancellationPolicy && <p>{`${POLICY_LABELS[listing.cancellationPolicy]} cancellation`}</p>}
-              <p>{listing.autoApprove ? 'Bookings are approved automatically' : 'You approve each booking'}</p>
-            </>
-          )}
-          {listing.rules && <p className="text-slate-500">{`Rules: ${listing.rules}`}</p>}
+          <PricingFacts listing={listing} />
         </SummaryCard>
 
         <SummaryCard title="Opening hours" listingId={listing.id} step={5}>
-          {listing.open24x7 ? (
-            <p>Open 24 × 7</p>
-          ) : hours.length === 0 ? (
-            <p className="text-slate-500">No opening hours yet</p>
-          ) : (
-            hours.map((h) => (
-              <p key={h.dayOfWeek}>{`${DAY_NAMES[h.dayOfWeek - 1]}: ${h.openTime.slice(0, 5)} – ${h.closeTime.slice(0, 5)}`}</p>
-            ))
-          )}
+          <HoursFacts listing={listing} />
         </SummaryCard>
 
         <SummaryCard title="Amenities" listingId={listing.id} step={4}>
-          {listing.amenities.length === 0 ? (
-            <p className="text-slate-500">None selected</p>
-          ) : (
-            <ul className="flex flex-wrap gap-2">
-              {listing.amenities.map((a) => (
-                <li key={a} className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium dark:bg-slate-800">
-                  {AMENITY_LABELS[a]}
-                </li>
-              ))}
-            </ul>
-          )}
+          <AmenityFacts listing={listing} />
         </SummaryCard>
       </div>
 
