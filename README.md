@@ -11,7 +11,7 @@ A web platform where private parking owners rent out unused slots and drivers fi
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Scaffold, auth (register/login/refresh/verify/reset), profile, all-India states & cities | ✅ |
-| 2 | Owner verification, listings, slots, availability, uploads | ⏳ |
+| 2 | Owner verification, listings wizard, slots, opening hours, blocked times, photo/document uploads, admin approval queues, demo listings in every state | ✅ |
 | 3 | Search + map + listing detail | ⏳ |
 | 4 | Booking, pricing, Razorpay payments, invoices | ⏳ |
 | 5 | Lifecycle jobs, cancellations/refunds, notifications | ⏳ |
@@ -60,9 +60,21 @@ Open http://localhost:5173.
 |---|---|---|
 | Admin | admin@parkease.dev | Demo@1234 |
 | Owner (verified) | owner@parkease.dev | Demo@1234 |
+| Owner (verified) | owner.north@parkease.dev | Demo@1234 |
+| Owner (verified) | owner.south@parkease.dev | Demo@1234 |
+| Owner (verified) | owner.east@parkease.dev | Demo@1234 |
+| Owner (verified) | owner.northeast@parkease.dev | Demo@1234 |
+| Owner (verified) | owner.central@parkease.dev | Demo@1234 |
+| Owner (pending verification) | owner.pending@parkease.dev | Demo@1234 |
 | Driver | driver@parkease.dev | Demo@1234 |
 
+The dev profile also seeds 55 approved demo listings spread across all 36 states and union territories. The pending owner (`owner.pending@`) and one pending listing, "Viman Nagar Residency Parking", show up in the admin queues (**Admin → Owner verification** and **Listing approvals**), so you can try the review flow straight away.
+
 Change the password with the `DEMO_PASSWORD` environment variable (applies only when the demo accounts are first created).
+
+### Uploads
+
+Listing photos and owner verification documents are stored on local disk in `backend/uploads/` by default (git-ignored). To use Cloudinary instead, set `CLOUDINARY_URL=cloudinary://<api_key>:<api_secret>@<cloud_name>`. Photos are public; verification documents are private and can only be opened through signed links that expire after 5 minutes. Other related settings (`PUBLIC_BASE_URL`, `STORAGE_LOCAL_DIR`) are listed in [`backend/.env.example`](backend/.env.example).
 
 ### Emails in development
 
