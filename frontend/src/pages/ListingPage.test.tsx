@@ -113,7 +113,7 @@ describe('ListingPage', () => {
     renderApp(URL_7)
     await screen.findByText('3 slots free')
 
-    expect(screen.getByText('Times are in Indian Standard Time (IST).')).toBeInTheDocument()
+    expect(screen.getByText('Times use your device’s time zone. Opening hours are shown in IST.')).toBeInTheDocument()
   })
 
   it('shows no time zone hint when the browser is on IST', async () => {
@@ -121,7 +121,7 @@ describe('ListingPage', () => {
     renderApp(URL_7)
     await screen.findByText('3 slots free')
 
-    expect(screen.queryByText(/Indian Standard Time/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Opening hours are shown in IST/)).not.toBeInTheDocument()
   })
 
   it('defaults to a car when the URL has no vehicle and the listing has car slots', async () => {

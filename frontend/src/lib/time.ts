@@ -17,13 +17,14 @@ export function defaultWindow(now: Date = new Date()): { start: Date; end: Date 
   return { start, end: new Date(start.getTime() + 2 * HOUR_MS) }
 }
 
-/** Every time on the site is Indian Standard Time; this says whether the browser already agrees. */
+/** Opening hours are in IST; this says whether the device zone is already IST. */
 export function browserIsIst(): boolean {
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
   return zone === 'Asia/Kolkata' || zone === 'Asia/Calcutta'
 }
 
-export const IST_HINT = 'Times are in Indian Standard Time (IST).'
+/** Shown when the device zone differs: pickers use the device zone, opening hours are in IST. */
+export const IST_HINT = 'Times use your device’s time zone. Opening hours are shown in IST.'
 
 const pad = (n: number) => String(n).padStart(2, '0')
 

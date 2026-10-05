@@ -405,14 +405,14 @@ describe('SearchForm', () => {
     browserZone('America/New_York')
     renderForm()
 
-    expect(screen.getByText('Times are in Indian Standard Time (IST).')).toBeInTheDocument()
+    expect(screen.getByText('Times use your device’s time zone. Opening hours are shown in IST.')).toBeInTheDocument()
   })
 
   it('shows no time zone hint when the browser is already on IST', () => {
     browserZone('Asia/Kolkata')
     renderForm()
 
-    expect(screen.queryByText(/Indian Standard Time/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Opening hours are shown in IST/)).not.toBeInTheDocument()
   })
 
   it('pre-fills from initial params', () => {
