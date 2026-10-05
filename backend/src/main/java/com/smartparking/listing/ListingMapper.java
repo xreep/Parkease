@@ -7,6 +7,7 @@ import com.smartparking.listing.dto.ListingSummaryDto;
 import com.smartparking.listing.dto.PhotoDto;
 import com.smartparking.slot.ParkingSlot;
 import com.smartparking.slot.dto.SlotDto;
+import com.smartparking.storage.FileStorage;
 import java.util.Comparator;
 import java.util.List;
 import org.springframework.stereotype.Component;
@@ -14,6 +15,12 @@ import org.springframework.stereotype.Component;
 /** Maps a listing plus its separately loaded children to DTOs. Call within a transaction (lazy city/state). */
 @Component
 public class ListingMapper {
+
+    private final FileStorage storage;
+
+    public ListingMapper(FileStorage storage) {
+        this.storage = storage;
+    }
 
     public ListingDetailDto toDetail(ParkingListing l, List<ListingPhoto> photos, List<ParkingSlot> slots,
                                      List<AvailabilityRule> rules) {
@@ -36,7 +43,12 @@ public class ListingMapper {
     }
 
     public PhotoDto toPhoto(ListingPhoto p) {
-        return new PhotoDto(p.getId(), p.getUrl(), p.getSortOrder());
+        return new PhotoDto(p.getId(), photoUrl(p), p.getSortOrder());
+    }
+
+    /** Public URL from the storage key, so a changed host or storage backend never leaves stale links. */
+    public String photoUrl(ListingPhoto p) {
+        return p.getStorageKey() != null ? storage.publicUrl(p.getStorageKey()) : p.getUrl();
     }
 
     public SlotDto toSlot(ParkingSlot s) {

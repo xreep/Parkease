@@ -32,7 +32,8 @@ class OwnerControllerTest {
         mvc.perform(get("/api/v1/owner/profile").header(HttpHeaders.AUTHORIZATION, auth))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.verificationStatus").value("UNSUBMITTED"))
-                .andExpect(jsonPath("$.documentType").isEmpty());
+                .andExpect(jsonPath("$.documentType").isEmpty())
+                .andExpect(jsonPath("$.hasDocument").value(false));
     }
 
     @Test
@@ -123,6 +124,7 @@ class OwnerControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.verificationStatus").value("PENDING"))
                 .andExpect(jsonPath("$.documentType").value("AADHAAR"))
+                .andExpect(jsonPath("$.hasDocument").value(true))
                 .andExpect(jsonPath("$.documentSubmittedAt").isNotEmpty());
         mvc.perform(get("/api/v1/owner/verification/document-url").header(HttpHeaders.AUTHORIZATION, auth))
                 .andExpect(status().isOk())
@@ -153,5 +155,18 @@ class OwnerControllerTest {
         String auth = unverifiedOwner(mvc, "o7@example.com");
         mvc.perform(get("/api/v1/owner/verification/document-url").header(HttpHeaders.AUTHORIZATION, auth))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void documentFromAnotherStorageBackendIs404NotFound() throws Exception {
+        String auth = unverifiedOwner(mvc, "o8@example.com");
+        Long id = users.findByEmail("o8@example.com").orElseThrow().getId();
+        OwnerProfile profile = profiles.findById(id).orElseThrow();
+        profile.setDocumentKey("cloudinary/private/parkease/owner-documents/abc.pdf");
+        profiles.saveAndFlush(profile);
+        mvc.perform(get("/api/v1/owner/verification/document-url").header(HttpHeaders.AUTHORIZATION, auth))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"))
+                .andExpect(jsonPath("$.detail").value("Document not available"));
     }
 }

@@ -75,7 +75,12 @@ public class OwnerProfileService {
         if (profile.getDocumentKey() == null) {
             throw ApiException.notFound("No document uploaded");
         }
-        return SignedUrlDto.from(storage.privateUrl(profile.getDocumentKey(), DOCUMENT_URL_TTL));
+        try {
+            return SignedUrlDto.from(storage.privateUrl(profile.getDocumentKey(), DOCUMENT_URL_TTL));
+        } catch (IllegalArgumentException e) {
+            // Key written by another storage backend (e.g. after switching local <-> Cloudinary).
+            throw ApiException.notFound("Document not available");
+        }
     }
 
     @Transactional(readOnly = true)

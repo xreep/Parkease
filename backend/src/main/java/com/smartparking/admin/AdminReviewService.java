@@ -10,6 +10,7 @@ import com.smartparking.common.error.ApiException;
 import com.smartparking.common.web.PageResponse;
 import com.smartparking.email.EmailSender;
 import com.smartparking.email.EmailTemplates;
+import com.smartparking.listing.ListingCompleteness;
 import com.smartparking.listing.ListingMapper;
 import com.smartparking.listing.ListingPhoto;
 import com.smartparking.listing.ListingPhotoRepository;
@@ -43,6 +44,7 @@ public class AdminReviewService {
     private final ParkingSlotRepository slots;
     private final AvailabilityRuleRepository rules;
     private final ListingMapper mapper;
+    private final ListingCompleteness completeness;
     private final EmailSender emailSender;
     private final AppProperties app;
     private final Clock clock;
@@ -104,8 +106,8 @@ public class AdminReviewService {
         boolean hasPayout = p.getPayoutUpi() != null
                 || (p.getPayoutBankAccount() != null && p.getPayoutIfsc() != null);
         return new AdminOwnerDto(u.getId(), u.getName(), u.getEmail(), u.getPhone(), p.getVerificationStatus(),
-                p.getDocumentType(), p.getDocumentSubmittedAt(), p.getRejectionReason(), p.getVerifiedAt(),
-                hasPayout, listings.countByOwnerId(u.getId()));
+                p.getDocumentType(), p.getDocumentKey() != null, p.getDocumentSubmittedAt(), p.getRejectionReason(),
+                p.getVerifiedAt(), hasPayout, listings.countByOwnerId(u.getId()));
     }
 
     // ---- listings ----
@@ -124,6 +126,11 @@ public class AdminReviewService {
     @Transactional
     public AdminListingDetailDto approveListing(Long id) {
         ParkingListing listing = requirePendingListing(id);
+        List<String> missing = completeness.missingParts(listing);
+        if (!missing.isEmpty()) {
+            throw ApiException.badRequest("LISTING_INCOMPLETE", "The listing is incomplete and cannot be approved")
+                    .with("missing", missing);
+        }
         listing.setStatus(ListingStatus.APPROVED);
         listing.setApprovedAt(clock.instant());
         listing.setRejectionReason(null);
@@ -159,7 +166,7 @@ public class AdminReviewService {
 
     private AdminListingSummaryDto toListingSummary(ParkingListing l) {
         List<ListingPhoto> ps = photos.findByListingIdOrderBySortOrderAsc(l.getId());
-        String cover = ps.isEmpty() ? null : ps.get(0).getUrl();
+        String cover = ps.isEmpty() ? null : mapper.photoUrl(ps.get(0));
         var s = mapper.toSummary(l, cover, slots.countByListingIdAndActiveTrue(l.getId()));
         User o = l.getOwner();
         return new AdminListingSummaryDto(s.id(), s.title(), s.status(), s.cityName(), s.stateName(),

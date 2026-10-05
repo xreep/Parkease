@@ -17,7 +17,6 @@ import com.smartparking.user.UserRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
-import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
@@ -43,6 +42,7 @@ public class OwnerListingService {
     private final FileStorage storage;
     private final ListingMapper mapper;
     private final OwnerProfileService ownerProfiles;
+    private final ListingCompleteness completeness;
     private final Clock clock;
 
     /** The owner's listing, or 404 (also for other owners' listings, so existence is not leaked). */
@@ -82,7 +82,7 @@ public class OwnerListingService {
         PageRequest pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
         return PageResponse.from(listings.findByOwnerIdOrderByUpdatedAtDesc(ownerId, pageable).map(l -> {
             List<ListingPhoto> ps = photos.findByListingIdOrderBySortOrderAsc(l.getId());
-            String cover = ps.isEmpty() ? null : ps.get(0).getUrl();
+            String cover = ps.isEmpty() ? null : mapper.photoUrl(ps.get(0));
             return mapper.toSummary(l, cover, slots.countByListingIdAndActiveTrue(l.getId()));
         }));
     }
@@ -131,13 +131,7 @@ public class OwnerListingService {
         if (!ownerProfiles.isVerified(ownerId)) {
             throw ApiException.forbidden("OWNER_NOT_VERIFIED", "Verify your identity before submitting listings");
         }
-        List<String> missing = new ArrayList<>();
-        if (photos.countByListingId(listingId) == 0) missing.add("PHOTOS");
-        if (slots.countByListingIdAndActiveTrue(listingId) == 0) missing.add("SLOTS");
-        if (listing.getPricePerHour() == null) missing.add("PRICING");
-        if (!listing.isOpen24x7() && rules.findByListingIdOrderByDayOfWeekAsc(listingId).isEmpty()) {
-            missing.add("AVAILABILITY");
-        }
+        List<String> missing = completeness.missingParts(listing);
         if (!missing.isEmpty()) {
             throw ApiException.badRequest("LISTING_INCOMPLETE", "Complete all steps before submitting")
                     .with("missing", missing);

@@ -91,6 +91,8 @@ class PrivateFileControllerTest {
         String path = URI.create(stored.url()).getRawPath();
         assertThat(path).startsWith("/uploads/public/listing-photos/");
 
-        mvc.perform(get(path)).andExpect(status().isOk()).andExpect(content().bytes(PNG));
+        mvc.perform(get(path)).andExpect(status().isOk()).andExpect(content().bytes(PNG))
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("max-age=31536000")))
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("public")));
     }
 }

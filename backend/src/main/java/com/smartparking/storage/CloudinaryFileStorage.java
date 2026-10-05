@@ -57,6 +57,13 @@ public class CloudinaryFileStorage implements FileStorage {
         }
     }
 
+    @Override
+    public String publicUrl(String key) {
+        Parsed p = parse(key);
+        if (p == null || !p.type().equals("upload")) throw new IllegalArgumentException("Not a public Cloudinary key");
+        return cloudinary.url().secure(true).generate(p.publicId() + "." + p.format());
+    }
+
     private Map<?, ?> upload(ValidatedUpload upload, String folder, String type) {
         try {
             return cloudinary.uploader().upload(upload.bytes(), ObjectUtils.asMap(
