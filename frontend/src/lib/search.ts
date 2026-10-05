@@ -233,3 +233,15 @@ export function useQuote(id: number | string, start?: string, end?: string, vehi
     enabled: Boolean(start && end),
   })
 }
+
+/** `/listings/:id`, carrying the searched window and vehicle on to the listing page. */
+export function listingHref(id: number, start?: string, end?: string, vehicle?: VehicleType): string {
+  const q = new URLSearchParams()
+  if (start && end) {
+    q.set('start', start)
+    q.set('end', end)
+  }
+  if (vehicle) q.set('vehicle', vehicle)
+  const qs = q.toString()
+  return `/listings/${id}${qs ? `?${qs}` : ''}`
+}
