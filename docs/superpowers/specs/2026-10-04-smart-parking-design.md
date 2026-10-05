@@ -177,10 +177,10 @@ Owner uploads ID/property document → `PENDING`. Only `VERIFIED` owners can sub
 | Vehicles | CRUD `/me/vehicles` |
 | Bookings (driver) | `POST /bookings`, `GET /bookings`, `GET /bookings/{id}`, `POST /bookings/{id}/cancel`, `GET /bookings/{id}/refund-preview`, `POST /bookings/{id}/review`, `POST /bookings/{id}/disputes` |
 | Payments | `POST /payments/verify`, `POST /payments/webhook`, `POST /bookings/{id}/payments/retry`, `GET /me/payments`, `GET /invoices/{id}/pdf` |
-| Owner | `GET/PUT /owner/profile`, `POST /owner/verification`, CRUD `/owner/listings`, `/owner/listings/{id}/photos`, `/slots`, `/availability-rules`, `/blocks`, `POST /owner/listings/{id}/submit`; `GET /owner/bookings`, `POST /owner/bookings/{id}/approve|reject|cancel`; `GET /owner/earnings`, `GET /owner/stats` |
+| Owner | `GET /owner/profile`, `PUT /owner/profile/payout`, `POST /owner/verification`, `GET /owner/verification/document-url`, CRUD `/owner/listings`, `/owner/listings/{id}/photos`, `/owner/listings/{id}/photos/order`, `/slots`, `/slots/bulk`, `/hours`, `/blocks`, `POST /owner/listings/{id}/submit|pause|resume`; `GET /owner/bookings`, `POST /owner/bookings/{id}/approve|reject|cancel`; `GET /owner/earnings`, `GET /owner/stats` |
 | Notifications | `GET /notifications`, `POST /notifications/{id}/read`, `POST /notifications/read-all`, `GET /notifications/unread-count` |
 | Uploads | `POST /uploads` (multipart, image/pdf ≤5 MB) |
-| Admin | `GET /admin/stats`, `/admin/owners?status`, `POST /admin/owners/{id}/verify|reject`, `/admin/listings?status`, `POST /admin/listings/{id}/approve|reject|suspend`, `/admin/users`, `POST /admin/users/{id}/suspend|activate`, CRUD `/admin/states`, `/admin/cities`, `/admin/bookings`, `/admin/disputes`, `POST /admin/disputes/{id}/resolve`, `/admin/payments`, `/admin/payouts`, `POST /admin/payouts/mark-paid`, `GET/PUT /admin/settings`, `GET /admin/reports/usage|revenue?from&to&stateId&cityId&format=csv` |
+| Admin | `GET /admin/stats`, `GET /admin/queues`, `/admin/owners?status`, `GET /admin/owners/{id}/document-url`, `POST /admin/owners/{id}/verify|reject`, `/admin/listings?status`, `POST /admin/listings/{id}/approve|reject|suspend`, `/admin/users`, `POST /admin/users/{id}/suspend|activate`, CRUD `/admin/states`, `/admin/cities`, `/admin/bookings`, `/admin/disputes`, `POST /admin/disputes/{id}/resolve`, `/admin/payments`, `/admin/payouts`, `POST /admin/payouts/mark-paid`, `GET/PUT /admin/settings`, `GET /admin/reports/usage|revenue?from&to&stateId&cityId&format=csv` |
 
 All prefixed `/api/v1`. Paginated list responses: `{content, page, size, totalElements, totalPages}`.
 
@@ -248,3 +248,16 @@ Native mobile apps; IoT sensors; gate/barrier automation; real payout money move
 ## 16. User Prerequisites
 
 Install Java 21 and PostgreSQL 16 (Homebrew). Optional accounts/keys: Razorpay (test), Cloudinary, Neon, Render, Vercel, SMTP. All optional services fall back to mocks for local development.
+
+## 17. Phase 2 Adjustments (approved 2026-10-05)
+
+- **Product name:** ParkEase (repo `xreep/Parkease`). Java package `com.smartparking` and DB names are unchanged.
+- **Approvals moved earlier:** Phase 2 ships the owner-verification queue and listing-approval queue (API + minimal admin pages). The full admin panel (users, bookings, disputes, payouts, reports, settings) stays in Phase 7.
+- **Partial seed early:** Phase 2 seeds 6 verified demo owners, ~55 approved listings (at least one per state/UT, more in metros), one pending owner verification and one pending listing. The full ~250–300 listing seed stays in Phase 8.
+- **Listing status adds `PAUSED`:** `APPROVED → PAUSED → APPROVED` (owner pause/resume, no re-review). Deleting is allowed only in `DRAFT`, `PENDING_REVIEW`, `REJECTED`, `PAUSED`.
+- **Amenities** are stored in a `listing_amenities` join table (JPA element collection) instead of a `text[]` column.
+- **Weekly hours:** at most one open window per weekday (`close_time > open_time`, no overnight windows) or `open_24x7`. Times are Asia/Kolkata wall-clock times.
+- **Location sanity check:** a listing's pin must be within 60 km of its selected city's centre (`LOCATION_OUTSIDE_CITY`).
+- **Private documents:** owner verification documents are never publicly addressable. They are fetched via short-lived signed URLs (5 min): an HMAC-signed `/api/v1/files/private` URL for local storage, and Cloudinary `private` delivery with `private_download_url` in Cloudinary mode. Listing photos are public.
+- **Uploads:** validated by magic bytes (JPEG/PNG/WebP for photos; plus PDF for documents), ≤5 MB, ≤8 photos per listing.
+- **Paginated lists** return `{content, page, size, totalElements, totalPages}`.
