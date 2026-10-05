@@ -29,6 +29,7 @@ export function Navbar() {
   const links = (
     <>
       <NavLink to="/" end className={linkClass} onClick={() => setOpen(false)}>Home</NavLink>
+      <NavLink to="/search" className={linkClass} onClick={() => setOpen(false)}>Find parking</NavLink>
       {user ? (
         <>
           <NavLink to={homeFor(user.role)} className={linkClass} onClick={() => setOpen(false)}>Dashboard</NavLink>

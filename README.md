@@ -12,7 +12,7 @@ A web platform where private parking owners rent out unused slots and drivers fi
 |---|---|---|
 | 1 | Scaffold, auth (register/login/refresh/verify/reset), profile, all-India states & cities | ✅ |
 | 2 | Owner verification, listings wizard, slots, opening hours, blocked times, photo/document uploads, admin approval queues, demo listings in every state | ✅ |
-| 3 | Search + map + listing detail | ⏳ |
+| 3 | Parking search with map and filters, availability + live price quotes, public listing pages, city pages | ✅ |
 | 4 | Booking, pricing, Razorpay payments, invoices | ⏳ |
 | 5 | Lifecycle jobs, cancellations/refunds, notifications | ⏳ |
 | 6 | Owner dashboard, earnings, reviews | ⏳ |
@@ -71,6 +71,16 @@ Open http://localhost:5173.
 The dev profile also seeds 55 approved demo listings spread across all 36 states and union territories. The pending owner (`owner.pending@`) and one pending listing, "Viman Nagar Residency Parking", show up in the admin queues (**Admin → Owner verification** and **Listing approvals**), so you can try the review flow straight away.
 
 Change the password with the `DEMO_PASSWORD` environment variable (applies only when the demo accounts are first created).
+
+### Try it: find parking
+
+With both servers running, open http://localhost:5173 and search for a place, for example **"Andheri Metro"** (or pick a city such as Pune from the "Popular" chips). Choose the time and vehicle, then:
+
+- filter by distance, price, listing type, amenities or 24 × 7, and sort by distance, price or rating; results show on the list and on a clustered map;
+- open a listing to see photos, opening hours, rules and the cancellation policy, and a live price quote (parking + platform fee + GST) for your times;
+- browse a state, pick a city (`/in/<state>/<city>`) to see the parking listed around it.
+
+Reserve signs you in; booking itself arrives in Phase 4.
 
 ### Uploads
 

@@ -1,3 +1,5 @@
+import type { CancellationPolicy } from './owner'
+
 const inr = new Intl.NumberFormat('en-IN', {
   style: 'currency',
   currency: 'INR',
@@ -86,3 +88,9 @@ export function formatAddress(l: { address: string; cityName: string; stateName:
   const parts = [l.address, ...(mentionsCity ? [] : [l.cityName]), l.stateName]
   return `${parts.join(', ')} ${l.pincode}`
 }
+
+export const CANCELLATION_POLICIES: { value: CancellationPolicy; label: string; help: string }[] = [
+  { value: 'FLEXIBLE', label: 'Flexible', help: 'Full refund up to 1 hour before start' },
+  { value: 'MODERATE', label: 'Moderate', help: 'Full refund up to 24 hours before start, 50% after' },
+  { value: 'STRICT', label: 'Strict', help: '50% refund up to 48 hours before start' },
+]
