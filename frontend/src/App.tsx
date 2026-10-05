@@ -2,9 +2,12 @@ import { Route, Routes } from 'react-router-dom'
 import { RequireRole } from './auth/RequireRole'
 import { AppLayout } from './components/layout/AppLayout'
 import { AccountPage } from './pages/AccountPage'
+import { ListingPage } from './pages/ListingPage'
+import { CityPage } from './pages/CityPage'
 import { HomePage } from './pages/HomePage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { RoleHomePage } from './pages/RoleHomePage'
+import { SearchPage } from './pages/SearchPage'
 import { StatePage } from './pages/StatePage'
 import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage'
 import { LoginPage } from './pages/auth/LoginPage'
@@ -28,7 +31,10 @@ export default function App() {
     <Routes>
       <Route element={<AppLayout />}>
         <Route index element={<HomePage />} />
+        <Route path="search" element={<SearchPage />} />
+        <Route path="listings/:id" element={<ListingPage />} />
         <Route path="in/:stateSlug" element={<StatePage />} />
+        <Route path="in/:stateSlug/:citySlug" element={<CityPage />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
         <Route path="forgot-password" element={<ForgotPasswordPage />} />

@@ -173,7 +173,7 @@ Owner uploads ID/property document → `PENDING`. Only `VERIFIED` owners can sub
 |---|---|
 | Auth | `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/verify-email`, `/auth/forgot-password`, `/auth/reset-password`; `GET /me`, `PATCH /me` |
 | Locations | `GET /states`, `GET /states/{code}/cities`, `GET /cities?q=` |
-| Search | `GET /search?lat&lng&radiusKm&start&end&vehicleType&type&amenities&maxPrice&sort&page` ; `GET /listings/{id}`; `GET /listings/{id}/availability?from&to`; `GET /listings/{id}/quote?start&end` ; `GET /listings/{id}/reviews` |
+| Search | `GET /search?lat&lng&radiusKm&start&end&vehicleType&types&amenities&maxPricePerHour&open24x7&sort&page` ; `GET /listings/{id}`; `GET /listings/{id}/availability?from&to` *(Phase 6)*; `GET /listings/{id}/quote?start&end` ; `GET /listings/{id}/reviews` *(Phase 6)* |
 | Vehicles | CRUD `/me/vehicles` |
 | Bookings (driver) | `POST /bookings`, `GET /bookings`, `GET /bookings/{id}`, `POST /bookings/{id}/cancel`, `GET /bookings/{id}/refund-preview`, `POST /bookings/{id}/review`, `POST /bookings/{id}/disputes` |
 | Payments | `POST /payments/verify`, `POST /payments/webhook`, `POST /bookings/{id}/payments/retry`, `GET /me/payments`, `GET /invoices/{id}/pdf` |
@@ -261,3 +261,16 @@ Install Java 21 and PostgreSQL 16 (Homebrew). Optional accounts/keys: Razorpay (
 - **Private documents:** owner verification documents are never publicly addressable. They are fetched via short-lived signed URLs (5 min): an HMAC-signed `/api/v1/files/private` URL for local storage, and Cloudinary `private` delivery with `private_download_url` in Cloudinary mode. Listing photos are public.
 - **Uploads:** validated by magic bytes (JPEG/PNG/WebP for photos; plus PDF for documents), ≤5 MB, ≤8 photos per listing.
 - **Paginated lists** return `{content, page, size, totalElements, totalPages}`.
+
+## 18. Phase 3 Decisions (approved 2026-10-05)
+
+- **Search window is optional.** `start`/`end` must be given together; without them search returns all approved listings nearby (no free-slot count or quote).
+- **Time rules:** instants on 15-minute boundaries, `start ≥ now` (rounded down to the current quarter hour), duration 1 hour – 90 days (`INVALID_TIME_RANGE`).
+- **Opening-hours rule:** a non-24×7 listing is available only if the whole window falls on one Asia/Kolkata calendar day inside that weekday's open–close window. Multi-day stays require `open_24x7`.
+- **Availability** = APPROVED + ≥1 active slot of the vehicle type + open for the window + no overlapping whole-listing block; free slots exclude slots with an overlapping slot block (Phase 4 also excludes overlapping bookings).
+- **Pricing** follows §6.1 (cheapest of hourly / daily / monthly / mixed); platform fee 10% of base, GST 18% of fee, HALF_UP to paise; percentages configurable via `app.pricing.*` until the Phase 7 settings table.
+- **Search** = native SQL candidate query (bounding box + Haversine, filters) capped at the 500 nearest candidates, then window/slot evaluation in batch, then sort + paginate. Radius 0.5–25 km (default 5).
+- **Public endpoints:** `GET /api/v1/search`, `GET /api/v1/listings/{id}` (APPROVED only), `GET /api/v1/listings/{id}/quote`. Public DTOs never expose status, rejection reason, submission times or owner contact details (owner first name only).
+- **Map:** React-Leaflet with `react-leaflet-cluster`; price-label markers; "Search this area" re-centres on the map.
+- **Reserve** button on the listing page sends signed-out users to login; actual booking arrives in Phase 4.
+- **Parameter names:** search takes `types` (repeatable) and `maxPricePerHour` (> 0, ≤ 100000; otherwise `INVALID_PARAMETER`), not `type`/`maxPrice`. `GET /listings/{id}/availability` and `/reviews` (§7) are not implemented yet; they arrive in Phase 6.

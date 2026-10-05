@@ -1,13 +1,27 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { CalendarCheck, Car, IndianRupee, MapPin, ShieldCheck, Timer } from 'lucide-react'
+import { SearchForm } from '../components/search/SearchForm'
 import { Spinner } from '../components/ui/Spinner'
 import { useStates, type StateSummary } from '../lib/locations'
+import { toSearchParams } from '../lib/search'
+import { defaultWindow } from '../lib/time'
 
 const steps = [
   { Icon: MapPin, title: 'Search near your destination', body: 'Metro stations, offices, malls and markets across India.' },
   { Icon: CalendarCheck, title: 'Reserve in advance', body: 'Pick your time and vehicle. Pay securely with UPI or card.' },
   { Icon: Car, title: 'Park and go', body: 'Show your booking code on arrival. No circling, no stress.' },
 ]
+
+/** City centres (from the seeded city data) for the one-click searches under the hero form. */
+const POPULAR_CITIES = [
+  { name: 'Mumbai', place: 'Mumbai, Maharashtra', lat: 19.076, lng: 72.8777 },
+  { name: 'Delhi', place: 'New Delhi, Delhi', lat: 28.6139, lng: 77.209 },
+  { name: 'Bengaluru', place: 'Bengaluru, Karnataka', lat: 12.9716, lng: 77.5946 },
+  { name: 'Hyderabad', place: 'Hyderabad, Telangana', lat: 17.385, lng: 78.4867 },
+  { name: 'Chennai', place: 'Chennai, Tamil Nadu', lat: 13.0827, lng: 80.2707 },
+  { name: 'Kolkata', place: 'Kolkata, West Bengal', lat: 22.5726, lng: 88.3639 },
+  { name: 'Pune', place: 'Pune, Maharashtra', lat: 18.5204, lng: 73.8567 },
+] as const
 
 const perks = [
   { Icon: Timer, label: 'Save time searching' },
@@ -38,10 +52,24 @@ function StateGrid({ title, states }: { title: string; states: StateSummary[] })
 }
 
 export function HomePage() {
+  const navigate = useNavigate()
   const { data: states, isLoading, isError } = useStates()
   const stateList = states?.filter((s) => s.type === 'STATE') ?? []
   const utList = states?.filter((s) => s.type === 'UT') ?? []
   const cityTotal = states?.reduce((sum, s) => sum + s.cityCount, 0) ?? 0
+
+  function searchCity(c: (typeof POPULAR_CITIES)[number]) {
+    const w = defaultWindow()
+    const search = toSearchParams({
+      place: c.place,
+      lat: c.lat,
+      lng: c.lng,
+      start: w.start.toISOString(),
+      end: w.end.toISOString(),
+      vehicle: 'FOUR_WHEELER',
+    })
+    navigate({ pathname: '/search', search: `?${search.toString()}` })
+  }
 
   return (
     <>
@@ -56,11 +84,22 @@ export function HomePage() {
           <p className="mt-4 max-w-2xl text-lg text-brand-50">
             Book unused private parking near metro stations, office parks and markets — or earn money from the space you are not using.
           </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <a href="#browse" className="rounded-lg bg-white px-5 py-3 font-semibold text-brand-700 shadow hover:bg-brand-50">
-              Find parking
-            </a>
-            <Link to="/register?role=OWNER" className="rounded-lg border border-white/60 px-5 py-3 font-semibold hover:bg-white/10">
+          <div className="mt-8 max-w-4xl rounded-2xl bg-white p-4 text-slate-900 shadow-xl sm:p-6 dark:bg-slate-900 dark:text-slate-100">
+            <SearchForm />
+          </div>
+          <div className="mt-5 flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-brand-50">Popular:</span>
+            {POPULAR_CITIES.map((c) => (
+              <button
+                key={c.name}
+                type="button"
+                onClick={() => searchCity(c)}
+                className="rounded-full bg-white/15 px-3 py-1 font-medium hover:bg-white/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              >
+                {c.name}
+              </button>
+            ))}
+            <Link to="/register?role=OWNER" className="ml-auto rounded-lg border border-white/60 px-4 py-2 font-semibold hover:bg-white/10">
               List your space
             </Link>
           </div>

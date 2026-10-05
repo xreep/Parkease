@@ -6,16 +6,10 @@ import { FormError } from '../../../components/AuthCard'
 import { TextArea } from '../../../components/ui/TextArea'
 import { TextField } from '../../../components/ui/TextField'
 import { errorMessage, toProblem } from '../../../lib/errors'
-import { AMENITY_LABELS } from '../../../lib/format'
-import { savePricing, type Amenity, type CancellationPolicy, type ListingDetail, type PricingBody } from '../../../lib/owner'
+import { AMENITY_LABELS, CANCELLATION_POLICIES } from '../../../lib/format'
+import { savePricing, type Amenity, type ListingDetail, type PricingBody } from '../../../lib/owner'
 import { StepFooter } from './StepFooter'
 import { isReadOnly, type StepProps } from './types'
-
-const POLICIES: { value: CancellationPolicy; label: string; help: string }[] = [
-  { value: 'FLEXIBLE', label: 'Flexible', help: 'Full refund up to 1 hour before start' },
-  { value: 'MODERATE', label: 'Moderate', help: 'Full refund up to 24 hours before start, 50% after' },
-  { value: 'STRICT', label: 'Strict', help: '50% refund up to 48 hours before start' },
-]
 
 const amenityKeys = Object.keys(AMENITY_LABELS) as [Amenity, ...Amenity[]]
 
@@ -125,7 +119,7 @@ export function PricingStep({ listing, onSaved }: StepProps) {
 
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium text-slate-700 dark:text-slate-300">Cancellation policy</legend>
-          {POLICIES.map((p) => (
+          {CANCELLATION_POLICIES.map((p) => (
             <div key={p.value} className="flex items-start gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
               <input
                 id={`policy-${p.value}`}
