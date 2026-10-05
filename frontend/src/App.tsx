@@ -11,6 +11,11 @@ import { LoginPage } from './pages/auth/LoginPage'
 import { RegisterPage } from './pages/auth/RegisterPage'
 import { ResetPasswordPage } from './pages/auth/ResetPasswordPage'
 import { VerifyEmailPage } from './pages/auth/VerifyEmailPage'
+import { AdminHomePage } from './pages/admin/AdminHomePage'
+import { AdminLayout } from './pages/admin/AdminLayout'
+import { AdminListingReviewPage } from './pages/admin/AdminListingReviewPage'
+import { ListingQueuePage } from './pages/admin/ListingQueuePage'
+import { OwnerQueuePage } from './pages/admin/OwnerQueuePage'
 import { ListingBlocksPage } from './pages/owner/ListingBlocksPage'
 import { ListingWizardPage } from './pages/owner/ListingWizardPage'
 import { MyListingsPage } from './pages/owner/MyListingsPage'
@@ -39,7 +44,12 @@ export default function App() {
           <Route path="listings/:id/edit" element={<ListingWizardPage />} />
           <Route path="listings/:id/blocks" element={<ListingBlocksPage />} />
         </Route>
-        <Route path="admin" element={<RequireRole roles={['ADMIN']}><RoleHomePage /></RequireRole>} />
+        <Route path="admin" element={<RequireRole roles={['ADMIN']}><AdminLayout /></RequireRole>}>
+          <Route index element={<AdminHomePage />} />
+          <Route path="owners" element={<OwnerQueuePage />} />
+          <Route path="listings" element={<ListingQueuePage />} />
+          <Route path="listings/:id" element={<AdminListingReviewPage />} />
+        </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
