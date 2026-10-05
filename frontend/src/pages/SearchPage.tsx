@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import clsx from 'clsx'
-import { SlidersHorizontal } from 'lucide-react'
+import { ChevronDown, SlidersHorizontal } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { FiltersDrawer, FiltersPanel } from '../components/search/FiltersPanel'
 import { ResultCard, ResultCardSkeleton } from '../components/search/ResultCard'
@@ -18,6 +18,7 @@ import {
   type SearchSort,
 } from '../lib/search'
 import { activeFilterCount, filtersOf, NO_FILTERS, paramsOf, RADIUS_OPTIONS, type Filters } from '../lib/searchFilters'
+import { toProblem } from '../lib/errors'
 import { durationLabel, formatWindow } from '../lib/time'
 
 const SORT_LABELS: Record<SearchSort, string> = {
@@ -33,14 +34,18 @@ function SearchResults({ params }: { params: SearchParams }) {
   const [highlightedId, setHighlightedId] = useState<number | null>(null)
   const [view, setView] = useState<View>('list')
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [sidebarFilters, setSidebarFilters] = useState(false)
   const headerRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
-  const { data, isPending, isError, isPlaceholderData, refetch } = useSearch(params)
+  const { data, error, isPending, isError, isPlaceholderData, refetch } = useSearch(params)
 
   const filters = filtersOf(params)
   const filterCount = activeFilterCount(filters)
   const hasWindow = Boolean(params.start && params.end)
   const results = data?.content ?? []
+  /** Data for the previous search or page, shown dimmed while the new one loads. */
+  const stale = isPlaceholderData
+  const timesRejected = isError && toProblem(error).code === 'INVALID_TIME_RANGE'
 
   function go(next: SearchParams, replace: boolean) {
     setSearchParams(toSearchParams(next), { replace })
@@ -49,8 +54,13 @@ function SearchResults({ params }: { params: SearchParams }) {
   const tweak = (patch: Partial<SearchParams>) => go({ ...params, ...patch, page: undefined }, true)
   const applyFilters = (f: Filters) => tweak(paramsOf(f))
 
+  function focusTimes() {
+    headerRef.current?.querySelector<HTMLInputElement>('input[type="datetime-local"]')?.focus()
+  }
+
+  /** Pushes a history entry so that Back returns to the previous page of results. */
   function changePage(page: number) {
-    go({ ...params, page: page || undefined }, true)
+    go({ ...params, page: page || undefined }, false)
     listRef.current?.scrollTo?.({ top: 0 })
     listRef.current?.scrollIntoView?.({ block: 'start' })
   }
@@ -82,7 +92,7 @@ function SearchResults({ params }: { params: SearchParams }) {
       <div className="mt-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
         <div className="min-w-0">
           <h1 className="text-lg font-semibold break-words">
-            {data ? `${data.totalElements} parking ${data.totalElements === 1 ? 'spot' : 'spots'} near ${place}` : 'Searching for parking…'}
+            {data && !stale ? `${data.totalElements} parking ${data.totalElements === 1 ? 'spot' : 'spots'} near ${place}` : 'Searching for parking…'}
           </h1>
           {hasWindow && (
             <p className="text-sm text-slate-600 dark:text-slate-400">
@@ -90,13 +100,14 @@ function SearchResults({ params }: { params: SearchParams }) {
             </p>
           )}
         </div>
-        <div className="flex items-end gap-2">
+        <div className="flex min-w-0 flex-wrap items-end gap-2">
           <Button type="button" variant="secondary" className="lg:hidden" onClick={() => setFiltersOpen(true)}>
             <SlidersHorizontal aria-hidden className="h-4 w-4" />
             {filterCount > 0 ? `Filters (${filterCount})` : 'Filters'}
           </Button>
           <Select
             label="Sort by"
+            className="min-w-0 flex-1 sm:flex-none"
             value={params.sort ?? DEFAULT_SORT}
             onChange={(e) => {
               const sort = e.target.value as SearchSort
@@ -107,7 +118,7 @@ function SearchResults({ params }: { params: SearchParams }) {
               <option key={s} value={s}>{SORT_LABELS[s]}</option>
             ))}
           </Select>
-          <div role="group" aria-label="Results view" className="flex gap-1 lg:hidden">
+          <div role="group" aria-label="Results view" className="flex shrink-0 gap-1 lg:hidden">
             {(['list', 'map'] as const).map((v) => (
               <Button
                 key={v}
@@ -130,25 +141,53 @@ function SearchResults({ params }: { params: SearchParams }) {
           ref={listRef}
           className={clsx('min-w-0 space-y-3 lg:overflow-y-auto lg:pr-2', view === 'map' && 'max-lg:hidden')}
         >
-          <details open className="hidden rounded-xl border border-slate-200 bg-white p-4 lg:block dark:border-slate-800 dark:bg-slate-900">
-            <summary className="cursor-pointer text-sm font-semibold">{filterCount > 0 ? `Filters (${filterCount})` : 'Filters'}</summary>
-            <div className="mt-4">
-              <FiltersPanel
-                value={filters}
-                onChange={(patch) => applyFilters({ ...filters, ...patch })}
-                onClear={() => applyFilters({ ...NO_FILTERS })}
-              />
-            </div>
-          </details>
+          <div className="hidden lg:block">
+            <Button
+              type="button"
+              variant="secondary"
+              aria-expanded={sidebarFilters}
+              aria-controls="search-filters"
+              onClick={() => setSidebarFilters((o) => !o)}
+            >
+              <SlidersHorizontal aria-hidden className="h-4 w-4" />
+              {`${sidebarFilters ? 'Hide' : 'Show'} filters${filterCount > 0 ? ` (${filterCount})` : ''}`}
+              <ChevronDown aria-hidden className={clsx('h-4 w-4 transition', sidebarFilters && 'rotate-180')} />
+            </Button>
+            {sidebarFilters && (
+              <section
+                id="search-filters"
+                aria-label="Filters"
+                className="mt-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
+              >
+                <FiltersPanel
+                  value={filters}
+                  onChange={(patch) => applyFilters({ ...filters, ...patch })}
+                  onClear={() => applyFilters({ ...NO_FILTERS })}
+                />
+              </section>
+            )}
+          </div>
 
-          {isPending ? (
-            <div role="status" aria-label="Loading results" className="space-y-3">
+          {isPending || (stale && results.length === 0) ? (
+            <div role="status" className="space-y-3">
+              <span className="sr-only">Loading results…</span>
               {[0, 1, 2].map((i) => <ResultCardSkeleton key={i} />)}
             </div>
           ) : isError ? (
             <div role="alert" className="space-y-3 rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/40">
-              <p className="text-sm text-red-700 dark:text-red-300">Couldn't load results. Try again.</p>
-              <Button type="button" variant="secondary" onClick={() => void refetch()}>Retry</Button>
+              {timesRejected ? (
+                <>
+                  <p className="text-sm text-red-700 dark:text-red-300">
+                    These times are no longer valid. Change the times to search again.
+                  </p>
+                  <Button type="button" variant="secondary" onClick={focusTimes}>Change times</Button>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-red-700 dark:text-red-300">Couldn't load results. Try again.</p>
+                  <Button type="button" variant="secondary" onClick={() => void refetch()}>Retry</Button>
+                </>
+              )}
             </div>
           ) : results.length === 0 ? (
             <div className="space-y-3 rounded-xl border border-dashed border-slate-300 p-6 text-center dark:border-slate-700">
@@ -161,17 +200,13 @@ function SearchResults({ params }: { params: SearchParams }) {
                     Try a larger distance
                   </Button>
                 )}
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => headerRef.current?.querySelector<HTMLInputElement>('input[type="datetime-local"]')?.focus()}
-                >
+                <Button type="button" variant="secondary" onClick={focusTimes}>
                   Try different times
                 </Button>
               </div>
             </div>
           ) : (
-            <div aria-busy={isPlaceholderData} className={clsx('space-y-3 transition-opacity', isPlaceholderData && 'opacity-60')}>
+            <div aria-busy={stale} className={clsx('space-y-3 transition-opacity', stale && 'opacity-60')}>
               {results.map((r) => (
                 <ResultCard
                   key={r.id}
@@ -195,6 +230,7 @@ function SearchResults({ params }: { params: SearchParams }) {
             center={{ lat: params.lat, lng: params.lng }}
             radiusKm={filters.radius}
             highlightedId={highlightedId}
+            loading={isPending || stale}
             onMarkerClick={showMarker}
             onSearchArea={searchArea}
           />

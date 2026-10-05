@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import MockAdapter from 'axios-mock-adapter'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../lib/api'
 import type { SearchResponse, SearchResultDto } from '../lib/search'
@@ -17,15 +17,19 @@ vi.mock('../components/search/ResultsMap', () => ({
     results: SearchResultDto[]
     onMarkerClick: (id: number) => void
     onSearchArea: (c: { lat: number; lng: number }) => void
-  }) => (
+  }) => {
+    const navigate = useNavigate()
+    return (
     <div>
       <output data-testid="url">{useLocation().search}</output>
+      <button type="button" onClick={() => navigate(-1)}>Go back</button>
       {results.map((r) => (
         <button key={r.id} type="button" onClick={() => onMarkerClick(r.id)}>{`Marker ${r.title}`}</button>
       ))}
       <button type="button" onClick={() => onSearchArea({ lat: 18.6, lng: 73.9 })}>Search this area</button>
     </div>
-  ),
+    )
+  },
 }))
 
 const DAY = 24 * 60 * 60 * 1000
@@ -111,6 +115,8 @@ describe('SearchPage', () => {
     renderApp(SEARCH_URL)
     await screen.findByText('1 parking spot near Pune, Maharashtra')
 
+    expect(screen.queryByRole('checkbox', { name: 'CCTV' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Show filters' }))
     await user.click(screen.getByRole('checkbox', { name: 'CCTV' }))
     await waitFor(() => expect(lastParams().amenities).toEqual(['CCTV']))
     expect(screen.getByTestId('url').textContent).toContain('amenities=CCTV')
@@ -119,6 +125,7 @@ describe('SearchPage', () => {
     // The unfiltered search is already cached, so the URL (not a new request) shows the filter is gone.
     await waitFor(() => expect(screen.getByTestId('url').textContent).not.toContain('amenities'))
     expect(screen.getByRole('checkbox', { name: 'CCTV' })).not.toBeChecked()
+    expect(screen.getByRole('button', { name: 'Hide filters' })).toBeInTheDocument()
   })
 
   it('applies the distance and maximum price filters', async () => {
@@ -127,6 +134,7 @@ describe('SearchPage', () => {
     renderApp(SEARCH_URL)
     await screen.findByText('1 parking spot near Pune, Maharashtra')
 
+    await user.click(screen.getByRole('button', { name: 'Show filters' }))
     await user.selectOptions(screen.getByLabelText('Distance'), '10')
     await waitFor(() => expect(lastParams().radiusKm).toBe(10))
 
@@ -134,6 +142,21 @@ describe('SearchPage', () => {
     await user.tab()
     await waitFor(() => expect(lastParams().maxPricePerHour).toBe(80))
     expect(screen.getByTestId('url').textContent).toContain('maxPrice=80')
+  })
+
+  it('does not apply a maximum price of zero or less', async () => {
+    mock.onGet('/search').reply(200, response([result()]))
+    const user = userEvent.setup()
+    renderApp(SEARCH_URL)
+    await screen.findByText('1 parking spot near Pune, Maharashtra')
+
+    await user.click(screen.getByRole('button', { name: 'Show filters' }))
+    await user.type(screen.getByLabelText('Max price per hour'), '0')
+    await user.tab()
+
+    expect(await screen.findByText('Enter a price above ₹0')).toBeInTheDocument()
+    expect(screen.getByTestId('url').textContent).not.toContain('maxPrice')
+    expect(mock.history.get.filter((r) => r.url === '/search')).toHaveLength(1)
   })
 
   it('offers a larger distance when nothing is found', async () => {
@@ -212,6 +235,52 @@ describe('SearchPage', () => {
     expect(await screen.findByText('Page 2 of 2')).toBeInTheDocument()
     expect(lastParams().page).toBe(1)
     expect(await screen.findByRole('article', { name: 'Office Park Lot' })).toBeInTheDocument()
+
+    // Each page is a history entry, so Back returns to the previous page.
+    await user.click(screen.getByRole('button', { name: 'Go back' }))
+    expect(await screen.findByText('Page 1 of 2')).toBeInTheDocument()
+    expect(screen.getByTestId('url').textContent).not.toContain('page=')
+  })
+
+  it('does not show the previous search as the new one while loading', async () => {
+    mock.onGet('/search').reply((config) =>
+      config.params.lat === 18.6 ? new Promise(() => {}) : [200, response([result(), second])],
+    )
+    const user = userEvent.setup()
+    renderApp(SEARCH_URL)
+    await screen.findByText('2 parking spots near Pune, Maharashtra')
+
+    await user.click(screen.getByRole('button', { name: 'Search this area' }))
+
+    expect(await screen.findByText('Searching for parking…')).toBeInTheDocument()
+    expect(screen.queryByText(/parking spots near/)).not.toBeInTheDocument()
+  })
+
+  it('shows a skeleton, not the empty state, while an empty search reloads', async () => {
+    mock.onGet('/search').reply((config) =>
+      config.params.radiusKm === 10 ? new Promise(() => {}) : [200, response([])],
+    )
+    const user = userEvent.setup()
+    renderApp(SEARCH_URL)
+    expect(await screen.findByText('Loading results…')).toBeInTheDocument()
+    await screen.findByText('No parking found here for these times.')
+
+    await user.click(screen.getByRole('button', { name: 'Try a larger distance' }))
+
+    expect(await screen.findByText('Loading results…')).toBeInTheDocument()
+    expect(screen.queryByText('No parking found here for these times.')).not.toBeInTheDocument()
+  })
+
+  it('asks for new times when the server rejects the time range', async () => {
+    mock.onGet('/search').reply(400, { code: 'INVALID_TIME_RANGE', detail: 'Start is in the past' })
+    const user = userEvent.setup()
+    renderApp(SEARCH_URL)
+
+    expect(await screen.findByText('These times are no longer valid. Change the times to search again.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Change times' }))
+
+    expect(screen.getByLabelText('From')).toHaveFocus()
   })
 
   it('toggles between the list and the map on small screens', async () => {
