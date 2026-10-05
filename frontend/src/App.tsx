@@ -2,6 +2,7 @@ import { Route, Routes } from 'react-router-dom'
 import { RequireRole } from './auth/RequireRole'
 import { AppLayout } from './components/layout/AppLayout'
 import { AccountPage } from './pages/AccountPage'
+import { ListingPage } from './pages/ListingPage'
 import { HomePage } from './pages/HomePage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { RoleHomePage } from './pages/RoleHomePage'
@@ -30,6 +31,7 @@ export default function App() {
       <Route element={<AppLayout />}>
         <Route index element={<HomePage />} />
         <Route path="search" element={<SearchPage />} />
+        <Route path="listings/:id" element={<ListingPage />} />
         <Route path="in/:stateSlug" element={<StatePage />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
