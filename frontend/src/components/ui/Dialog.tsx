@@ -1,3 +1,4 @@
+import clsx from 'clsx'
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -14,9 +15,11 @@ export type DialogProps = {
   children: ReactNode
   /** While busy, clicking the backdrop or pressing Escape does not dismiss the dialog. */
   busy?: boolean
+  /** A wider panel, for content such as a photo. */
+  wide?: boolean
 }
 
-export function Dialog({ open, title, onClose, children, busy = false }: DialogProps) {
+export function Dialog({ open, title, onClose, children, busy = false, wide = false }: DialogProps) {
   const titleId = useId()
   const panelRef = useRef<HTMLDivElement>(null)
   const onCloseRef = useRef(onClose)
@@ -72,7 +75,7 @@ export function Dialog({ open, title, onClose, children, busy = false }: DialogP
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl outline-none dark:border-slate-800 dark:bg-slate-900"
+        className={clsx('w-full rounded-2xl border border-slate-200 bg-white p-6 shadow-xl outline-none dark:border-slate-800 dark:bg-slate-900', wide ? 'max-w-3xl' : 'max-w-md')}
       >
         <h2 id={titleId} className="text-lg font-semibold">{title}</h2>
         <div className="mt-4">{children}</div>
