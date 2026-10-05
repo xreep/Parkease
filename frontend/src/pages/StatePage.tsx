@@ -32,11 +32,15 @@ export function StatePage() {
       <p className="mt-1 text-slate-600 dark:text-slate-400">Capital: {state.capitalName}</p>
       <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {state.cities.map((city) => (
-          <div key={city.id} className="flex items-start justify-between rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+          <Link
+            key={city.id}
+            to={`/in/${state.slug}/${city.slug}`}
+            className="group flex items-start justify-between rounded-xl border border-slate-200 bg-white p-4 transition hover:-translate-y-0.5 hover:border-brand-500 hover:shadow-md dark:border-slate-800 dark:bg-slate-900"
+          >
             <div className="flex gap-3">
               <MapPin className="mt-0.5 h-5 w-5 text-brand-600" />
               <div>
-                <p className="font-semibold">{city.name}</p>
+                <p className="font-semibold group-hover:text-brand-700 dark:group-hover:text-brand-400">{city.name}</p>
                 <p className="text-xs text-slate-500">{city.lat.toFixed(3)}°N, {city.lng.toFixed(3)}°E</p>
               </div>
             </div>
@@ -45,7 +49,7 @@ export function StatePage() {
                 <Star className="h-3 w-3" />Capital
               </span>
             )}
-          </div>
+          </Link>
         ))}
       </div>
     </section>
