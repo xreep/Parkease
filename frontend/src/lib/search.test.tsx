@@ -4,7 +4,7 @@ import MockAdapter from 'axios-mock-adapter'
 import type { ReactNode } from 'react'
 import { describe, expect, it } from 'vitest'
 import { api } from './api'
-import { parseSearchParams, toApiQuery, toSearchParams, useSearch, type SearchParams } from './search'
+import { listingHref, parseSearchParams, toApiQuery, toSearchParams, useSearch, type SearchParams } from './search'
 
 describe('search params', () => {
   const full: SearchParams = {
@@ -81,6 +81,15 @@ describe('search params', () => {
       page: 2,
     })
     expect(toApiQuery({ place: 'X', lat: 1, lng: 2 })).toEqual({ lat: 1, lng: 2 })
+  })
+})
+
+describe('listingHref', () => {
+  it('carries the searched window and vehicle', () => {
+    expect(listingHref(7, '2026-10-06T04:30:00.000Z', '2026-10-06T06:30:00.000Z', 'TWO_WHEELER')).toBe(
+      '/listings/7?start=2026-10-06T04%3A30%3A00.000Z&end=2026-10-06T06%3A30%3A00.000Z&vehicle=TWO_WHEELER',
+    )
+    expect(listingHref(7)).toBe('/listings/7')
   })
 })
 
