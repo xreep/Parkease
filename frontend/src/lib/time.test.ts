@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { defaultWindow, durationLabel, formatWindow, fromLocalInputValue, nextQuarter, toLocalInputValue } from './time'
+import { currentQuarter, defaultWindow, durationLabel, formatWindow, fromLocalInputValue, nextQuarter, toLocalInputValue } from './time'
 
 describe('time helpers', () => {
   it('rounds up to the next quarter hour', () => {
     expect(nextQuarter(new Date(2026, 9, 6, 10, 7, 30))).toEqual(new Date(2026, 9, 6, 10, 15))
     expect(nextQuarter(new Date(2026, 9, 6, 10, 0, 0, 1))).toEqual(new Date(2026, 9, 6, 10, 15))
+  })
+
+  it('floors to the current quarter hour', () => {
+    expect(currentQuarter(new Date(2026, 9, 6, 10, 7, 30))).toEqual(new Date(2026, 9, 6, 10, 0))
+    expect(currentQuarter(new Date(2026, 9, 6, 10, 15, 0, 0))).toEqual(new Date(2026, 9, 6, 10, 15))
+    expect(currentQuarter(new Date(2026, 9, 6, 10, 29, 59, 999))).toEqual(new Date(2026, 9, 6, 10, 15))
   })
 
   it('is always strictly in the future', () => {

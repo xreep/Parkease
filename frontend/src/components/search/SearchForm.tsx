@@ -5,7 +5,7 @@ import { VEHICLE_TYPE_LABELS } from '../../lib/format'
 import type { VehicleType } from '../../lib/owner'
 import type { Place } from '../../lib/places'
 import { toSearchParams, type SearchParams } from '../../lib/search'
-import { defaultWindow, fromLocalInputValue, toLocalInputValue } from '../../lib/time'
+import { currentQuarter, defaultWindow, fromLocalInputValue, toLocalInputValue } from '../../lib/time'
 import { Button } from '../ui/Button'
 import { Select } from '../ui/Select'
 import { TextField } from '../ui/TextField'
@@ -23,7 +23,7 @@ type Errors = { place?: string; start?: string; end?: string }
 
 const MIN_MINUTES = 60
 
-function initialWindow(initial?: SearchParams) {
+function initialTimes(initial?: SearchParams) {
   if (initial?.start && initial.end) {
     return { start: toLocalInputValue(new Date(initial.start)), end: toLocalInputValue(new Date(initial.end)) }
   }
@@ -36,16 +36,17 @@ export function SearchForm({ initial, compact = false, onSubmit }: Props) {
   const [place, setPlace] = useState<Place | null>(() =>
     initial ? { label: initial.place, lat: initial.lat, lng: initial.lng, kind: 'place' } : null,
   )
-  const [window, setWindow] = useState(() => initialWindow(initial))
+  const [times, setTimes] = useState(() => initialTimes(initial))
   const [vehicle, setVehicle] = useState<VehicleType>(initial?.vehicle ?? 'FOUR_WHEELER')
   const [errors, setErrors] = useState<Errors>({})
 
   function validate(): Errors {
     const errs: Errors = {}
     if (!place) errs.place = 'Choose a place from the list'
-    const start = fromLocalInputValue(window.start)
-    const end = fromLocalInputValue(window.end)
+    const start = fromLocalInputValue(times.start)
+    const end = fromLocalInputValue(times.end)
     if (Number.isNaN(start.getTime())) errs.start = 'Choose a start time'
+    else if (start < currentQuarter()) errs.start = "Start time can't be in the past"
     if (Number.isNaN(end.getTime())) errs.end = 'Choose an end time'
     if (!errs.start && !errs.end) {
       const minutes = (end.getTime() - start.getTime()) / 60_000
@@ -65,8 +66,8 @@ export function SearchForm({ initial, compact = false, onSubmit }: Props) {
       place: place.label,
       lat: place.lat,
       lng: place.lng,
-      start: fromLocalInputValue(window.start).toISOString(),
-      end: fromLocalInputValue(window.end).toISOString(),
+      start: fromLocalInputValue(times.start).toISOString(),
+      end: fromLocalInputValue(times.end).toISOString(),
       vehicle,
       page: undefined,
     }
@@ -97,17 +98,17 @@ export function SearchForm({ initial, compact = false, onSubmit }: Props) {
         label="From"
         type="datetime-local"
         step={900}
-        value={window.start}
+        value={times.start}
         error={errors.start}
-        onChange={(e) => setWindow((w) => ({ ...w, start: e.target.value }))}
+        onChange={(e) => setTimes((w) => ({ ...w, start: e.target.value }))}
       />
       <TextField
         label="Until"
         type="datetime-local"
         step={900}
-        value={window.end}
+        value={times.end}
         error={errors.end}
-        onChange={(e) => setWindow((w) => ({ ...w, end: e.target.value }))}
+        onChange={(e) => setTimes((w) => ({ ...w, end: e.target.value }))}
       />
       <Select label="Vehicle" value={vehicle} onChange={(e) => setVehicle(e.target.value as VehicleType)}>
         <option value="FOUR_WHEELER">{VEHICLE_TYPE_LABELS.FOUR_WHEELER}</option>

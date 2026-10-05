@@ -167,7 +167,7 @@ describe('SearchForm', () => {
 
     const input = screen.getByRole('combobox', { name: /where are you going/i })
     await user.type(input, 'pun')
-    const listbox = screen.getByRole('listbox')
+    const listbox = await screen.findByRole('listbox')
     await waitFor(() => expect(within(listbox).getAllByRole('option')).toHaveLength(2))
     const options = within(listbox).getAllByRole('option')
     expect(options.map((o) => o.textContent)).toEqual(['Pune, Maharashtra', 'Pune Railway Station, Camp, Pune'])
@@ -193,6 +193,77 @@ describe('SearchForm', () => {
 
     await user.keyboard('{Escape}')
     expect(input).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it("rejects a start before the current quarter hour", async () => {
+    mock.onGet('/cities').reply(200, [pune])
+    const user = userEvent.setup()
+    renderForm()
+
+    await user.type(screen.getByRole('combobox', { name: /where are you going/i }), 'pun')
+    await user.click(await screen.findByRole('option', { name: 'Pune, Maharashtra' }))
+    const from = screen.getByLabelText('From')
+    const until = screen.getByLabelText('Until')
+    await user.clear(from)
+    await user.type(from, '2020-01-01T08:00')
+    await user.clear(until)
+    await user.type(until, '2020-01-01T10:00')
+    await user.click(screen.getByRole('button', { name: /search parking/i }))
+
+    expect(await screen.findByText("Start time can't be in the past")).toBeInTheDocument()
+    expect(screen.queryByTestId('location')).not.toBeInTheDocument()
+  })
+
+  it('does not call Nominatim for queries shorter than 3 characters', async () => {
+    mock.onGet('/cities').reply(200, [])
+    const user = userEvent.setup()
+    renderForm()
+
+    await user.type(screen.getByRole('combobox', { name: /where are you going/i }), 'pu')
+
+    expect(await screen.findByText('No matches')).toBeInTheDocument()
+    expect(mock.history.get.filter((r) => r.url === '/cities')).not.toHaveLength(0)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps the listbox to options and groups, with status text outside it', async () => {
+    mock.onGet('/cities').reply(200, [pune])
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => [{ display_name: 'Pune Railway Station, Camp, Pune, India', lat: '18.528', lon: '73.874' }],
+    })
+    const user = userEvent.setup()
+    renderForm()
+
+    await user.type(screen.getByRole('combobox', { name: /where are you going/i }), 'pun')
+    const listbox = await screen.findByRole('listbox')
+    await waitFor(() => expect(within(listbox).getAllByRole('option')).toHaveLength(2))
+
+    const groups = within(listbox).getAllByRole('group')
+    expect(groups.map((g) => g.getAttribute('aria-labelledby')).map((id) => document.getElementById(id!)?.textContent)).toEqual([
+      'Cities',
+      'Places',
+    ])
+    for (const child of Array.from(listbox.children)) expect(child).toHaveAttribute('role', 'group')
+    expect(within(listbox).queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('shows Searching… in a status region and drops stale options while a new lookup is pending', async () => {
+    mock.onGet('/cities').replyOnce(200, [pune])
+    const user = userEvent.setup()
+    renderForm()
+
+    const input = screen.getByRole('combobox', { name: /where are you going/i })
+    await user.type(input, 'pun')
+    await screen.findByRole('option', { name: 'Pune, Maharashtra' })
+
+    mock.onGet('/cities').reply(() => new Promise(() => {}))
+    await user.type(input, 'e')
+
+    const listbox = screen.getByRole('listbox', { hidden: true })
+    expect(within(listbox).queryAllByRole('option', { hidden: true })).toHaveLength(0)
+    expect(screen.getByRole('status')).toHaveTextContent('Searching…')
+    expect(listbox).not.toContainElement(screen.getByRole('status'))
   })
 
   it('pre-fills from initial params', () => {

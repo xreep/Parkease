@@ -81,7 +81,7 @@ export function PlaceSearch({
     setText(next)
     setTyped(next)
     setOpen(true)
-    setResults((r) => (next.trim() ? { ...r, done: false } : EMPTY))
+    setResults(EMPTY)
     setActive(-1)
     if (value) onChange(null)
   }
@@ -108,7 +108,7 @@ export function PlaceSearch({
   }
 
   const optionRow = (place: Place, index: number) => (
-    <li
+    <div
       key={`${place.kind}-${place.label}-${place.lat}-${place.lng}`}
       id={optionId(index)}
       role="option"
@@ -123,14 +123,27 @@ export function PlaceSearch({
     >
       <MapPin aria-hidden className="h-4 w-4 shrink-0 text-slate-400" />
       <span className="min-w-0 break-words">{place.label}</span>
-    </li>
+    </div>
   )
 
-  const heading = (title: string) => (
-    <li role="presentation" className="px-3 pt-2 pb-1 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
-      {title}
-    </li>
-  )
+  /** A listbox may only hold options and groups, so each heading labels a `role="group"` of options. */
+  const group = (key: string, title: string, places: Place[], offset: number) =>
+    places.length > 0 && (
+      <div role="group" aria-labelledby={`${id}-${key}`}>
+        <div
+          id={`${id}-${key}`}
+          aria-hidden
+          className="px-3 pt-2 pb-1 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400"
+        >
+          {title}
+        </div>
+        {places.map((p, i) => optionRow(p, offset + i))}
+      </div>
+    )
+
+  const listVisible = showList && options.length > 0
+  const dropdown =
+    'absolute z-30 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900'
 
   return (
     <div className="relative space-y-1.5" onBlur={handleBlur}>
@@ -143,9 +156,9 @@ export function PlaceSearch({
         role="combobox"
         autoComplete="off"
         aria-autocomplete="list"
-        aria-expanded={showList}
+        aria-expanded={listVisible}
         aria-controls={listboxId}
-        aria-activedescendant={showList && active >= 0 ? optionId(active) : undefined}
+        aria-activedescendant={listVisible && active >= 0 ? optionId(active) : undefined}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? messageId : undefined}
         value={text}
@@ -161,23 +174,20 @@ export function PlaceSearch({
             : 'border-slate-300 focus:border-brand-500 focus:ring-brand-500/30 dark:border-slate-700',
         )}
       />
-      <ul
+      <div
         id={listboxId}
         role="listbox"
         aria-label={label}
-        hidden={!showList}
-        className="absolute z-30 mt-1 max-h-72 w-full overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+        hidden={!listVisible}
+        className={clsx(dropdown, 'max-h-72 overflow-auto py-1')}
       >
-        {results.cities.length > 0 && heading('Cities')}
-        {results.cities.map((p, i) => optionRow(p, i))}
-        {results.places.length > 0 && heading('Places')}
-        {results.places.map((p, i) => optionRow(p, results.cities.length + i))}
-        {options.length === 0 && (
-          <li role="presentation" className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">
-            {results.done ? 'No matches' : 'Searching…'}
-          </li>
-        )}
-      </ul>
+        {group('cities', 'Cities', results.cities, 0)}
+        {group('places', 'Places', results.places, results.cities.length)}
+      </div>
+      {/* Status text lives outside the listbox, which may only contain options and groups. */}
+      <div role="status" className={clsx(showList && options.length === 0 && [dropdown, 'px-3 py-2 text-sm text-slate-500 dark:text-slate-400'])}>
+        {showList && options.length === 0 ? (results.done ? 'No matches' : 'Searching…') : null}
+      </div>
       {error && (
         <p id={messageId} className="text-sm text-red-600 dark:text-red-400">
           {error}

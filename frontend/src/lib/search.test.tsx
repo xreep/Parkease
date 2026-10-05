@@ -1,5 +1,10 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { renderHook, waitFor } from '@testing-library/react'
+import MockAdapter from 'axios-mock-adapter'
+import type { ReactNode } from 'react'
 import { describe, expect, it } from 'vitest'
-import { parseSearchParams, toApiQuery, toSearchParams, type SearchParams } from './search'
+import { api } from './api'
+import { parseSearchParams, toApiQuery, toSearchParams, useSearch, type SearchParams } from './search'
 
 describe('search params', () => {
   const full: SearchParams = {
@@ -30,6 +35,14 @@ describe('search params', () => {
       place: 'Pune', lat: 18.5, lng: 73.8, radius: 5, types: [], amenities: [], open24x7: false, sort: 'distance', page: 0,
     })
     expect(usp.toString()).toBe('place=Pune&lat=18.5&lng=73.8')
+  })
+
+  it('only writes a positive maxPrice', () => {
+    const base = { place: 'X', lat: 1, lng: 2 }
+    expect(toSearchParams({ ...base, maxPrice: 0 }).has('maxPrice')).toBe(false)
+    expect(toSearchParams({ ...base, maxPrice: -5 }).has('maxPrice')).toBe(false)
+    expect(toApiQuery({ ...base, maxPrice: 0 })).toEqual({ lat: 1, lng: 2 })
+    expect(parseSearchParams(toSearchParams({ ...base, maxPrice: 0 }))).toEqual(base)
   })
 
   it('applies defaults when parsing a minimal query', () => {
@@ -68,5 +81,29 @@ describe('search params', () => {
       page: 2,
     })
     expect(toApiQuery({ place: 'X', lat: 1, lng: 2 })).toEqual({ lat: 1, lng: 2 })
+  })
+})
+
+describe('useSearch', () => {
+  it('sends repeated keys for array filters, as Spring expects', async () => {
+    const mock = new MockAdapter(api)
+    mock.onGet('/search').reply(200, { content: [], page: 0, size: 20, totalElements: 0, totalPages: 0 })
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        {children}
+      </QueryClientProvider>
+    )
+
+    const { result } = renderHook(
+      () => useSearch({ place: 'X', lat: 1, lng: 2, types: ['OFFICE', 'METRO'], amenities: ['CCTV', 'COVERED'] }),
+      { wrapper },
+    )
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    const uri = decodeURIComponent(api.getUri(mock.history.get[0]))
+    expect(uri).toContain('types=OFFICE&types=METRO')
+    expect(uri).toContain('amenities=CCTV&amenities=COVERED')
+    expect(uri).not.toContain('[]')
+    mock.restore()
   })
 })

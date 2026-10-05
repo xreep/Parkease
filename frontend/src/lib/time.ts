@@ -6,6 +6,11 @@ export function nextQuarter(now: Date = new Date()): Date {
   return new Date((Math.floor(now.getTime() / QUARTER_MS) + 1) * QUARTER_MS)
 }
 
+/** The quarter hour that `now` falls in (10:07 gives 10:00; exactly 10:15:00.000 stays 10:15). */
+export function currentQuarter(now: Date = new Date()): Date {
+  return new Date(Math.floor(now.getTime() / QUARTER_MS) * QUARTER_MS)
+}
+
 /** Next quarter hour to two hours later. */
 export function defaultWindow(now: Date = new Date()): { start: Date; end: Date } {
   const start = nextQuarter(now)
