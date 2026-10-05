@@ -6,6 +6,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import com.smartparking.listing.ListingStatus;
+import com.smartparking.listing.ParkingListing;
+import com.smartparking.listing.ParkingListingRepository;
 import com.smartparking.location.City;
 import com.smartparking.location.CityRepository;
 import org.springframework.data.domain.Limit;
@@ -61,5 +64,12 @@ public final class ListingTestSupport {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"open24x7\":true,\"rules\":[]}"))
                 .andExpect(status().is2xxSuccessful());
+    }
+
+    /** Marks a listing APPROVED directly through the repository (as the admin review would). */
+    public static ParkingListing approveListing(ParkingListingRepository listings, Long id) {
+        ParkingListing listing = listings.findById(id).orElseThrow();
+        listing.setStatus(ListingStatus.APPROVED);
+        return listings.saveAndFlush(listing);
     }
 }

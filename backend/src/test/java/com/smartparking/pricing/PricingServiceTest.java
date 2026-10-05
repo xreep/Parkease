@@ -112,4 +112,28 @@ class PricingServiceTest {
         assertThat(quote(Duration.ofHours(1)).breakdown()).isEqualTo("1 hour");
         assertThat(quote(Duration.ofHours(24)).breakdown()).isEqualTo("1 day");
     }
+
+    @Test
+    void monthPlusHoursWithoutDailyPrice() {
+        Quote q = service.quote(bd("40"), null, bd("4500"), T0, T0.plus(Duration.ofDays(30).plusHours(5)));
+        assertThat(q.baseAmount()).isEqualByComparingTo("4700.00");
+        assertThat(q.pricingMode()).isEqualTo(PricingMode.MIXED);
+        assertThat(q.breakdown()).isEqualTo("1 month + 5 hours");
+    }
+
+    @Test
+    void remainderEqualToDayPriceRoundsUpToWholeDay() {
+        Quote q = service.quote(bd("50"), bd("250"), null, T0, T0.plus(Duration.ofDays(1).plusHours(5)));
+        assertThat(q.baseAmount()).isEqualByComparingTo("500.00");
+        assertThat(q.pricingMode()).isEqualTo(PricingMode.DAILY);
+        assertThat(q.breakdown()).isEqualTo("2 days");
+    }
+
+    @Test
+    void exactlyNinetyDaysIsThreeMonths() {
+        Quote q = quote(Duration.ofDays(90));
+        assertThat(q.baseAmount()).isEqualByComparingTo("13500.00");
+        assertThat(q.pricingMode()).isEqualTo(PricingMode.MONTHLY);
+        assertThat(q.breakdown()).isEqualTo("3 months");
+    }
 }

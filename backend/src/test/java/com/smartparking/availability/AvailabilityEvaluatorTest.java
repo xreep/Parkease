@@ -162,4 +162,33 @@ class AvailabilityEvaluatorTest {
         assertThat(evaluator.evaluate(in, window(), null)).isEqualTo(new Result(true, null, 2, 2));
         assertThat(evaluator.evaluate(in, window(), VehicleType.TWO_WHEELER)).isEqualTo(new Result(true, null, 1, 1));
     }
+
+    @Test
+    void windowExactlyMatchingOpeningHoursIsOpen() {
+        // 08:00-22:00 IST on Tuesday = 02:30-16:30Z
+        TimeWindow full = TimeWindow.of(Instant.parse("2026-10-06T02:30:00Z"), Instant.parse("2026-10-06T16:30:00Z"), clock);
+        assertThat(evaluator.isOpen(false, monToSat("08:00", "22:00"), full)).isTrue();
+    }
+
+    @Test
+    void noVehicleSlotsTakesPrecedenceOverClosed() {
+        var in = input(false, List.of(), List.of(slot(VehicleType.FOUR_WHEELER, true)), List.of());
+        assertThat(evaluator.evaluate(in, window(), VehicleType.TWO_WHEELER))
+                .isEqualTo(new Result(false, "NO_VEHICLE_SLOTS", 0, 0));
+    }
+
+    @Test
+    void closedTakesPrecedenceOverWholeListingBlock() {
+        var in = input(false, List.of(), List.of(slot(VehicleType.FOUR_WHEELER, true)),
+                List.of(block(null, "2026-10-06T05:30:00Z", "2026-10-06T06:00:00Z")));
+        assertThat(evaluator.evaluate(in, window(), null)).isEqualTo(new Result(false, "CLOSED", 0, 1));
+    }
+
+    @Test
+    void openingHoursUseTheIstDayNotTheUtcDay() {
+        // 01:00-03:00 IST on Tuesday = Monday 19:30-21:30Z
+        TimeWindow earlyTuesday = TimeWindow.of(Instant.parse("2026-10-05T19:30:00Z"), Instant.parse("2026-10-05T21:30:00Z"), clock);
+        assertThat(evaluator.isOpen(false, List.of(rule(2, "00:00", "06:00")), earlyTuesday)).isTrue();
+        assertThat(evaluator.isOpen(false, List.of(rule(1, "00:00", "06:00")), earlyTuesday)).isFalse();
+    }
 }
