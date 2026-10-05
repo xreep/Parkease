@@ -368,6 +368,18 @@ class SearchControllerTest {
     }
 
     @Test
+    void maxPricePerHourMustBePositiveAndReasonable() throws Exception {
+        for (String bad : new String[] {"0", "-5", "1000000000", "100000.01"}) {
+            search("&maxPricePerHour=" + bad)
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
+                    .andExpect(jsonPath("$.detail").value("maxPricePerHour must be between 1 and 100000"));
+        }
+        search("&maxPricePerHour=100000").andExpect(status().isOk());
+        search("&maxPricePerHour=1").andExpect(status().isOk());
+    }
+
+    @Test
     void publicFieldsOnlyAndNoAuthNeeded() throws Exception {
         listing("Public", 1, 30);
         search("")

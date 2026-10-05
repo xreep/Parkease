@@ -18,7 +18,6 @@ import com.smartparking.slot.ParkingSlotRepository;
 import com.smartparking.slot.SlotSize;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.Comparator;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -62,10 +61,7 @@ public class PublicListingService {
         TimeWindow window = TimeWindow.of(start, end, clock);
         ParkingListing l = requireApproved(id);
         List<AvailabilityRule> listingRules = l.isOpen24x7() ? List.of() : rules.findByListingIdOrderByDayOfWeekAsc(id);
-        List<AvailabilityBlock> overlapping = blocks
-                .findByListingIdAndEndTimeAfterOrderByStartTimeAsc(id, window.start()).stream()
-                .filter(b -> window.overlaps(b.getStartTime(), b.getEndTime()))
-                .toList();
+        List<AvailabilityBlock> overlapping = blocks.findOverlapping(List.of(id), window.start(), window.end());
         AvailabilityEvaluator.Result result = evaluator.evaluate(
                 new ListingAvailabilityInput(l.isOpen24x7(), listingRules, slots.findByListingIdOrderByLabelAsc(id),
                         overlapping),
