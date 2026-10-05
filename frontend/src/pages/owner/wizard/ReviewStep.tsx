@@ -5,7 +5,7 @@ import { FormError } from '../../../components/AuthCard'
 import { Button } from '../../../components/ui/Button'
 import { errorMessage, missingParts, toProblem } from '../../../lib/errors'
 import { AmenityFacts, HoursFacts, PhotoFacts, PricingFacts, SlotFacts } from '../../../components/listing/ListingFacts'
-import { LISTING_TYPE_LABELS } from '../../../lib/format'
+import { formatAddress, LISTING_TYPE_LABELS } from '../../../lib/format'
 import { pauseListing, resumeListing, submitListing, useOwnerProfile } from '../../../lib/owner'
 import type { StepProps } from './types'
 
@@ -78,7 +78,7 @@ export function ReviewStep({ listing, onSaved }: StepProps) {
         <SummaryCard title="Location" listingId={listing.id} step={1}>
           <p className="font-medium">{listing.title}</p>
           <p>{LISTING_TYPE_LABELS[listing.listingType]}</p>
-          <p>{`${listing.address}, ${listing.cityName}, ${listing.stateName} ${listing.pincode}`}</p>
+          <p>{formatAddress(listing)}</p>
           <p className="text-slate-500">{`Lat ${listing.lat.toFixed(5)}, Lng ${listing.lng.toFixed(5)}`}</p>
         </SummaryCard>
 

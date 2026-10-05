@@ -12,6 +12,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { TextField } from '../../components/ui/TextField'
 import { errorMessage } from '../../lib/errors'
 import { DOCUMENT_TYPE_LABELS } from '../../lib/format'
+import { openInNewTab } from '../../lib/openDocument'
 import {
   getDocumentUrl,
   savePayout,
@@ -90,8 +91,7 @@ function ViewDocumentButton() {
   async function open() {
     setLoading(true)
     try {
-      const { url } = await getDocumentUrl()
-      window.open(url, '_blank', 'noopener')
+      await openInNewTab(getDocumentUrl)
     } catch (error) {
       toast.error(errorMessage(error))
     } finally {
@@ -118,7 +118,7 @@ function IdentitySection({ profile }: { profile: OwnerProfile }) {
       ) : (
         <DocumentForm profile={profile} />
       )}
-      {profile.documentType !== null && <ViewDocumentButton />}
+      {profile.hasDocument && <ViewDocumentButton />}
     </Section>
   )
 }

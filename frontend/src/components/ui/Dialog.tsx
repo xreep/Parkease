@@ -12,7 +12,7 @@ export type DialogProps = {
   title: string
   onClose: () => void
   children: ReactNode
-  /** While busy, clicking the backdrop does not dismiss the dialog. */
+  /** While busy, clicking the backdrop or pressing Escape does not dismiss the dialog. */
   busy?: boolean
 }
 
@@ -20,8 +20,10 @@ export function Dialog({ open, title, onClose, children, busy = false }: DialogP
   const titleId = useId()
   const panelRef = useRef<HTMLDivElement>(null)
   const onCloseRef = useRef(onClose)
+  const busyRef = useRef(busy)
   useEffect(() => {
     onCloseRef.current = onClose
+    busyRef.current = busy
   })
 
   useEffect(() => {
@@ -37,7 +39,7 @@ export function Dialog({ open, title, onClose, children, busy = false }: DialogP
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         e.stopPropagation()
-        onCloseRef.current()
+        if (!busyRef.current) onCloseRef.current()
       } else if (e.key === 'Tab') {
         const items = focusable()
         if (items.length === 0) return
@@ -118,7 +120,7 @@ function ReasonForm({ confirmLabel, onConfirm, onClose, onBusyChange }: ReasonFo
       <FormError message={formError} />
       <TextArea label="Reason" rows={4} error={errors.reason?.message} {...register('reason')} />
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
+        <Button type="button" variant="secondary" disabled={isSubmitting} onClick={onClose}>Cancel</Button>
         <Button type="submit" variant="danger" loading={isSubmitting}>{confirmLabel}</Button>
       </div>
     </form>

@@ -10,6 +10,7 @@ import { Spinner } from '../../components/ui/Spinner'
 import { getOwnerDocumentUrl, rejectOwner, useAdminOwners, verifyOwner, type AdminOwner } from '../../lib/admin'
 import { errorMessage } from '../../lib/errors'
 import { DOCUMENT_TYPE_LABELS, formatDateTime } from '../../lib/format'
+import { openInNewTab } from '../../lib/openDocument'
 import type { VerificationStatus } from '../../lib/owner'
 
 const FILTERS: { value: VerificationStatus; label: string }[] = [
@@ -24,8 +25,7 @@ function OwnerRow({ owner, onReject, onChanged }: { owner: AdminOwner; onReject:
   async function viewDocument() {
     setBusy('document')
     try {
-      const { url } = await getOwnerDocumentUrl(owner.userId)
-      window.open(url, '_blank', 'noopener')
+      await openInNewTab(() => getOwnerDocumentUrl(owner.userId))
     } catch (error) {
       toast.error(errorMessage(error))
     } finally {
@@ -65,9 +65,11 @@ function OwnerRow({ owner, onReject, onChanged }: { owner: AdminOwner; onReject:
         <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-300">{owner.rejectionReason}</p>
       )}
       <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="secondary" className="px-3 py-1.5" loading={busy === 'document'} disabled={busy !== null} onClick={() => void viewDocument()}>
-          View document
-        </Button>
+        {owner.hasDocument && (
+          <Button type="button" variant="secondary" className="px-3 py-1.5" loading={busy === 'document'} disabled={busy !== null} onClick={() => void viewDocument()}>
+            View document
+          </Button>
+        )}
         {owner.verificationStatus === 'PENDING' && (
           <>
             <Button type="button" className="px-3 py-1.5" loading={busy === 'verify'} disabled={busy !== null} onClick={() => void verify()}>Verify</Button>
@@ -85,6 +87,9 @@ export function OwnerQueuePage() {
   const [page, setPage] = useState(0)
   const [rejecting, setRejecting] = useState<AdminOwner | null>(null)
   const { data, error, isPending } = useAdminOwners(status, page)
+
+  // The last row of a later page was handled elsewhere: step back instead of showing an empty page.
+  if (data !== undefined && data.content.length === 0 && page > 0) setPage(page - 1)
 
   const refresh = () =>
     Promise.all([

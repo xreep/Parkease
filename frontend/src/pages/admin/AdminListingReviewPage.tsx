@@ -11,7 +11,7 @@ import { Spinner } from '../../components/ui/Spinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { approveListing, rejectListing, useAdminListing, type AdminListingDetail } from '../../lib/admin'
 import { errorMessage } from '../../lib/errors'
-import { formatDateTime, LISTING_TYPE_LABELS } from '../../lib/format'
+import { formatAddress, formatDateTime, LISTING_TYPE_LABELS } from '../../lib/format'
 
 const linkClass = 'text-sm font-medium text-brand-700 hover:underline dark:text-brand-400'
 const noop = () => undefined
@@ -94,7 +94,7 @@ function ReviewContent({ detail }: { detail: AdminListingDetail }) {
       <div className="grid gap-4 md:grid-cols-2">
         <Section title="Location">
           <p>{LISTING_TYPE_LABELS[listing.listingType]}</p>
-          <p>{`${listing.address}, ${listing.cityName}, ${listing.stateName} ${listing.pincode}`}</p>
+          <p>{formatAddress(listing)}</p>
           {listing.description && <p className="text-slate-500">{listing.description}</p>}
           <div className="pt-2">
             <LocationPicker value={{ lat: listing.lat, lng: listing.lng }} center={{ lat: listing.lat, lng: listing.lng }} zoom={15} onChange={noop} readOnly />

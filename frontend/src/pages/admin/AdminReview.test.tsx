@@ -31,7 +31,7 @@ const driver = { ...admin, id: 9, name: 'Dev Driver', email: 'driver@example.com
 
 const pendingOwner: AdminOwner = {
   userId: 5, name: 'Ravi Kumar', email: 'ravi@example.com', phone: '9876543210', verificationStatus: 'PENDING',
-  documentType: 'AADHAAR', documentSubmittedAt: '2026-10-05T10:00:00Z', rejectionReason: null, verifiedAt: null,
+  documentType: 'AADHAAR', hasDocument: true, documentSubmittedAt: '2026-10-05T10:00:00Z', rejectionReason: null, verifiedAt: null,
   hasPayoutDetails: true, listingCount: 2,
 }
 const verifiedOwner: AdminOwner = {
@@ -225,26 +225,51 @@ describe('admin review area', () => {
     it('opens the signed document link in a new tab', async () => {
       mock.onGet('/admin/owners').reply(200, page([pendingOwner]))
       mock.onGet('/admin/owners/5/document-url').reply(200, { url: '/files/private/doc?sig=abc', expiresAt: '2026-10-05T10:05:00Z' })
-      const open = vi.spyOn(window, 'open').mockReturnValue(null)
+      const tab = { opener: 'self' as unknown, location: { href: '' }, close: vi.fn() }
+      const open = vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window)
       renderApp('/admin/owners')
 
       await userEvent.click(await screen.findByRole('button', { name: 'View document' }))
 
-      await waitFor(() => expect(open).toHaveBeenCalledWith('/files/private/doc?sig=abc', '_blank', 'noopener'))
+      await waitFor(() => expect(tab.location.href).toBe('/files/private/doc?sig=abc'))
+      expect(open).toHaveBeenCalledWith('about:blank', '_blank')
+      expect(tab.opener).toBeNull()
       open.mockRestore()
     })
 
     it('shows the server message when the document link cannot be created', async () => {
       mock.onGet('/admin/owners').reply(200, page([pendingOwner]))
       mock.onGet('/admin/owners/5/document-url').reply(404, { code: 'NOT_FOUND', detail: 'No document submitted' })
-      const open = vi.spyOn(window, 'open').mockReturnValue(null)
+      const tab = { opener: 'self' as unknown, location: { href: '' }, close: vi.fn() }
+      const open = vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window)
       renderApp('/admin/owners')
 
       await userEvent.click(await screen.findByRole('button', { name: 'View document' }))
 
       await waitFor(() => expect(toast.error).toHaveBeenCalledWith('No document submitted'))
-      expect(open).not.toHaveBeenCalled()
+      expect(tab.close).toHaveBeenCalled()
+      expect(tab.location.href).toBe('')
       open.mockRestore()
+    })
+
+    it('hides "View document" for an owner without a document', async () => {
+      mock.onGet('/admin/owners').reply(200, page([{ ...pendingOwner, documentType: null, hasDocument: false }]))
+      renderApp('/admin/owners')
+
+      await screen.findByText('Ravi Kumar')
+      expect(screen.queryByRole('button', { name: 'View document' })).not.toBeInTheDocument()
+    })
+
+    it('steps back a page when the current page comes back empty', async () => {
+      mock.onGet('/admin/owners', { params: { status: 'PENDING', page: 0, size: 20 } }).reply(200, page([pendingOwner], 2, 0))
+      mock.onGet('/admin/owners', { params: { status: 'PENDING', page: 1, size: 20 } }).reply(200, page([], 1, 1))
+      renderApp('/admin/owners')
+
+      await screen.findByText('Ravi Kumar')
+      await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+
+      expect(await screen.findByText('Ravi Kumar')).toBeInTheDocument()
+      expect(screen.queryByText('No owners in this list.')).not.toBeInTheDocument()
     })
 
     it('pages through the owners', async () => {
@@ -262,6 +287,18 @@ describe('admin review area', () => {
   })
 
   describe('listing approval queue', () => {
+    it('steps back a page when the current page comes back empty', async () => {
+      mock.onGet('/admin/listings', { params: { status: 'PENDING_REVIEW', page: 0, size: 20 } }).reply(200, page([pendingListing], 2, 0))
+      mock.onGet('/admin/listings', { params: { status: 'PENDING_REVIEW', page: 1, size: 20 } }).reply(200, page([], 1, 1))
+      renderApp('/admin/listings')
+
+      await screen.findByText('Viman Nagar Residency Parking')
+      await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+
+      expect(await screen.findByText('Viman Nagar Residency Parking')).toBeInTheDocument()
+      expect(screen.queryByText('No listings in this list.')).not.toBeInTheDocument()
+    })
+
     it('lists pending listings with a review link', async () => {
       mock.onGet('/admin/listings').reply(200, page([pendingListing]))
       renderApp('/admin/listings')

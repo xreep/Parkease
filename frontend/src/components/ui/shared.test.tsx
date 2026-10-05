@@ -116,4 +116,22 @@ describe('shared UI', () => {
     await userEvent.pointer({ keys: '[MouseLeft]', target: backdrop })
     expect(onClose).toHaveBeenCalled()
   })
+
+  it('ignores Escape and disables Cancel while the reason is being submitted', async () => {
+    let finish: () => void = () => {}
+    const onConfirm = vi.fn(() => new Promise<void>((resolve) => { finish = resolve }))
+    const onClose = vi.fn()
+    render(<ReasonDialog open title="Reject" confirmLabel="Reject it" onConfirm={onConfirm} onClose={onClose} />)
+
+    await userEvent.type(screen.getByLabelText('Reason'), 'Blurry')
+    await userEvent.click(screen.getByRole('button', { name: 'Reject it' }))
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    await userEvent.keyboard('{Escape}')
+    expect(onClose).not.toHaveBeenCalled()
+
+    finish()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled())
+    await userEvent.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalled()
+  })
 })

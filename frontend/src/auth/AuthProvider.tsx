@@ -1,4 +1,5 @@
 import { createContext, startTransition, useContext, useEffect, useState, type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { api, setSessionExpiredHandler } from '../lib/api'
 import { tokenStore } from '../lib/tokenStore'
 import type { AuthResponse, RegisterInput, User } from './types'
@@ -15,11 +16,15 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient()
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(() => tokenStore.getAccess() !== null)
 
   useEffect(() => {
-    setSessionExpiredHandler(() => setUser(null))
+    setSessionExpiredHandler(() => {
+      queryClient.clear()
+      setUser(null)
+    })
     if (!tokenStore.getAccess()) return
     api
       .get<User>('/me')
@@ -29,10 +34,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // so a transient failure never destroys a still-valid session.
       })
       .finally(() => setLoading(false))
-  }, [])
+  }, [queryClient])
 
   function accept(data: AuthResponse): User {
     tokenStore.set(data.accessToken, data.refreshToken)
+    // Never show a previous user's cached data to the new session.
+    queryClient.clear()
     setUser(data.user)
     return data.user
   }
@@ -45,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout: async () => {
       const refreshToken = tokenStore.getRefresh()
       tokenStore.clear()
+      queryClient.clear()
       // A transition, like the caller's navigate('/'), so the route change wins over RequireRole's redirect.
       startTransition(() => setUser(null))
       if (refreshToken) await api.post('/auth/logout', { refreshToken }).catch(() => undefined)

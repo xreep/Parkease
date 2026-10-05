@@ -46,6 +46,9 @@ export function ListingQueuePage() {
   const [page, setPage] = useState(0)
   const { data, error, isPending } = useAdminListings(status, page)
 
+  // The last row of a later page was handled elsewhere: step back instead of showing an empty page.
+  if (data !== undefined && data.content.length === 0 && page > 0) setPage(page - 1)
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">

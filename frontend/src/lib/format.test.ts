@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatINR, listingStatusLabel, verificationStatusLabel } from './format'
+import { formatAddress, formatINR, listingStatusLabel, verificationStatusLabel } from './format'
 
 describe('format helpers', () => {
   it('formats rupees', () => {
@@ -13,5 +13,12 @@ describe('format helpers', () => {
     expect(listingStatusLabel('APPROVED')).toBe('Live')
     expect(listingStatusLabel('REJECTED')).toBe('Changes needed')
     expect(verificationStatusLabel('PENDING')).toBe('Under review')
+  })
+
+  it('formats an address without repeating the city', () => {
+    const base = { cityName: 'Pune', stateName: 'Maharashtra', pincode: '411014' }
+    expect(formatAddress({ ...base, address: '14 Viman Nagar Road' })).toBe('14 Viman Nagar Road, Pune, Maharashtra 411014')
+    expect(formatAddress({ ...base, address: 'Off Airport Road, Viman Nagar, PUNE' }))
+      .toBe('Off Airport Road, Viman Nagar, PUNE, Maharashtra 411014')
   })
 })
