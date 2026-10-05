@@ -10,9 +10,11 @@ import com.smartparking.slot.dto.SlotDto;
 import com.smartparking.storage.FileStorage;
 import java.util.Comparator;
 import java.util.List;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /** Maps a listing plus its separately loaded children to DTOs. Call within a transaction (lazy city/state). */
+@Slf4j
 @Component
 public class ListingMapper {
 
@@ -48,7 +50,16 @@ public class ListingMapper {
 
     /** Public URL from the storage key, so a changed host or storage backend never leaves stale links. */
     public String photoUrl(ListingPhoto p) {
-        return p.getStorageKey() != null ? storage.publicUrl(p.getStorageKey()) : p.getUrl();
+        if (p.getStorageKey() == null) {
+            return p.getUrl();
+        }
+        try {
+            return storage.publicUrl(p.getStorageKey());
+        } catch (IllegalArgumentException e) {
+            // Key written by the other storage backend (local <-> Cloudinary): keep the URL stored at upload time.
+            log.warn("Photo {} has a storage key this backend cannot serve; using its stored url", p.getId());
+            return p.getUrl();
+        }
     }
 
     public SlotDto toSlot(ParkingSlot s) {
