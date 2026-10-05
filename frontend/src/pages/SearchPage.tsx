@@ -45,7 +45,8 @@ function SearchResults({ params }: { params: SearchParams }) {
   const results = data?.content ?? []
   /** Data for the previous search or page, shown dimmed while the new one loads. */
   const stale = isPlaceholderData
-  const timesRejected = isError && toProblem(error).code === 'INVALID_TIME_RANGE'
+  const problem = isError ? toProblem(error) : null
+  const timesProblem = problem?.code === 'INVALID_TIME_RANGE' ? problem : null
 
   function go(next: SearchParams, replace: boolean) {
     setSearchParams(toSearchParams(next), { replace })
@@ -107,7 +108,7 @@ function SearchResults({ params }: { params: SearchParams }) {
           </Button>
           <Select
             label="Sort by"
-            className="min-w-0 flex-1 sm:flex-none"
+            className="min-w-[9rem] flex-1 sm:flex-none"
             value={params.sort ?? DEFAULT_SORT}
             onChange={(e) => {
               const sort = e.target.value as SearchSort
@@ -175,10 +176,13 @@ function SearchResults({ params }: { params: SearchParams }) {
             </div>
           ) : isError ? (
             <div role="alert" className="space-y-3 rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/40">
-              {timesRejected ? (
+              {timesProblem ? (
                 <>
                   <p className="text-sm text-red-700 dark:text-red-300">
-                    These times are no longer valid. Change the times to search again.
+                    {/* Only a past start gets the friendly line; any other time problem is explained by the server. */}
+                    {timesProblem.detail.includes('in the past')
+                      ? 'These times are no longer valid. Change the times to search again.'
+                      : timesProblem.detail}
                   </p>
                   <Button type="button" variant="secondary" onClick={focusTimes}>Change times</Button>
                 </>

@@ -14,6 +14,10 @@ type NominatimHit = { display_name: string; lat: string; lon: string }
 const shorten = (displayName: string) =>
   displayName.split(',').slice(0, 3).map((s) => s.trim()).join(', ')
 
+/**
+ * One-shot lookup on nominatim.openstreetmap.org. Its usage policy forbids autocomplete, so call this only
+ * from an explicit user action (never on keystrokes or a debounce), at most once per request.
+ */
 export async function searchNominatim(q: string, signal?: AbortSignal): Promise<Place[]> {
   const res = await fetch(
     'https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=in&q=' + encodeURIComponent(q),

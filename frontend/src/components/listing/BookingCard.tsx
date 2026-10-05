@@ -10,7 +10,7 @@ import {
   type QuoteUnavailableReason,
   type VehicleType,
 } from '../../lib/search'
-import { defaultWindow, fromLocalInputValue, toLocalInputValue } from '../../lib/time'
+import { browserIsIst, defaultWindow, fromLocalInputValue, IST_HINT, toLocalInputValue } from '../../lib/time'
 import { Button } from '../ui/Button'
 import { Select } from '../ui/Select'
 import { Spinner } from '../ui/Spinner'
@@ -28,7 +28,7 @@ const UNAVAILABLE_MESSAGES: Record<QuoteUnavailableReason, string> = {
 type Selection = { start: string; end: string; vehicle: VehicleType }
 
 /** The window and vehicle from the URL (ISO instants), as picker values; the default window when absent. */
-function initialSelection(params: URLSearchParams): Selection {
+function initialSelection(params: URLSearchParams, listing: PublicListingDto): Selection {
   const s = params.get('start')
   const e = params.get('end')
   const vehicle = params.get('vehicle')
@@ -39,7 +39,10 @@ function initialSelection(params: URLSearchParams): Selection {
   return {
     start: toLocalInputValue(usable ? start : fallback.start),
     end: toLocalInputValue(usable ? end : fallback.end),
-    vehicle: vehicle === 'TWO_WHEELER' || vehicle === 'FOUR_WHEELER' ? vehicle : 'FOUR_WHEELER',
+    vehicle:
+      vehicle === 'TWO_WHEELER' || vehicle === 'FOUR_WHEELER'
+        ? vehicle
+        : listing.slotSummary.fourWheeler > 0 ? 'FOUR_WHEELER' : 'TWO_WHEELER',
   }
 }
 
@@ -56,7 +59,7 @@ export function BookingCard({ listing }: { listing: PublicListingDto }) {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [selection, setSelection] = useState(() => initialSelection(searchParams))
+  const [selection, setSelection] = useState(() => initialSelection(searchParams, listing))
   /** The selection the quote is for: follows `selection` 300 ms after the last change. */
   const [settled, setSettled] = useState(selection)
 
@@ -135,6 +138,7 @@ export function BookingCard({ listing }: { listing: PublicListingDto }) {
           value={selection.end}
           onChange={(e) => change({ end: e.target.value })}
         />
+        {!browserIsIst() && <p className="-mt-1 text-xs text-slate-500">{IST_HINT}</p>}
         <Select label="Vehicle" value={selection.vehicle} onChange={(e) => change({ vehicle: e.target.value as VehicleType })}>
           <option value="FOUR_WHEELER">{VEHICLE_TYPE_LABELS.FOUR_WHEELER}</option>
           <option value="TWO_WHEELER">{VEHICLE_TYPE_LABELS.TWO_WHEELER}</option>

@@ -63,7 +63,18 @@ describe('ListingPage', () => {
     mock.onGet('/listings/7/quote').reply(200, available)
   })
 
-  afterEach(() => mock.restore())
+  afterEach(() => {
+    mock.restore()
+    vi.restoreAllMocks()
+  })
+
+  /** Pretends the browser is in the given IANA time zone. */
+  function browserZone(timeZone: string) {
+    const real = Intl.DateTimeFormat.prototype.resolvedOptions
+    vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockImplementation(function (this: Intl.DateTimeFormat) {
+      return { ...real.call(this), timeZone }
+    })
+  }
 
   const quoteCalls = () => mock.history.get.filter((r) => r.url === '/listings/7/quote')
 
@@ -89,6 +100,53 @@ describe('ListingPage', () => {
     expect(screen.getByText('No overnight parking.')).toBeInTheDocument()
     expect(screen.getByText(/full refund up to 24 hours before start/i)).toBeInTheDocument()
     expect(screen.getByText('Hosted by Priya')).toBeInTheDocument()
+  })
+
+  it('labels the opening hours as IST', async () => {
+    renderApp(URL_7)
+
+    expect(await screen.findByRole('heading', { name: 'Opening hours (IST)' })).toBeInTheDocument()
+  })
+
+  it('hints that times are in IST when the browser is in another time zone', async () => {
+    browserZone('Europe/London')
+    renderApp(URL_7)
+    await screen.findByText('3 slots free')
+
+    expect(screen.getByText('Times are in Indian Standard Time (IST).')).toBeInTheDocument()
+  })
+
+  it('shows no time zone hint when the browser is on IST', async () => {
+    browserZone('Asia/Calcutta')
+    renderApp(URL_7)
+    await screen.findByText('3 slots free')
+
+    expect(screen.queryByText(/Indian Standard Time/)).not.toBeInTheDocument()
+  })
+
+  it('defaults to a car when the URL has no vehicle and the listing has car slots', async () => {
+    renderApp('/listings/7')
+    await screen.findByText('3 slots free')
+
+    expect(screen.getByLabelText('Vehicle')).toHaveValue('FOUR_WHEELER')
+    expect(quoteCalls()[0].params.vehicleType).toBe('FOUR_WHEELER')
+  })
+
+  it('defaults to a two-wheeler when the listing has no car slots', async () => {
+    mock.onGet('/listings/7').reply(200, { ...listing, slotSummary: { ...listing.slotSummary, fourWheeler: 0 } })
+    renderApp('/listings/7')
+    await screen.findByText('3 slots free')
+
+    expect(screen.getByLabelText('Vehicle')).toHaveValue('TWO_WHEELER')
+    expect(quoteCalls()[0].params.vehicleType).toBe('TWO_WHEELER')
+  })
+
+  it('keeps the vehicle from the URL even when the listing has no such slots', async () => {
+    mock.onGet('/listings/7').reply(200, { ...listing, slotSummary: { ...listing.slotSummary, fourWheeler: 0 } })
+    renderApp(URL_7)
+    await screen.findByText('3 slots free')
+
+    expect(screen.getByLabelText('Vehicle')).toHaveValue('FOUR_WHEELER')
   })
 
   it('says Open 24 x 7 when the listing never closes', async () => {

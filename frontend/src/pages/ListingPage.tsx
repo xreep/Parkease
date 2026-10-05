@@ -43,7 +43,7 @@ function SlotsSection({ summary }: { summary: PublicListingDto['slotSummary'] })
 
 function HoursSection({ listing }: { listing: PublicListingDto }) {
   return (
-    <Section title="Opening hours">
+    <Section title="Opening hours (IST)">
       {listing.open24x7 ? (
         <p>Open 24 × 7</p>
       ) : (
