@@ -80,7 +80,7 @@ With both servers running, open http://localhost:5173 and search for a place, fo
 - open a listing to see photos, opening hours, rules and the cancellation policy, and a live price quote (parking + platform fee + GST) for your times;
 - browse a state, pick a city (`/in/<state>/<city>`) to see the parking listed around it.
 
-Online booking and payment arrive in Phase 4, so "Reserve" is not active yet.
+Reserve signs you in; booking itself arrives in Phase 4.
 
 ### Uploads
 

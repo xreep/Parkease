@@ -173,7 +173,7 @@ Owner uploads ID/property document → `PENDING`. Only `VERIFIED` owners can sub
 |---|---|
 | Auth | `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/verify-email`, `/auth/forgot-password`, `/auth/reset-password`; `GET /me`, `PATCH /me` |
 | Locations | `GET /states`, `GET /states/{code}/cities`, `GET /cities?q=` |
-| Search | `GET /search?lat&lng&radiusKm&start&end&vehicleType&type&amenities&maxPrice&sort&page` ; `GET /listings/{id}`; `GET /listings/{id}/availability?from&to`; `GET /listings/{id}/quote?start&end` ; `GET /listings/{id}/reviews` |
+| Search | `GET /search?lat&lng&radiusKm&start&end&vehicleType&types&amenities&maxPricePerHour&open24x7&sort&page` ; `GET /listings/{id}`; `GET /listings/{id}/availability?from&to` *(Phase 6)*; `GET /listings/{id}/quote?start&end` ; `GET /listings/{id}/reviews` *(Phase 6)* |
 | Vehicles | CRUD `/me/vehicles` |
 | Bookings (driver) | `POST /bookings`, `GET /bookings`, `GET /bookings/{id}`, `POST /bookings/{id}/cancel`, `GET /bookings/{id}/refund-preview`, `POST /bookings/{id}/review`, `POST /bookings/{id}/disputes` |
 | Payments | `POST /payments/verify`, `POST /payments/webhook`, `POST /bookings/{id}/payments/retry`, `GET /me/payments`, `GET /invoices/{id}/pdf` |
@@ -273,3 +273,4 @@ Install Java 21 and PostgreSQL 16 (Homebrew). Optional accounts/keys: Razorpay (
 - **Public endpoints:** `GET /api/v1/search`, `GET /api/v1/listings/{id}` (APPROVED only), `GET /api/v1/listings/{id}/quote`. Public DTOs never expose status, rejection reason, submission times or owner contact details (owner first name only).
 - **Map:** React-Leaflet with `react-leaflet-cluster`; price-label markers; "Search this area" re-centres on the map.
 - **Reserve** button on the listing page sends signed-out users to login; actual booking arrives in Phase 4.
+- **Parameter names:** search takes `types` (repeatable) and `maxPricePerHour` (> 0, ≤ 100000; otherwise `INVALID_PARAMETER`), not `type`/`maxPrice`. `GET /listings/{id}/availability` and `/reviews` (§7) are not implemented yet; they arrive in Phase 6.
