@@ -107,6 +107,8 @@ export type SearchParams = {
 }
 
 export const DEFAULT_RADIUS_KM = 5
+export const MIN_RADIUS_KM = 0.5
+export const MAX_RADIUS_KM = 25
 export const DEFAULT_SORT: SearchSort = 'distance'
 
 const SORTS: readonly SearchSort[] = ['distance', 'price', 'rating']
@@ -119,23 +121,37 @@ function finiteNumber(raw: string | null): number | undefined {
   return Number.isFinite(n) ? n : undefined
 }
 
-/** Reads `/search` URL params. Null when lat/lng are missing or not valid coordinates. */
+const INDIA = { minLat: 6, maxLat: 38, minLng: 68, maxLng: 98 }
+
+const isInstant = (v: string) => !Number.isNaN(new Date(v).getTime())
+
+/**
+ * Reads `/search` URL params. Null when the search can't be run: lat/lng missing or outside India,
+ * or a start/end that isn't a date. The radius is clamped to what the API accepts.
+ */
 export function parseSearchParams(usp: URLSearchParams): SearchParams | null {
   const lat = finiteNumber(usp.get('lat'))
   const lng = finiteNumber(usp.get('lng'))
-  if (lat === undefined || lng === undefined || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null
+  if (
+    lat === undefined || lng === undefined ||
+    lat < INDIA.minLat || lat > INDIA.maxLat || lng < INDIA.minLng || lng > INDIA.maxLng
+  ) {
+    return null
+  }
 
   const p: SearchParams = { place: usp.get('place') ?? '', lat, lng }
   const start = usp.get('start')
   const end = usp.get('end')
   if (start && end) {
+    if (!isInstant(start) || !isInstant(end)) return null
     p.start = start
     p.end = end
   }
   const vehicle = usp.get('vehicle')
   if (vehicle && isKey(VEHICLE_TYPE_LABELS, vehicle)) p.vehicle = vehicle
-  const radius = finiteNumber(usp.get('radius'))
-  if (radius !== undefined && radius > 0 && radius !== DEFAULT_RADIUS_KM) p.radius = radius
+  const rawRadius = finiteNumber(usp.get('radius'))
+  const radius = rawRadius === undefined ? undefined : Math.min(MAX_RADIUS_KM, Math.max(MIN_RADIUS_KM, rawRadius))
+  if (radius !== undefined && radius !== DEFAULT_RADIUS_KM) p.radius = radius
   const types = usp.getAll('types').filter((t): t is ListingType => isKey(LISTING_TYPE_LABELS, t))
   if (types.length) p.types = types
   const amenities = usp.getAll('amenities').filter((a): a is Amenity => isKey(AMENITY_LABELS, a))

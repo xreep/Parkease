@@ -38,10 +38,10 @@ describe('search params', () => {
   })
 
   it('only writes a positive maxPrice', () => {
-    const base = { place: 'X', lat: 1, lng: 2 }
+    const base = { place: 'X', lat: 18.5, lng: 73.8 }
     expect(toSearchParams({ ...base, maxPrice: 0 }).has('maxPrice')).toBe(false)
     expect(toSearchParams({ ...base, maxPrice: -5 }).has('maxPrice')).toBe(false)
-    expect(toApiQuery({ ...base, maxPrice: 0 })).toEqual({ lat: 1, lng: 2 })
+    expect(toApiQuery({ ...base, maxPrice: 0 })).toEqual({ lat: 18.5, lng: 73.8 })
     expect(parseSearchParams(toSearchParams({ ...base, maxPrice: 0 }))).toEqual(base)
   })
 
@@ -58,11 +58,44 @@ describe('search params', () => {
     expect(parseSearchParams(new URLSearchParams('lat=95&lng=73.8'))).toBeNull()
   })
 
+  it.each([
+    ['lat=5.9&lng=73.8'],
+    ['lat=38.1&lng=73.8'],
+    ['lat=18.5&lng=67.9'],
+    ['lat=18.5&lng=98.1'],
+    ['lat=51.5&lng=-0.12'],
+  ])('treats coordinates outside India (%s) as invalid', (q) => {
+    expect(parseSearchParams(new URLSearchParams(`place=X&${q}`))).toBeNull()
+  })
+
+  it('accepts coordinates on the edge of the India bounds', () => {
+    expect(parseSearchParams(new URLSearchParams('place=X&lat=6&lng=68'))).toMatchObject({ lat: 6, lng: 68 })
+    expect(parseSearchParams(new URLSearchParams('place=X&lat=38&lng=98'))).toMatchObject({ lat: 38, lng: 98 })
+  })
+
+  it('treats an unparsable start or end as invalid', () => {
+    const base = 'place=X&lat=18.5&lng=73.8'
+    expect(parseSearchParams(new URLSearchParams(`${base}&start=nonsense&end=2030-01-01T10:00:00.000Z`))).toBeNull()
+    expect(parseSearchParams(new URLSearchParams(`${base}&start=2030-01-01T08:00:00.000Z&end=garbage`))).toBeNull()
+    expect(
+      parseSearchParams(new URLSearchParams(`${base}&start=2030-01-01T08:00:00.000Z&end=2030-01-01T10:00:00.000Z`)),
+    ).toMatchObject({ start: '2030-01-01T08:00:00.000Z', end: '2030-01-01T10:00:00.000Z' })
+  })
+
+  it('clamps the radius to 0.5-25 km', () => {
+    const base = 'place=X&lat=18.5&lng=73.8'
+    expect(parseSearchParams(new URLSearchParams(`${base}&radius=100`))?.radius).toBe(25)
+    expect(parseSearchParams(new URLSearchParams(`${base}&radius=0.1`))?.radius).toBe(0.5)
+    expect(parseSearchParams(new URLSearchParams(`${base}&radius=-3`))?.radius).toBe(0.5)
+    expect(parseSearchParams(new URLSearchParams(`${base}&radius=10`))?.radius).toBe(10)
+    expect(parseSearchParams(new URLSearchParams(`${base}&radius=5`))?.radius).toBeUndefined()
+  })
+
   it('ignores unknown enum values', () => {
     const p = parseSearchParams(
-      new URLSearchParams('place=X&lat=1&lng=2&vehicle=BUS&types=METRO&types=NOPE&amenities=WIFI&sort=magic&page=-3'),
+      new URLSearchParams('place=X&lat=18.5&lng=73.8&vehicle=BUS&types=METRO&types=NOPE&amenities=WIFI&sort=magic&page=-3'),
     )
-    expect(p).toEqual({ place: 'X', lat: 1, lng: 2, types: ['METRO'] })
+    expect(p).toEqual({ place: 'X', lat: 18.5, lng: 73.8, types: ['METRO'] })
   })
 
   it('maps to API query names', () => {

@@ -1,13 +1,17 @@
-import { useEffect, useId, useState, type FocusEvent, type KeyboardEvent } from 'react'
+import { useEffect, useId, useRef, useState, type FocusEvent, type KeyboardEvent } from 'react'
 import clsx from 'clsx'
-import { MapPin } from 'lucide-react'
+import { MapPin, Search } from 'lucide-react'
 import { searchCities, searchNominatim, type Place } from '../../lib/places'
 
 const DEBOUNCE_MS = 300
 const MIN_PLACE_CHARS = 3
 
-type Results = { cities: Place[]; places: Place[]; done: boolean }
-const EMPTY: Results = { cities: [], places: [], done: false }
+/** Live suggestions are our own cities only; Nominatim is looked up once, on request (OSM usage policy). */
+type Results = { cities: Place[]; done: boolean }
+const EMPTY: Results = { cities: [], done: false }
+
+type PlacesLookup = { status: 'idle' } | { status: 'loading' } | { status: 'error' } | { status: 'done'; places: Place[] }
+const IDLE: PlacesLookup = { status: 'idle' }
 
 type Props = {
   value: Place | null
@@ -33,6 +37,8 @@ export function PlaceSearch({
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(-1)
   const [results, setResults] = useState<Results>(EMPTY)
+  const [lookup, setLookup] = useState<PlacesLookup>(IDLE)
+  const lookupAbort = useRef<AbortController | null>(null)
 
   // Keep the box in step when the chosen place is changed from outside (e.g. the URL).
   const valueLabel = value?.label
@@ -47,16 +53,9 @@ export function PlaceSearch({
     if (!q) return
     const controller = new AbortController()
     const timer = setTimeout(async () => {
-      const [cities, places] = await Promise.allSettled([
-        searchCities(q, controller.signal),
-        q.length >= MIN_PLACE_CHARS ? searchNominatim(q, controller.signal) : Promise.resolve([]),
-      ])
+      const [cities] = await Promise.allSettled([searchCities(q, controller.signal)])
       if (controller.signal.aborted) return
-      setResults({
-        cities: cities.status === 'fulfilled' ? cities.value : [],
-        places: places.status === 'fulfilled' ? places.value : [],
-        done: true,
-      })
+      setResults({ cities: cities.status === 'fulfilled' ? cities.value : [], done: true })
       setActive(-1)
     }, DEBOUNCE_MS)
     return () => {
@@ -65,9 +64,45 @@ export function PlaceSearch({
     }
   }, [typed])
 
-  const options = [...results.cities, ...results.places]
-  const showList = open && typed !== null && typed.trim() !== ''
+  // Cancel an in-flight places lookup if the box goes away.
+  useEffect(() => () => lookupAbort.current?.abort(), [])
+
+  const query = typed?.trim() ?? ''
+  const places = lookup.status === 'done' ? lookup.places : []
+  /** The final row offers the lookup (or reports on it) until places have been found. */
+  const showAction = results.done && query.length >= MIN_PLACE_CHARS && places.length === 0
+  const actionIndex = results.cities.length
+  const options = [...results.cities, ...places]
+  const optionCount = options.length + (showAction ? 1 : 0)
+  const showList = open && typed !== null && query !== ''
   const optionId = (i: number) => `${id}-option-${i}`
+
+  const actionLabel =
+    lookup.status === 'loading'
+      ? 'Searching places…'
+      : lookup.status === 'error'
+        ? "Couldn't search places. Try again"
+        : lookup.status === 'done'
+          ? 'No places found'
+          : `Search places for “${query}”`
+  const actionBusy = lookup.status === 'loading' || lookup.status === 'done'
+
+  async function searchPlaces() {
+    if (actionBusy || query.length < MIN_PLACE_CHARS) return
+    lookupAbort.current?.abort()
+    const controller = new AbortController()
+    lookupAbort.current = controller
+    setLookup({ status: 'loading' })
+    try {
+      const found = await searchNominatim(query, controller.signal)
+      if (!controller.signal.aborted) {
+        setLookup({ status: 'done', places: found })
+        setActive(-1)
+      }
+    } catch {
+      if (!controller.signal.aborted) setLookup({ status: 'error' })
+    }
+  }
 
   function choose(place: Place) {
     setText(place.label)
@@ -82,20 +117,23 @@ export function PlaceSearch({
     setTyped(next)
     setOpen(true)
     setResults(EMPTY)
+    lookupAbort.current?.abort()
+    setLookup(IDLE)
     setActive(-1)
     if (value) onChange(null)
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      if (options.length === 0) return
+      if (optionCount === 0) return
       e.preventDefault()
       setOpen(true)
       const down = e.key === 'ArrowDown'
-      setActive((i) => (down ? (i + 1) % options.length : i <= 0 ? options.length - 1 : i - 1))
-    } else if (e.key === 'Enter' && showList && active >= 0 && options[active]) {
+      setActive((i) => (down ? (i + 1) % optionCount : i <= 0 ? optionCount - 1 : i - 1))
+    } else if (e.key === 'Enter' && showList && active >= 0 && active < optionCount) {
       e.preventDefault()
-      choose(options[active])
+      if (showAction && active === actionIndex) void searchPlaces()
+      else choose(options[active])
     } else if (e.key === 'Escape' && open) {
       e.preventDefault()
       setOpen(false)
@@ -126,6 +164,28 @@ export function PlaceSearch({
     </div>
   )
 
+  const actionRow = (
+    <div
+      id={optionId(actionIndex)}
+      role="option"
+      aria-selected={actionIndex === active}
+      aria-disabled={actionBusy || undefined}
+      onMouseDown={(e) => e.preventDefault()}
+      onMouseEnter={() => setActive(actionIndex)}
+      onClick={() => void searchPlaces()}
+      className={clsx(
+        'flex items-center gap-2 border-t border-slate-100 px-3 py-2 text-sm font-medium dark:border-slate-800',
+        actionBusy ? 'cursor-default text-slate-500 dark:text-slate-400' : 'cursor-pointer',
+        actionIndex === active && !actionBusy
+          ? 'bg-brand-50 text-brand-900 dark:bg-brand-950/60 dark:text-brand-100'
+          : !actionBusy && 'text-brand-700 dark:text-brand-400',
+      )}
+    >
+      <Search aria-hidden className="h-4 w-4 shrink-0" />
+      <span className="min-w-0 break-words">{actionLabel}</span>
+    </div>
+  )
+
   /** A listbox may only hold options and groups, so each heading labels a `role="group"` of options. */
   const group = (key: string, title: string, places: Place[], offset: number) =>
     places.length > 0 && (
@@ -141,7 +201,7 @@ export function PlaceSearch({
       </div>
     )
 
-  const listVisible = showList && options.length > 0
+  const listVisible = showList && optionCount > 0
   const dropdown =
     'absolute z-30 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900'
 
@@ -182,11 +242,12 @@ export function PlaceSearch({
         className={clsx(dropdown, 'max-h-72 overflow-auto py-1')}
       >
         {group('cities', 'Cities', results.cities, 0)}
-        {group('places', 'Places', results.places, results.cities.length)}
+        {group('places', 'Places', places, results.cities.length)}
+        {showAction && actionRow}
       </div>
       {/* Status text lives outside the listbox, which may only contain options and groups. */}
-      <div role="status" className={clsx(showList && options.length === 0 && [dropdown, 'px-3 py-2 text-sm text-slate-500 dark:text-slate-400'])}>
-        {showList && options.length === 0 ? (results.done ? 'No matches' : 'Searching…') : null}
+      <div role="status" className={clsx(showList && optionCount === 0 && [dropdown, 'px-3 py-2 text-sm text-slate-500 dark:text-slate-400'])}>
+        {showList && optionCount === 0 ? (results.done ? 'No matches' : 'Searching…') : null}
       </div>
       {error && (
         <p id={messageId} className="text-sm text-red-600 dark:text-red-400">

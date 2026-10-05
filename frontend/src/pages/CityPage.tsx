@@ -24,7 +24,7 @@ function CityResults({ city }: { city: City }) {
   return (
     <>
       <div className="mt-6">
-        <SearchForm initial={{ place, lat: city.lat, lng: city.lng }} />
+        <SearchForm initial={{ place, lat: city.lat, lng: city.lng, radius: CITY_RADIUS_KM }} />
       </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">

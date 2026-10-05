@@ -272,11 +272,24 @@ describe('SearchPage', () => {
   })
 
   it('asks for new times when the server rejects the time range', async () => {
-    mock.onGet('/search').reply(400, { code: 'INVALID_TIME_RANGE', detail: 'Start is in the past' })
+    mock.onGet('/search').reply(400, { code: 'INVALID_TIME_RANGE', detail: "Start time can't be in the past" })
     const user = userEvent.setup()
     renderApp(SEARCH_URL)
 
     expect(await screen.findByText('These times are no longer valid. Change the times to search again.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Change times' }))
+
+    expect(screen.getByLabelText('From')).toHaveFocus()
+  })
+
+  it("shows the server's explanation for other time range problems, with Change times", async () => {
+    mock.onGet('/search').reply(400, { code: 'INVALID_TIME_RANGE', detail: 'Bookings can be at most 90 days' })
+    const user = userEvent.setup()
+    renderApp(SEARCH_URL)
+
+    expect(await screen.findByText('Bookings can be at most 90 days')).toBeInTheDocument()
+    expect(screen.queryByText(/no longer valid/)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Change times' }))
 
@@ -313,6 +326,25 @@ describe('SearchPage', () => {
 
     await waitFor(() => expect(lastParams().open24x7).toBe(true))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('clamps an oversized radius from the URL before searching', async () => {
+    mock.onGet('/search').reply(200, response([result()]))
+    renderApp(`${SEARCH_URL}&radius=500`)
+
+    await screen.findByText('1 parking spot near Pune, Maharashtra')
+    expect(lastParams().radiusKm).toBe(25)
+  })
+
+  it.each([
+    ['coordinates outside India', '/search?place=London&lat=51.5&lng=-0.12'],
+    ['an unparsable start time', `${SEARCH_URL.replace(/start=[^&]+/, 'start=soon')}`],
+  ])('shows the Find parking form for %s', (_name, url) => {
+    renderApp(url)
+
+    expect(screen.getByRole('heading', { name: 'Find parking' })).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(mock.history.get.filter((r) => r.url === '/search')).toHaveLength(0)
   })
 
   it('asks for a place when the coordinates are missing', () => {

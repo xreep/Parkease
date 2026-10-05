@@ -17,6 +17,14 @@ export function defaultWindow(now: Date = new Date()): { start: Date; end: Date 
   return { start, end: new Date(start.getTime() + 2 * HOUR_MS) }
 }
 
+/** Every time on the site is Indian Standard Time; this says whether the browser already agrees. */
+export function browserIsIst(): boolean {
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  return zone === 'Asia/Kolkata' || zone === 'Asia/Calcutta'
+}
+
+export const IST_HINT = 'Times are in Indian Standard Time (IST).'
+
 const pad = (n: number) => String(n).padStart(2, '0')
 
 /** `YYYY-MM-DDTHH:mm` in local time, the value format of `<input type="datetime-local">`. */

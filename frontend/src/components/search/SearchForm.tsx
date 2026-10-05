@@ -5,7 +5,14 @@ import { VEHICLE_TYPE_LABELS } from '../../lib/format'
 import type { VehicleType } from '../../lib/owner'
 import type { Place } from '../../lib/places'
 import { toSearchParams, type SearchParams } from '../../lib/search'
-import { currentQuarter, defaultWindow, fromLocalInputValue, toLocalInputValue } from '../../lib/time'
+import {
+  browserIsIst,
+  currentQuarter,
+  defaultWindow,
+  fromLocalInputValue,
+  IST_HINT,
+  toLocalInputValue,
+} from '../../lib/time'
 import { Button } from '../ui/Button'
 import { Select } from '../ui/Select'
 import { TextField } from '../ui/TextField'
@@ -22,6 +29,11 @@ type Props = {
 type Errors = { place?: string; start?: string; end?: string }
 
 const MIN_MINUTES = 60
+const MAX_MINUTES = 90 * 24 * 60
+const QUARTER_MS = 15 * 60_000
+const STEP_MESSAGE = 'Use 15-minute steps (e.g. 10:00, 10:15)'
+
+const offQuarter = (d: Date) => d.getTime() % QUARTER_MS !== 0
 
 function initialTimes(initial?: SearchParams) {
   if (initial?.start && initial.end) {
@@ -47,11 +59,14 @@ export function SearchForm({ initial, compact = false, onSubmit }: Props) {
     const end = fromLocalInputValue(times.end)
     if (Number.isNaN(start.getTime())) errs.start = 'Choose a start time'
     else if (start < currentQuarter()) errs.start = "Start time can't be in the past"
+    else if (offQuarter(start)) errs.start = STEP_MESSAGE
     if (Number.isNaN(end.getTime())) errs.end = 'Choose an end time'
+    else if (offQuarter(end)) errs.end = STEP_MESSAGE
     if (!errs.start && !errs.end) {
       const minutes = (end.getTime() - start.getTime()) / 60_000
       if (minutes <= 0) errs.end = "'Until' must be after 'From'"
       else if (minutes < MIN_MINUTES) errs.end = 'Book at least 1 hour'
+      else if (minutes > MAX_MINUTES) errs.end = 'Bookings can be at most 90 days'
     }
     return errs
   }
@@ -117,6 +132,7 @@ export function SearchForm({ initial, compact = false, onSubmit }: Props) {
       <Button type="submit" className={clsx(compact ? 'lg:mt-[1.65rem]' : 'sm:col-span-2')}>
         Search parking
       </Button>
+      {!browserIsIst() && <p className="col-span-full -mt-2 text-xs text-slate-500">{IST_HINT}</p>}
     </form>
   )
 }

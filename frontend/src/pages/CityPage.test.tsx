@@ -81,6 +81,7 @@ describe('CityPage', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Search parking' }))
 
     expect(await screen.findByTestId('loc')).toHaveTextContent('/search?place=Pune%2C+Maharashtra&lat=18.5204&lng=73.8567')
+    expect(screen.getByTestId('loc').textContent).toMatch(/[?&]radius=15(&|$)/)
   })
 
   it('invites owners to list a space when the city has no parking yet', async () => {

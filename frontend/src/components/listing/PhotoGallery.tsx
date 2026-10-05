@@ -86,12 +86,12 @@ export function PhotoGallery({ photos, title }: { photos: Photo[]; title: string
           type="button"
           aria-label="Open photo 1"
           onClick={() => setOpen(0)}
-          className="overflow-hidden rounded-2xl bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:bg-slate-800"
+          className="block h-56 overflow-hidden rounded-2xl bg-slate-100 sm:h-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:bg-slate-800"
         >
-          <img src={photos[0].url} alt={`${title} photo 1`} className="h-56 w-full object-cover sm:h-80" />
+          <img src={photos[0].url} alt={`${title} photo 1`} className="h-full w-full object-cover" />
         </button>
         {thumbs.length > 0 && (
-          <ul className="grid grid-cols-4 gap-2 sm:grid-cols-1 sm:grid-rows-4">
+          <ul className="grid grid-cols-4 gap-2 sm:h-80 sm:grid-cols-1 sm:grid-rows-4">
             {thumbs.map((p, i) => {
               const n = i + 2
               const more = i === thumbs.length - 1 && hidden > 0
