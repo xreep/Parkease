@@ -70,6 +70,27 @@ describe('blocked times', () => {
     expect(within(items[0]).getByRole('button', { name: 'Remove block 1' })).toBeInTheDocument()
   })
 
+  it('sorts by the actual instant even when offsets differ', async () => {
+    const earlier: Block = { ...sooner, id: 31, startTime: '2026-11-02T09:00:00+05:30', endTime: '2026-11-02T12:00:00+05:30', reason: 'Earlier instant' }
+    const laterInstant: Block = { ...sooner, id: 32, startTime: '2026-11-02T04:30:00Z', endTime: '2026-11-02T06:00:00Z', reason: 'Later instant' }
+    mock.onGet('/owner/listings/7/blocks').reply(200, [laterInstant, earlier])
+    renderApp('/owner/listings/7/blocks')
+
+    const items = within(await screen.findByRole('list', { name: 'Upcoming blocked times' })).getAllByRole('listitem')
+    expect(within(items[0]).getByText('Earlier instant')).toBeInTheDocument()
+    expect(within(items[1]).getByText('Later instant')).toBeInTheDocument()
+  })
+
+  it('does not offer removal on a suspended listing', async () => {
+    mock.onGet('/owner/listings/7').reply(200, { ...listing, status: 'SUSPENDED' })
+    mock.onGet('/owner/listings/7/blocks').reply(200, [sooner])
+    renderApp('/owner/listings/7/blocks')
+
+    expect(await screen.findByText("This listing was suspended by ParkEase and can't be edited.")).toBeInTheDocument()
+    expect(await screen.findByText('Whole listing')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Remove block/ })).not.toBeInTheDocument()
+  })
+
   it('blocks the whole listing', async () => {
     mock.onGet('/owner/listings/7/blocks').reply(200, [])
     mock.onPost('/owner/listings/7/blocks').reply(201, sooner)

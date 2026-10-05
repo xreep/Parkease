@@ -50,7 +50,7 @@ function DeleteDialog({ listing, onClose, onDeleted }: { listing: ListingSummary
   )
 }
 
-function ListingCard({ listing, onChanged, onDelete }: { listing: ListingSummary; onChanged: () => Promise<void>; onDelete: () => void }) {
+function ListingCard({ listing, onChanged, onDelete }: { listing: ListingSummary; onChanged: (id: number) => Promise<void>; onDelete: () => void }) {
   const [busy, setBusy] = useState(false)
 
   async function changeStatus(kind: 'pause' | 'resume') {
@@ -61,7 +61,7 @@ function ListingCard({ listing, onChanged, onDelete }: { listing: ListingSummary
     } catch (error) {
       toast.error(errorMessage(error))
     } finally {
-      await onChanged()
+      await onChanged(listing.id)
       setBusy(false)
     }
   }
@@ -113,7 +113,13 @@ export function MyListingsPage() {
   const [deleting, setDeleting] = useState<ListingSummary | null>(null)
   const { data, error, isPending } = useMyListings(page)
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ['owner', 'listings'] })
+  // The wizard reads ['owner','listing',id] with a long staleTime, so a status change must invalidate it too.
+  const refresh = async (id: number) => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['owner', 'listings'] }),
+      queryClient.invalidateQueries({ queryKey: ['owner', 'listing', id] }),
+    ])
+  }
 
   return (
     <div className="space-y-6">
@@ -155,9 +161,11 @@ export function MyListingsPage() {
           listing={deleting}
           onClose={() => setDeleting(null)}
           onDeleted={() => {
+            const { id } = deleting
             setDeleting(null)
             if (data && data.content.length === 1 && page > 0) setPage(page - 1)
-            void refresh()
+            queryClient.removeQueries({ queryKey: ['owner', 'listing', id] })
+            void queryClient.invalidateQueries({ queryKey: ['owner', 'listings'] })
           }}
         />
       )}

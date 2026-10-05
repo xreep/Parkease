@@ -5,8 +5,10 @@ import App from '../App'
 import { AuthProvider } from '../auth/AuthProvider'
 import { ThemeProvider } from '../theme/ThemeProvider'
 
-export function renderApp(initialPath = '/') {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+export function renderApp(
+  initialPath = '/',
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+) {
   return render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
