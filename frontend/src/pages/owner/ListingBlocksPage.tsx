@@ -73,9 +73,9 @@ function BlockForm({ listing, onAdded }: { listing: ListingDetail; onAdded: () =
   )
 }
 
-function BlockList({ listingId, blocks, onRemoved }: { listingId: number; blocks: Block[]; onRemoved: () => Promise<void> }) {
+function BlockList({ listingId, blocks, canRemove, onRemoved }: { listingId: number; blocks: Block[]; canRemove: boolean; onRemoved: () => Promise<void> }) {
   const [removingId, setRemovingId] = useState<number | null>(null)
-  const sorted = useMemo(() => [...blocks].sort((a, b) => a.startTime.localeCompare(b.startTime) || a.id - b.id), [blocks])
+  const sorted = useMemo(() => [...blocks].sort((a, b) => Date.parse(a.startTime) - Date.parse(b.startTime) || a.id - b.id), [blocks])
 
   async function remove(block: Block) {
     setRemovingId(block.id)
@@ -106,16 +106,18 @@ function BlockList({ listingId, blocks, onRemoved }: { listingId: number; blocks
             <p className="text-sm text-slate-500">{block.slotLabel ?? 'Whole listing'}</p>
             {block.reason && <p className="text-sm text-slate-600 dark:text-slate-400">{block.reason}</p>}
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            className="px-3 py-1.5 text-red-600 dark:text-red-400"
-            aria-label={`Remove block ${i + 1}`}
-            loading={removingId === block.id}
-            onClick={() => void remove(block)}
-          >
-            Remove
-          </Button>
+          {canRemove && (
+            <Button
+              type="button"
+              variant="ghost"
+              className="px-3 py-1.5 text-red-600 dark:text-red-400"
+              aria-label={`Remove block ${i + 1}`}
+              loading={removingId === block.id}
+              onClick={() => void remove(block)}
+            >
+              Remove
+            </Button>
+          )}
         </li>
       ))}
     </ul>
@@ -151,7 +153,7 @@ function BlocksContent({ id }: { id: number }) {
       ) : blocks.error ? (
         <FormError message={errorMessage(blocks.error)} />
       ) : (
-        <BlockList listingId={id} blocks={blocks.data} onRemoved={refresh} />
+        <BlockList listingId={id} blocks={blocks.data} canRemove={listing.status !== 'SUSPENDED'} onRemoved={refresh} />
       )}
     </div>
   )

@@ -187,7 +187,7 @@ describe('listing wizard', () => {
 
       await waitFor(() => expect(mock.history.put).toHaveLength(1))
       expect(JSON.parse(mock.history.put[0].data)).toMatchObject({ cityId: 51, title: 'FC Road Garage', lat: 18.5204 })
-      expect(await screen.findByRole('link', { name: 'Photos' })).toHaveAttribute('aria-current', 'step')
+      await waitFor(() => expect(screen.getByRole('link', { name: 'Photos' })).toHaveAttribute('aria-current', 'step'))
     })
 
     it('shows the rejection note on a rejected listing', async () => {
@@ -317,7 +317,7 @@ describe('listing wizard', () => {
 
       await userEvent.click(await screen.findByRole('button', { name: 'Continue' }))
 
-      expect(await screen.findByRole('link', { name: 'Slots' })).toHaveAttribute('aria-current', 'step')
+      await waitFor(() => expect(screen.getByRole('link', { name: 'Slots' })).toHaveAttribute('aria-current', 'step'))
     })
 
     it('goes back to the location step', async () => {
@@ -326,7 +326,7 @@ describe('listing wizard', () => {
 
       await userEvent.click(await screen.findByRole('button', { name: 'Back' }))
 
-      expect(await screen.findByRole('link', { name: 'Location' })).toHaveAttribute('aria-current', 'step')
+      await waitFor(() => expect(screen.getByRole('link', { name: 'Location' })).toHaveAttribute('aria-current', 'step'))
     })
   })
 
@@ -464,7 +464,7 @@ describe('listing wizard', () => {
 
       await userEvent.click(await screen.findByRole('button', { name: 'Continue' }))
 
-      expect(await screen.findByRole('link', { name: 'Pricing' })).toHaveAttribute('aria-current', 'step')
+      await waitFor(() => expect(screen.getByRole('link', { name: 'Pricing' })).toHaveAttribute('aria-current', 'step'))
     })
 
     it('pads the preview to three digits when the last number reaches 100', async () => {
@@ -577,7 +577,7 @@ describe('listing wizard', () => {
         pricePerHour: 50, pricePerDay: 400, pricePerMonth: null, cancellationPolicy: 'STRICT',
         autoApprove: true, amenities: ['COVERED', 'CCTV'], rules: 'No overnight parking',
       })
-      expect(await screen.findByRole('link', { name: 'Hours' })).toHaveAttribute('aria-current', 'step')
+      await waitFor(() => expect(screen.getByRole('link', { name: 'Hours' })).toHaveAttribute('aria-current', 'step'))
     })
 
     it('prefills the saved pricing', async () => {
@@ -627,7 +627,7 @@ describe('listing wizard', () => {
       expect(JSON.parse(mock.history.put[0].data)).toEqual({
         open24x7: false, rules: [{ dayOfWeek: 1, openTime: '09:00', closeTime: '18:00' }],
       })
-      expect(await screen.findByRole('link', { name: 'Review' })).toHaveAttribute('aria-current', 'step')
+      await waitFor(() => expect(screen.getByRole('link', { name: 'Review' })).toHaveAttribute('aria-current', 'step'))
     })
 
     it('sends no rules when open 24 x 7', async () => {
@@ -697,6 +697,26 @@ describe('listing wizard', () => {
         expect(screen.getByLabelText(`Open on ${day}`)).toBeChecked()
         expect(screen.getByLabelText(`${day} opens`)).toHaveValue('10:00')
         expect(screen.getByLabelText(`${day} closes`)).toHaveValue('16:00')
+      }
+    })
+
+    it('copies Monday to every day and ticks them all, even when Monday starts unticked', async () => {
+      mock.onGet('/owner/listings/7').reply(200, listing)
+      mock.onGet('/owner/listings/7/hours').reply(200, {
+        open24x7: false, rules: [{ dayOfWeek: 3, openTime: '10:00', closeTime: '16:00' }],
+      })
+      renderApp('/owner/listings/7/edit?step=5')
+
+      await waitFor(() => expect(screen.getByLabelText('Open on Wednesday')).toBeChecked())
+      expect(screen.getByLabelText('Open on Monday')).not.toBeChecked()
+      fireEvent.change(screen.getByLabelText('Monday opens'), { target: { value: '07:00' } })
+      fireEvent.change(screen.getByLabelText('Monday closes'), { target: { value: '19:30' } })
+      await userEvent.click(screen.getByRole('button', { name: 'Copy Monday to all days' }))
+
+      for (const day of ['Monday', 'Tuesday', 'Wednesday', 'Sunday']) {
+        expect(screen.getByLabelText(`Open on ${day}`)).toBeChecked()
+        expect(screen.getByLabelText(`${day} opens`)).toHaveValue('07:00')
+        expect(screen.getByLabelText(`${day} closes`)).toHaveValue('19:30')
       }
     })
 

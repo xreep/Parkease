@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { QueryClient } from '@tanstack/react-query'
 import MockAdapter from 'axios-mock-adapter'
 import { toast } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -75,6 +76,43 @@ describe('my listings', () => {
     expect(mock.history.post[0].url).toBe('/owner/listings/7/pause')
     expect(await screen.findByRole('button', { name: 'Resume' })).toBeInTheDocument()
     expect(toast.success).toHaveBeenCalledWith('Listing paused')
+  })
+
+  it('marks the cached listing detail stale after pausing so the wizard does not show old status', async () => {
+    mock.onGet('/owner/listings').reply(200, page([live]))
+    mock.onPost('/owner/listings/7/pause').reply(200, {})
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 60_000 } } })
+    client.setQueryData(['owner', 'listing', 7], { id: 7, status: 'APPROVED' })
+    renderApp('/owner/listings', client)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Pause' }))
+
+    await waitFor(() => expect(client.getQueryState(['owner', 'listing', 7])?.isInvalidated).toBe(true))
+  })
+
+  it('marks the cached listing detail stale after resuming', async () => {
+    mock.onGet('/owner/listings').reply(200, page([{ ...live, status: 'PAUSED' }]))
+    mock.onPost('/owner/listings/7/resume').reply(200, {})
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 60_000 } } })
+    client.setQueryData(['owner', 'listing', 7], { id: 7, status: 'PAUSED' })
+    renderApp('/owner/listings', client)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Resume' }))
+
+    await waitFor(() => expect(client.getQueryState(['owner', 'listing', 7])?.isInvalidated).toBe(true))
+  })
+
+  it('drops the cached listing detail after deleting', async () => {
+    mock.onGet('/owner/listings').reply(200, page([rejected]))
+    mock.onDelete('/owner/listings/8').reply(204)
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 60_000 } } })
+    client.setQueryData(['owner', 'listing', 8], { id: 8, status: 'REJECTED' })
+    renderApp('/owner/listings', client)
+
+    await userEvent.click(within(await screen.findByRole('article', { name: 'Baner Lot' })).getByRole('button', { name: 'Delete' }))
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete listing' }))
+
+    await waitFor(() => expect(client.getQueryData(['owner', 'listing', 8])).toBeUndefined())
   })
 
   it('resumes a paused listing', async () => {

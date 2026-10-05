@@ -19,8 +19,8 @@ export function HoursEditor({ form }: Props) {
   const opts = { shouldDirty: true, shouldValidate: form.formState.isSubmitted }
 
   function copyMonday() {
-    const monday = getValues('days.0')
-    for (let i = 1; i < DAY_NAMES.length; i++) setValue(`days.${i}`, { ...monday }, opts)
+    const { openTime, closeTime } = getValues('days.0')
+    for (let i = 0; i < DAY_NAMES.length; i++) setValue(`days.${i}`, { enabled: true, openTime, closeTime }, opts)
   }
 
   function weekdays() {
