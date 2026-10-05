@@ -109,6 +109,8 @@ export type SearchParams = {
 export const DEFAULT_RADIUS_KM = 5
 export const MIN_RADIUS_KM = 0.5
 export const MAX_RADIUS_KM = 25
+/** The API rejects a higher maxPricePerHour. */
+export const MAX_PRICE_PER_HOUR = 100_000
 export const DEFAULT_SORT: SearchSort = 'distance'
 
 const SORTS: readonly SearchSort[] = ['distance', 'price', 'rating']
@@ -157,7 +159,7 @@ export function parseSearchParams(usp: URLSearchParams): SearchParams | null {
   const amenities = usp.getAll('amenities').filter((a): a is Amenity => isKey(AMENITY_LABELS, a))
   if (amenities.length) p.amenities = amenities
   const maxPrice = finiteNumber(usp.get('maxPrice'))
-  if (maxPrice !== undefined && maxPrice > 0) p.maxPrice = maxPrice
+  if (maxPrice !== undefined && maxPrice > 0 && maxPrice <= MAX_PRICE_PER_HOUR) p.maxPrice = maxPrice
   if (usp.get('open24x7') === 'true') p.open24x7 = true
   const sort = SORTS.find((s) => s === usp.get('sort'))
   if (sort && sort !== DEFAULT_SORT) p.sort = sort

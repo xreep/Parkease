@@ -82,6 +82,15 @@ describe('search params', () => {
     ).toMatchObject({ start: '2030-01-01T08:00:00.000Z', end: '2030-01-01T10:00:00.000Z' })
   })
 
+  it('drops a maxPrice outside (0, 100000]', () => {
+    const base = 'place=X&lat=18.5&lng=73.8'
+    for (const bad of ['0', '-5', '100001', '1000000000']) {
+      expect(parseSearchParams(new URLSearchParams(`${base}&maxPrice=${bad}`))).not.toHaveProperty('maxPrice')
+    }
+    expect(parseSearchParams(new URLSearchParams(`${base}&maxPrice=100000`))?.maxPrice).toBe(100000)
+    expect(parseSearchParams(new URLSearchParams(`${base}&maxPrice=0.5`))?.maxPrice).toBe(0.5)
+  })
+
   it('clamps the radius to 0.5-25 km', () => {
     const base = 'place=X&lat=18.5&lng=73.8'
     expect(parseSearchParams(new URLSearchParams(`${base}&radius=100`))?.radius).toBe(25)
