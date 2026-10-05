@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
-import { render } from '@testing-library/react'
+import L from 'leaflet'
+import { act, render } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SearchResultDto } from '../../lib/search'
 import { ResultsMap } from './ResultsMap'
 
@@ -43,5 +44,56 @@ describe('ResultsMap', () => {
   it('does not offer "Search this area" until the map is moved away', () => {
     const { queryByRole } = render(<ResultsMap {...props} results={results} highlightedId={null} />)
     expect(queryByRole('button', { name: 'Search this area' })).not.toBeInTheDocument()
+  })
+
+  describe('when it starts hidden', () => {
+    const size = { w: 0, h: 0 }
+    const observers: ResizeObserverCallback[] = []
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+      vi.unstubAllGlobals()
+      observers.length = 0
+      size.w = size.h = 0
+    })
+
+    it('waits for a size before fitting, then fits to a finite zoom', () => {
+      // jsdom has no layout: give the map container a controllable size and capture the ResizeObserver.
+      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => size.w)
+      vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(() => size.h)
+      vi.stubGlobal('ResizeObserver', class {
+        constructor(cb: ResizeObserverCallback) { observers.push(cb) }
+        observe() {}
+        disconnect() {}
+      })
+      const fitBounds = vi.spyOn(L.Map.prototype, 'fitBounds')
+
+      render(<ResultsMap {...props} results={results} highlightedId={null} />)
+      expect(fitBounds).not.toHaveBeenCalled()
+
+      size.w = 400
+      size.h = 300
+      act(() => observers.forEach((cb) => cb([], {} as ResizeObserver)))
+
+      expect(fitBounds).toHaveBeenCalledTimes(1)
+      const map = fitBounds.mock.contexts[0] as L.Map
+      expect(Number.isFinite(map.getZoom())).toBe(true)
+      expect(Number.isFinite(map.getCenter().lat)).toBe(true)
+    })
+
+    it('does not refit for the same search when only the results change', () => {
+      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(400)
+      vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(300)
+      const fitBounds = vi.spyOn(L.Map.prototype, 'fitBounds')
+
+      const { rerender } = render(<ResultsMap {...props} results={results} highlightedId={null} />)
+      expect(fitBounds).toHaveBeenCalledTimes(1)
+
+      rerender(<ResultsMap {...props} results={[results[1]]} highlightedId={null} />)
+      expect(fitBounds).toHaveBeenCalledTimes(1)
+
+      rerender(<ResultsMap {...props} center={{ lat: 19, lng: 73 }} results={results} highlightedId={null} />)
+      expect(fitBounds).toHaveBeenCalledTimes(2)
+    })
   })
 })

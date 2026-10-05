@@ -75,6 +75,9 @@ export function FiltersPanel({ value, onChange, onClear, onApply }: PanelProps) 
     return () => clearTimeout(timer)
   }, [priceText])
 
+  const priceNumber = priceText.trim() === '' ? undefined : Number(priceText)
+  const priceInvalid = priceNumber !== undefined && !(priceNumber > 0)
+
   const radiusOptions = RADIUS_OPTIONS.includes(value.radius as (typeof RADIUS_OPTIONS)[number])
     ? [...RADIUS_OPTIONS]
     : [...RADIUS_OPTIONS, value.radius].sort((a, b) => a - b)
@@ -94,6 +97,7 @@ export function FiltersPanel({ value, onChange, onClear, onApply }: PanelProps) 
           min={1}
           step={1}
           placeholder="No limit"
+          error={priceInvalid ? 'Enter a price above ₹0' : undefined}
           value={priceText}
           onChange={(e) => setPriceText(e.target.value)}
           onBlur={() => commitPrice(priceText)}
