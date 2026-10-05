@@ -37,6 +37,10 @@ app:
     username: ${MAIL_USERNAME:}
     password: ${MAIL_PASSWORD:}
     from: ${MAIL_FROM:ParkEase <no-reply@parkease.local>}
+  storage:
+    local-dir: ${STORAGE_LOCAL_DIR:uploads}
+    public-base-url: ${PUBLIC_BASE_URL:http://localhost:8080}
+    cloudinary-url: ${CLOUDINARY_URL:}
 
 springdoc:
   swagger-ui:

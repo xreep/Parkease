@@ -29,6 +29,22 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void apiExceptionExtraPropertiesAreIncluded() throws Exception {
+        mvc.perform(get("/api/v1/test-errors/extra"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("LISTING_INCOMPLETE"))
+                .andExpect(jsonPath("$.missing[0]").value("PHOTOS"))
+                .andExpect(jsonPath("$.missing[1]").value("SLOTS"));
+    }
+
+    @Test
+    void oversizedUploadIsPayloadTooLarge() throws Exception {
+        mvc.perform(get("/api/v1/test-errors/too-large"))
+                .andExpect(status().isPayloadTooLarge())
+                .andExpect(jsonPath("$.code").value("FILE_TOO_LARGE"));
+    }
+
+    @Test
     void validationErrorsListFields() throws Exception {
         mvc.perform(post("/api/v1/test-errors/validation")
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))

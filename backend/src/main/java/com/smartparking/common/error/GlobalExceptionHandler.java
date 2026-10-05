@@ -16,6 +16,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 @Slf4j
 @RestControllerAdvice
@@ -23,7 +24,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ApiException.class)
     ResponseEntity<ProblemDetail> handleApi(ApiException ex) {
-        return respond(problem(ex.getStatus(), ex.getCode(), ex.getMessage()));
+        ProblemDetail pd = problem(ex.getStatus(), ex.getCode(), ex.getMessage());
+        ex.getProperties().forEach(pd::setProperty);
+        return respond(pd);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -60,6 +63,11 @@ public class GlobalExceptionHandler {
         // Never log the exception message: Postgres includes the offending values (e.g. emails).
         log.warn("Data integrity violation (sqlState={}, constraint={})", sqlState, constraint);
         return respond(problem(HttpStatus.CONFLICT, "CONFLICT", "The request conflicts with existing data"));
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    ResponseEntity<ProblemDetail> handleUploadTooLarge(MaxUploadSizeExceededException ex) {
+        return respond(problem(HttpStatus.PAYLOAD_TOO_LARGE, "FILE_TOO_LARGE", "Files must be 5 MB or smaller"));
     }
 
     @ExceptionHandler(AccessDeniedException.class)
