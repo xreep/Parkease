@@ -34,18 +34,24 @@ public record SearchCriteria(
     public static final int DEFAULT_SIZE = 20;
     public static final int MAX_SIZE = 50;
 
+    public static final BigDecimal MAX_PRICE_PER_HOUR = BigDecimal.valueOf(100_000);
+
     private static final double MIN_LAT = 6;
     private static final double MAX_LAT = 38;
     private static final double MIN_LNG = 68;
     private static final double MAX_LNG = 98;
 
-    /** Raw query parameters in, validated criteria out; throws INVALID_LOCATION / INVALID_TIME_RANGE. */
+    /** Raw query parameters in, validated criteria out; throws INVALID_LOCATION / INVALID_TIME_RANGE / INVALID_PARAMETER. */
     public static SearchCriteria of(Double lat, Double lng, Double radiusKm, Instant start, Instant end,
             VehicleType vehicleType, Collection<ListingType> types, Collection<Amenity> amenities,
             BigDecimal maxPricePerHour, Boolean open24x7, String sort, Integer page, Integer size, Clock clock) {
         if (lat == null || lng == null || !Double.isFinite(lat) || !Double.isFinite(lng)
                 || lat < MIN_LAT || lat > MAX_LAT || lng < MIN_LNG || lng > MAX_LNG) {
             throw ApiException.badRequest("INVALID_LOCATION", "Choose a location in India");
+        }
+        if (maxPricePerHour != null
+                && (maxPricePerHour.signum() <= 0 || maxPricePerHour.compareTo(MAX_PRICE_PER_HOUR) > 0)) {
+            throw ApiException.badRequest("INVALID_PARAMETER", "maxPricePerHour must be between 1 and 100000");
         }
         double radius = radiusKm == null || !Double.isFinite(radiusKm) ? DEFAULT_RADIUS_KM : radiusKm;
         radius = Math.max(MIN_RADIUS_KM, Math.min(MAX_RADIUS_KM, radius));
