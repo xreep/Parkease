@@ -11,6 +11,7 @@ import com.smartparking.listing.ParkingListing;
 import com.smartparking.listing.ParkingListingRepository;
 import com.smartparking.location.City;
 import com.smartparking.location.CityRepository;
+import java.math.BigDecimal;
 import org.springframework.data.domain.Limit;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -71,5 +72,27 @@ public final class ListingTestSupport {
         ParkingListing listing = listings.findById(id).orElseThrow();
         listing.setStatus(ListingStatus.APPROVED);
         return listings.saveAndFlush(listing);
+    }
+
+    /**
+     * Creates a complete listing (photo, one FOUR_WHEELER slot "A-01", CCTV, 24x7) for {@code auth}, then moves it
+     * to {@code lat}/{@code lng}, sets its title and hourly price and marks it APPROVED through the repository.
+     * Callers can tweak further fields (type, amenities, hours, rating) through the repositories afterwards.
+     */
+    public static Long approvedListingAt(MockMvc mvc, String auth, ParkingListingRepository listings, Long cityId,
+                                         String title, double lat, double lng, double pricePerHour) throws Exception {
+        String body = mvc.perform(post("/api/v1/owner/listings").header(HttpHeaders.AUTHORIZATION, auth)
+                        .contentType(MediaType.APPLICATION_JSON).content(basicsJson(cityId, title)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        Long id = ((Number) JsonPath.read(body, "$.id")).longValue();
+        makeComplete(mvc, auth, id);
+        ParkingListing listing = listings.findById(id).orElseThrow();
+        listing.setLat(lat);
+        listing.setLng(lng);
+        listing.setPricePerHour(BigDecimal.valueOf(pricePerHour));
+        listing.setStatus(ListingStatus.APPROVED);
+        listings.saveAndFlush(listing);
+        return id;
     }
 }
