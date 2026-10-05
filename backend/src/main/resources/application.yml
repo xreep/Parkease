@@ -41,6 +41,9 @@ app:
     local-dir: ${STORAGE_LOCAL_DIR:uploads}
     public-base-url: ${PUBLIC_BASE_URL:http://localhost:8080}
     cloudinary-url: ${CLOUDINARY_URL:}
+  pricing:
+    platform-fee-percent: 10
+    gst-percent: 18
 
 springdoc:
   swagger-ui:
