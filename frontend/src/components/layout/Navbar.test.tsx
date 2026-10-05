@@ -34,4 +34,9 @@ describe('Navbar logout', () => {
     expect(screen.queryByRole('heading', { name: /^log in$/i })).not.toBeInTheDocument()
     expect(tokenStore.getAccess()).toBeNull()
   })
+
+  it('has a Find parking link to the search page', async () => {
+    renderApp('/')
+    expect(screen.getByRole('link', { name: 'Find parking' })).toHaveAttribute('href', '/search')
+  })
 })

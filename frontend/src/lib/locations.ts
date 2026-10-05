@@ -43,3 +43,12 @@ export function useStateDetail(slug: string) {
     staleTime: Infinity,
   })
 }
+
+export function useCity(stateSlug: string, citySlug: string) {
+  return useQuery({
+    queryKey: ['city', stateSlug, citySlug],
+    queryFn: async () => (await api.get<City>(`/states/${stateSlug}/cities/${citySlug}`)).data,
+    enabled: stateSlug !== '' && citySlug !== '',
+    staleTime: Infinity,
+  })
+}
