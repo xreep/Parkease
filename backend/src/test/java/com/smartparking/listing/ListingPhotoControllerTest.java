@@ -85,6 +85,23 @@ class ListingPhotoControllerTest {
     }
 
     @Test
+    void photoWithAForeignStorageKeyFallsBackToItsStoredUrl() throws Exception {
+        ListingPhoto photo = new ListingPhoto();
+        photo.setListing(listingRepository.findById(listingId).orElseThrow());
+        photo.setUrl("https://res.cloudinary.com/demo/image/upload/abc.png");
+        photo.setStorageKey("cloudinary/upload/abc.png");
+        photo.setSortOrder(0);
+        photoRepository.saveAndFlush(photo);
+
+        mvc.perform(get("/api/v1/owner/listings/" + listingId).header(HttpHeaders.AUTHORIZATION, auth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.photos[0].url").value("https://res.cloudinary.com/demo/image/upload/abc.png"));
+        mvc.perform(get("/api/v1/owner/listings").header(HttpHeaders.AUTHORIZATION, auth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].coverPhotoUrl").value("https://res.cloudinary.com/demo/image/upload/abc.png"));
+    }
+
+    @Test
     void seedPhotosWithoutStorageKeyKeepTheirStoredUrl() throws Exception {
         ListingPhoto photo = new ListingPhoto();
         photo.setListing(listingRepository.findById(listingId).orElseThrow());
