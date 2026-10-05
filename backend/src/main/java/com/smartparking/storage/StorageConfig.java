@@ -4,8 +4,10 @@ import com.cloudinary.Cloudinary;
 import com.smartparking.common.security.JwtProperties;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Duration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.CacheControl;
 import org.springframework.util.StringUtils;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -42,6 +44,8 @@ public class StorageConfig implements WebMvcConfigurer {
             return;
         }
         Path publicDir = Path.of(properties.localDir()).toAbsolutePath().normalize().resolve("public");
-        registry.addResourceHandler("/uploads/public/**").addResourceLocations(publicDir.toUri().toString());
+        registry.addResourceHandler("/uploads/public/**")
+                .addResourceLocations(publicDir.toUri().toString())
+                .setCacheControl(CacheControl.maxAge(Duration.ofDays(365)).cachePublic());
     }
 }

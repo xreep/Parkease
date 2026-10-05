@@ -47,6 +47,9 @@ public class AvailabilityService {
         ParkingListing listing = listings.requireEditable(ownerId, listingId);
         boolean open24x7 = r.open24x7();
         if (!open24x7) {
+            if (r.rules().isEmpty()) {
+                throw ApiException.badRequest("INVALID_HOURS", "Choose at least one open day or 24 \u00d7 7");
+            }
             validateRules(r.rules());
         }
         // Set before the bulk delete: it flushes first, then clears the persistence context.

@@ -10,6 +10,7 @@ import static com.smartparking.support.OwnerTestSupport.verifiedOwner;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.emptyOrNullString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -19,6 +20,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.jayway.jsonpath.JsonPath;
 import com.smartparking.email.EmailMessage;
+import com.smartparking.listing.ListingPhotoRepository;
 import com.smartparking.location.CityRepository;
 import com.smartparking.owner.OwnerProfileRepository;
 import com.smartparking.support.AuthTestSupport;
@@ -44,6 +46,7 @@ class AdminReviewControllerTest {
     @Autowired UserRepository users;
     @Autowired OwnerProfileRepository profiles;
     @Autowired CityRepository cities;
+    @Autowired ListingPhotoRepository photoRepository;
     @Autowired PasswordEncoder passwordEncoder;
     @Autowired RecordingEmailSender emails;
 
@@ -88,6 +91,7 @@ class AdminReviewControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].email").value("pending-owner@example.com"))
                 .andExpect(jsonPath("$.content[0].documentType").value("AADHAAR"))
+                .andExpect(jsonPath("$.content[0].hasDocument").value(true))
                 .andExpect(jsonPath("$.content[0].hasPayoutDetails").value(false))
                 .andExpect(jsonPath("$.content[0].listingCount").value(0));
         adminGet("/api/v1/admin/owners/" + userId + "/document-url")
@@ -169,6 +173,23 @@ class AdminReviewControllerTest {
         adminPost("/api/v1/admin/listings/" + id + "/approve")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("INVALID_STATUS"));
+    }
+
+    @Test
+    void approveIsBlockedWhenTheListingBecameIncomplete() throws Exception {
+        String owner = verifiedOwner(mvc, users, profiles, "incomplete-owner@example.com");
+        Long id = createListing(mvc, owner, puneCityId(cities));
+        makeComplete(mvc, owner, id);
+        mvc.perform(post("/api/v1/owner/listings/" + id + "/submit").header(HttpHeaders.AUTHORIZATION, owner))
+                .andExpect(status().isOk());
+        photoRepository.deleteAll(photoRepository.findByListingIdOrderBySortOrderAsc(id));
+        photoRepository.flush();
+
+        adminPost("/api/v1/admin/listings/" + id + "/approve")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("LISTING_INCOMPLETE"))
+                .andExpect(jsonPath("$.missing", hasSize(1)))
+                .andExpect(jsonPath("$.missing[0]").value("PHOTOS"));
     }
 
     @Test

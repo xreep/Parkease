@@ -34,6 +34,7 @@ class ListingPhotoControllerTest {
     @Autowired MockMvc mvc;
     @Autowired CityRepository cities;
     @Autowired ListingPhotoRepository photoRepository;
+    @Autowired ParkingListingRepository listingRepository;
     @Autowired FileStorage storage;
 
     String auth;
@@ -64,6 +65,35 @@ class ListingPhotoControllerTest {
                 .andExpect(jsonPath("$.sortOrder").value(0));
         mvc.perform(get("/api/v1/owner/listings/" + listingId).header(HttpHeaders.AUTHORIZATION, auth))
                 .andExpect(jsonPath("$.photos.length()").value(1));
+    }
+
+    @Test
+    void photoUrlIsComputedFromTheStorageKeyNotTheStoredHost() throws Exception {
+        ListingPhoto photo = new ListingPhoto();
+        photo.setListing(listingRepository.findById(listingId).orElseThrow());
+        photo.setUrl("http://old-host.example/uploads/public/listing-photos/bogus.png");
+        photo.setStorageKey("local/public/listing-photos/" + java.util.UUID.randomUUID() + ".png");
+        photo.setSortOrder(0);
+        photoRepository.saveAndFlush(photo);
+
+        mvc.perform(get("/api/v1/owner/listings/" + listingId).header(HttpHeaders.AUTHORIZATION, auth))
+                .andExpect(jsonPath("$.photos[0].url").value(
+                        "http://localhost:8080/uploads/public/" + photo.getStorageKey().substring("local/public/".length())));
+        mvc.perform(get("/api/v1/owner/listings").header(HttpHeaders.AUTHORIZATION, auth))
+                .andExpect(jsonPath("$.content[0].coverPhotoUrl").value(
+                        "http://localhost:8080/uploads/public/" + photo.getStorageKey().substring("local/public/".length())));
+    }
+
+    @Test
+    void seedPhotosWithoutStorageKeyKeepTheirStoredUrl() throws Exception {
+        ListingPhoto photo = new ListingPhoto();
+        photo.setListing(listingRepository.findById(listingId).orElseThrow());
+        photo.setUrl("/seed/parking-1.svg");
+        photo.setSortOrder(0);
+        photoRepository.saveAndFlush(photo);
+
+        mvc.perform(get("/api/v1/owner/listings/" + listingId).header(HttpHeaders.AUTHORIZATION, auth))
+                .andExpect(jsonPath("$.photos[0].url").value("/seed/parking-1.svg"));
     }
 
     @Test

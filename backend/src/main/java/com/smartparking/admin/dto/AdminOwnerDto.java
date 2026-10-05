@@ -11,6 +11,7 @@ public record AdminOwnerDto(
         String phone,
         VerificationStatus verificationStatus,
         DocumentType documentType,
+        boolean hasDocument,
         Instant documentSubmittedAt,
         String rejectionReason,
         Instant verifiedAt,

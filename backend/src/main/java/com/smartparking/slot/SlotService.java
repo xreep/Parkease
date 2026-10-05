@@ -1,6 +1,7 @@
 package com.smartparking.slot;
 
 import com.smartparking.common.error.ApiException;
+import com.smartparking.listing.ListingCompleteness;
 import com.smartparking.listing.ListingMapper;
 import com.smartparking.listing.OwnerListingService;
 import com.smartparking.listing.ParkingListing;
@@ -70,8 +71,11 @@ public class SlotService {
 
     @Transactional
     public SlotDto update(Long ownerId, Long listingId, Long slotId, SlotRequest r) {
-        listings.requireEditable(ownerId, listingId);
+        ParkingListing listing = listings.requireEditable(ownerId, listingId);
         ParkingSlot slot = requireSlot(listingId, slotId);
+        if (slot.isActive() && Boolean.FALSE.equals(r.active())) {
+            requireAnotherActiveSlot(listing, slot);
+        }
         String label = r.label().trim();
         if (!label.equalsIgnoreCase(slot.getLabel())) {
             requireLabelFree(listingId, label);
@@ -87,8 +91,20 @@ public class SlotService {
 
     @Transactional
     public void delete(Long ownerId, Long listingId, Long slotId) {
-        listings.requireEditable(ownerId, listingId);
-        slots.delete(requireSlot(listingId, slotId));
+        ParkingListing listing = listings.requireEditable(ownerId, listingId);
+        ParkingSlot slot = requireSlot(listingId, slotId);
+        if (slot.isActive()) {
+            requireAnotherActiveSlot(listing, slot);
+        }
+        slots.delete(slot);
+    }
+
+    /** A submitted or live listing must keep at least one active slot. */
+    private void requireAnotherActiveSlot(ParkingListing listing, ParkingSlot slot) {
+        if (ListingCompleteness.isSubmittedOrLive(listing)
+                && slots.countByListingIdAndActiveTrue(listing.getId()) <= 1) {
+            throw ListingCompleteness.stillNeeds("SLOTS");
+        }
     }
 
     private ParkingSlot requireSlot(Long listingId, Long slotId) {

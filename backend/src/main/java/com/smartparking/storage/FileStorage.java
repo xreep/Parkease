@@ -14,6 +14,9 @@ public interface FileStorage {
 
     SignedUrl privateUrl(String key, Duration ttl);
 
+    /** Public URL for a key returned by {@link #storePublic}; throws IllegalArgumentException for other keys. */
+    String publicUrl(String key);
+
     record SignedUrl(String url, Instant expiresAt) {
     }
 }

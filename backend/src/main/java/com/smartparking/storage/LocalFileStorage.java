@@ -38,8 +38,7 @@ public class LocalFileStorage implements FileStorage {
     @Override
     public StoredFile storePublic(ValidatedUpload upload, String folder) {
         String key = write("public", folder, upload);
-        String url = publicBaseUrl + "/uploads/" + key.substring("local/".length());
-        return new StoredFile(key, url, upload.contentType(), upload.bytes().length);
+        return new StoredFile(key, publicUrl(key), upload.contentType(), upload.bytes().length);
     }
 
     @Override
@@ -67,6 +66,14 @@ public class LocalFileStorage implements FileStorage {
         String url = publicBaseUrl + "/api/v1/files/private?key=" + URLEncoder.encode(key, StandardCharsets.UTF_8)
                 + "&expires=" + expires + "&sig=" + signer.sign(key, expires);
         return new SignedUrl(url, expiresAt);
+    }
+
+    @Override
+    public String publicUrl(String key) {
+        if (key == null || !key.startsWith("local/public/")) {
+            throw new IllegalArgumentException("Not a public local key");
+        }
+        return publicBaseUrl + "/uploads/" + key.substring("local/".length());
     }
 
     /** Path of a private file for a safe key, or empty. */

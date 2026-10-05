@@ -113,6 +113,14 @@ class AvailabilityControllerTest {
     }
 
     @Test
+    void rejectsNoOpenDaysWhenNot24x7() throws Exception {
+        putHours("{\"open24x7\":false,\"rules\":[]}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_HOURS"))
+                .andExpect(jsonPath("$.detail").value("Choose at least one open day or 24 \u00d7 7"));
+    }
+
+    @Test
     void rejectsInvalidDayOfWeek() throws Exception {
         putHours("""
                 {"open24x7":false,"rules":[{"dayOfWeek":8,"openTime":"08:00","closeTime":"17:00"}]}""")

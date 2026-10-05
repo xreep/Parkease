@@ -53,9 +53,12 @@ public class ListingPhotoService {
 
     @Transactional
     public void delete(Long ownerId, Long listingId, Long photoId) {
-        listings.requireEditable(ownerId, listingId);
+        ParkingListing listing = listings.requireEditable(ownerId, listingId);
         ListingPhoto photo = photos.findByIdAndListingId(photoId, listingId)
                 .orElseThrow(() -> ApiException.notFound("Photo not found"));
+        if (ListingCompleteness.isSubmittedOrLive(listing) && photos.countByListingId(listingId) <= 1) {
+            throw ListingCompleteness.stillNeeds("PHOTOS");
+        }
         String key = photo.getStorageKey();
         photos.delete(photo);
         photos.flush();
