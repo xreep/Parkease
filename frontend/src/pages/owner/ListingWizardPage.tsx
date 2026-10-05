@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import clsx from 'clsx'
 import { FormError } from '../../components/AuthCard'
@@ -30,6 +31,12 @@ const stepClass = (current: boolean, enabled: boolean) =>
   )
 
 function Stepper({ current, listingId }: { current: number; listingId?: number }) {
+  const currentRef = useRef<HTMLLIElement>(null)
+  // On narrow screens the stepper scrolls sideways; keep the current step visible.
+  useEffect(() => {
+    const el = currentRef.current
+    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [current])
   return (
     <nav aria-label="Listing steps" className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
       <ol className="flex min-w-max gap-1">
@@ -43,7 +50,7 @@ function Stepper({ current, listingId }: { current: number; listingId?: number }
             </>
           )
           return (
-            <li key={label}>
+            <li key={label} ref={isCurrent ? currentRef : undefined}>
               {listingId === undefined ? (
                 <span className={stepClass(isCurrent, false)} aria-current={isCurrent ? 'step' : undefined}>{body}</span>
               ) : (

@@ -2,6 +2,7 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import MockAdapter from 'axios-mock-adapter'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { toast } from 'sonner'
 import { api } from '../../lib/api'
 import type { OwnerProfile } from '../../lib/owner'
 import { tokenStore } from '../../lib/tokenStore'
@@ -15,8 +16,8 @@ const owner = {
 }
 
 const unsubmitted: OwnerProfile = {
-  verificationStatus: 'UNSUBMITTED', documentType: null, documentSubmittedAt: null, rejectionReason: null,
-  verifiedAt: null, payoutUpi: null, payoutAccountName: null, payoutIfsc: null, payoutBankAccountLast4: null,
+  verificationStatus: 'UNSUBMITTED', documentType: null, hasDocument: false, documentSubmittedAt: null,
+  rejectionReason: null, verifiedAt: null, payoutUpi: null, payoutAccountName: null, payoutIfsc: null, payoutBankAccountLast4: null,
 }
 
 describe('owner verification', () => {
@@ -104,7 +105,7 @@ describe('owner verification', () => {
 
   it('shows the rejection reason and prefills saved payout details', async () => {
     mock.onGet('/owner/profile').reply(200, {
-      ...unsubmitted, verificationStatus: 'REJECTED', rejectionReason: 'Blurry photo', documentType: 'PAN',
+      ...unsubmitted, verificationStatus: 'REJECTED', rejectionReason: 'Blurry photo', documentType: 'PAN', hasDocument: true,
       documentSubmittedAt: '2026-10-05T10:00:00Z', payoutUpi: 'ravi@okaxis', payoutAccountName: 'Ravi Kumar',
       payoutIfsc: 'HDFC0001234', payoutBankAccountLast4: '9012',
     })
@@ -118,17 +119,64 @@ describe('owner verification', () => {
 
   it('opens the signed document URL in a new tab', async () => {
     mock.onGet('/owner/profile').reply(200, {
-      ...unsubmitted, verificationStatus: 'VERIFIED', documentType: 'PAN', documentSubmittedAt: '2026-10-05T10:00:00Z',
+      ...unsubmitted, verificationStatus: 'VERIFIED', documentType: 'PAN', hasDocument: true,
+      documentSubmittedAt: '2026-10-05T10:00:00Z',
     })
     mock.onGet('/owner/verification/document-url').reply(200, { url: 'https://files.test/doc?sig=1', expiresAt: '2026-10-05T10:05:00Z' })
-    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    const tab = { opener: 'self' as unknown, location: { href: '' }, close: vi.fn() }
+    const open = vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window)
     renderApp('/owner/verification')
 
     expect(await screen.findByText('Your identity is verified.')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'View document' }))
 
-    await waitFor(() => expect(open).toHaveBeenCalledWith('https://files.test/doc?sig=1', '_blank', 'noopener'))
+    // The tab is opened synchronously (popup-safe), then pointed at the signed URL.
+    await waitFor(() => expect(tab.location.href).toBe('https://files.test/doc?sig=1'))
+    expect(open).toHaveBeenCalledWith('about:blank', '_blank')
+    expect(tab.opener).toBeNull()
+    expect(tab.close).not.toHaveBeenCalled()
     open.mockRestore()
+  })
+
+  it('closes the blank tab and shows the error when the document link fails', async () => {
+    mock.onGet('/owner/profile').reply(200, {
+      ...unsubmitted, verificationStatus: 'PENDING', documentType: 'PAN', hasDocument: true,
+      documentSubmittedAt: '2026-10-05T10:00:00Z',
+    })
+    mock.onGet('/owner/verification/document-url').reply(404, { code: 'NOT_FOUND', detail: 'Document not available' })
+    const tab = { opener: 'self' as unknown, location: { href: '' }, close: vi.fn() }
+    const open = vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window)
+    renderApp('/owner/verification')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'View document' }))
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Document not available'))
+    expect(tab.close).toHaveBeenCalled()
+    expect(tab.location.href).toBe('')
+    open.mockRestore()
+  })
+
+  it('tells the owner when the browser blocks the new tab', async () => {
+    mock.onGet('/owner/profile').reply(200, {
+      ...unsubmitted, verificationStatus: 'PENDING', documentType: 'PAN', hasDocument: true,
+      documentSubmittedAt: '2026-10-05T10:00:00Z',
+    })
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    renderApp('/owner/verification')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'View document' }))
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Allow pop-ups for this site to view the document.'))
+    expect(mock.history.get.some((r) => r.url === '/owner/verification/document-url')).toBe(false)
+    open.mockRestore()
+  })
+
+  it('only offers to view a document that exists', async () => {
+    mock.onGet('/owner/profile').reply(200, { ...unsubmitted, documentType: 'PAN', hasDocument: false })
+    renderApp('/owner/verification')
+
+    expect(await screen.findByRole('button', { name: 'Submit for verification' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'View document' })).not.toBeInTheDocument()
   })
 
   const withBank: OwnerProfile = {

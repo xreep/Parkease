@@ -20,6 +20,7 @@ export type SignedUrl = { url: string; expiresAt: string }
 export type OwnerProfile = {
   verificationStatus: VerificationStatus
   documentType: DocumentType | null
+  hasDocument: boolean
   documentSubmittedAt: string | null
   rejectionReason: string | null
   verifiedAt: string | null

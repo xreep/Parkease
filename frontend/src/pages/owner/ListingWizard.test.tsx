@@ -215,6 +215,21 @@ describe('listing wizard', () => {
       expect(within(nav).getByRole('link', { name: 'Hours' })).toHaveAttribute('href', '/owner/listings/7/edit?step=5')
       expect(within(nav).getByRole('link', { name: 'Pricing' })).toHaveAttribute('aria-current', 'step')
     })
+
+    it('scrolls the current step into view', async () => {
+      const scrollIntoView = vi.fn()
+      Element.prototype.scrollIntoView = scrollIntoView
+      try {
+        mock.onGet('/owner/listings/7').reply(200, listing)
+        renderApp('/owner/listings/7/edit?step=4')
+
+        const nav = await screen.findByRole('navigation', { name: 'Listing steps' })
+        await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' }))
+        expect(scrollIntoView.mock.contexts.at(-1)).toBe(within(nav).getByRole('link', { name: 'Pricing' }).closest('li'))
+      } finally {
+        delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView
+      }
+    })
   })
 
   describe('step 2: photos', () => {
@@ -748,7 +763,7 @@ describe('listing wizard', () => {
 
   describe('step 6: review and submit', () => {
     const verified = {
-      verificationStatus: 'VERIFIED', documentType: 'PAN', documentSubmittedAt: null, rejectionReason: null,
+      verificationStatus: 'VERIFIED', documentType: 'PAN', hasDocument: true, documentSubmittedAt: null, rejectionReason: null,
       verifiedAt: '2026-10-01T10:00:00Z', payoutUpi: null, payoutAccountName: null, payoutIfsc: null, payoutBankAccountLast4: null,
     }
     const complete: ListingDetail = {

@@ -79,3 +79,10 @@ export const SLOT_SIZE_LABELS = {
   MEDIUM: 'Medium',
   LARGE: 'Large',
 } as const
+
+/** "address, city, state PIN", leaving out the city when the address already mentions it. */
+export function formatAddress(l: { address: string; cityName: string; stateName: string; pincode: string }): string {
+  const mentionsCity = l.address.toLowerCase().includes(l.cityName.toLowerCase())
+  const parts = [l.address, ...(mentionsCity ? [] : [l.cityName]), l.stateName]
+  return `${parts.join(', ')} ${l.pincode}`
+}

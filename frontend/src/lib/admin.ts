@@ -9,6 +9,7 @@ export type AdminOwner = {
   phone: string | null
   verificationStatus: VerificationStatus
   documentType: DocumentType | null
+  hasDocument: boolean
   documentSubmittedAt: string | null
   rejectionReason: string | null
   verifiedAt: string | null
