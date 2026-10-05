@@ -164,7 +164,7 @@ export function toSearchParams(p: SearchParams): URLSearchParams {
   if (p.radius !== undefined && p.radius !== DEFAULT_RADIUS_KM) usp.set('radius', String(p.radius))
   p.types?.forEach((t) => usp.append('types', t))
   p.amenities?.forEach((a) => usp.append('amenities', a))
-  if (p.maxPrice !== undefined) usp.set('maxPrice', String(p.maxPrice))
+  if (p.maxPrice !== undefined && p.maxPrice > 0) usp.set('maxPrice', String(p.maxPrice))
   if (p.open24x7) usp.set('open24x7', 'true')
   if (p.sort && p.sort !== DEFAULT_SORT) usp.set('sort', p.sort)
   if (p.page) usp.set('page', String(p.page))
@@ -197,7 +197,7 @@ export function toApiQuery(p: SearchParams): SearchApiQuery {
   if (p.radius !== undefined) q.radiusKm = p.radius
   if (p.types?.length) q.types = p.types
   if (p.amenities?.length) q.amenities = p.amenities
-  if (p.maxPrice !== undefined) q.maxPricePerHour = p.maxPrice
+  if (p.maxPrice !== undefined && p.maxPrice > 0) q.maxPricePerHour = p.maxPrice
   if (p.open24x7) q.open24x7 = true
   if (p.sort) q.sort = p.sort
   if (p.page) q.page = p.page
