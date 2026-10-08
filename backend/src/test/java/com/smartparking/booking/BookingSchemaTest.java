@@ -258,4 +258,25 @@ class BookingSchemaTest {
 
         assertThatThrownBy(() -> vehicles.saveAndFlush(dup)).isInstanceOf(DataIntegrityViolationException.class);
     }
+
+    @Test
+    void deletingVehicleKeepsBookingWithPlateSnapshot() {
+        Vehicle vehicle = new Vehicle();
+        vehicle.setUser(driver);
+        vehicle.setType(VehicleType.FOUR_WHEELER);
+        vehicle.setPlateNumber("MH12AB1234");
+        vehicles.save(vehicle);
+        Booking booking = booking(BookingStatus.CONFIRMED, 10, 12);
+        booking.setVehicle(vehicle);
+        bookings.saveAndFlush(booking);
+
+        em.clear();
+        vehicles.delete(vehicles.findById(vehicle.getId()).orElseThrow());
+        em.flush();
+        em.clear();
+
+        Booking reloaded = bookings.findById(booking.getId()).orElseThrow();
+        assertThat(reloaded.getVehicle()).isNull();
+        assertThat(reloaded.getPlateNumber()).isEqualTo("MH12AB1234");
+    }
 }
