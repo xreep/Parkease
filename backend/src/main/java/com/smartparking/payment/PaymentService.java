@@ -2,18 +2,17 @@ package com.smartparking.payment;
 
 import com.smartparking.booking.Booking;
 import com.smartparking.booking.BookingActor;
-import com.smartparking.booking.BookingEvent;
-import com.smartparking.booking.BookingEventRepository;
+import com.smartparking.booking.BookingEvents;
 import com.smartparking.booking.BookingMapper;
 import com.smartparking.booking.BookingProperties;
 import com.smartparking.booking.BookingRepository;
 import com.smartparking.booking.BookingStatus;
-import com.smartparking.booking.SlotAllocator;
 import com.smartparking.booking.dto.BookingDetailDto;
 import com.smartparking.booking.dto.CheckoutDto;
 import com.smartparking.common.config.AppProperties;
 import com.smartparking.common.error.ApiException;
 import com.smartparking.common.util.AfterCommit;
+import com.smartparking.common.util.SqlStates;
 import com.smartparking.earning.EarningStatus;
 import com.smartparking.earning.OwnerEarning;
 import com.smartparking.earning.OwnerEarningRepository;
@@ -25,8 +24,6 @@ import com.smartparking.listing.ParkingListing;
 import com.smartparking.payment.dto.MockPayResponse;
 import com.smartparking.payment.dto.VerifyPaymentRequest;
 import com.smartparking.user.User;
-import jakarta.persistence.EntityManager;
-import org.hibernate.Hibernate;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
@@ -40,6 +37,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /** Payment orders, verification and the idempotent confirmation that turns a paid hold into a booking. */
 @Service
@@ -50,22 +48,22 @@ public class PaymentService {
 
     static final String LATE_PAYMENT_NOTE = "Payment received after hold expired";
     static final String SLOT_TAKEN_REASON = "Slot was taken before the payment arrived";
+    static final String START_PASSED_REASON = "The booking start time passed before the payment arrived";
 
     private final PaymentProvider provider;
     private final PaymentProperties paymentProperties;
     private final PaymentRepository payments;
     private final BookingRepository bookings;
-    private final BookingEventRepository events;
+    private final BookingEvents events;
     private final BookingMapper mapper;
     private final BookingProperties bookingProperties;
     private final OwnerEarningRepository earnings;
     private final InvoiceService invoices;
     private final RefundService refunds;
-    private final SlotAllocator allocator;
     private final EmailSender emailSender;
     private final AppProperties app;
-    private final EntityManager em;
     private final Clock clock;
+    private final TransactionTemplate tx;
 
     // ---- checkout -------------------------------------------------------------------------------------------
 
@@ -118,19 +116,17 @@ public class PaymentService {
     // ---- verification ---------------------------------------------------------------------------------------
 
     /** Checks the checkout signature for the driver's own booking and confirms the payment (idempotent). */
-    @Transactional
     public BookingDetailDto verify(Long driverId, VerifyPaymentRequest request) {
         if (!bookings.existsByIdAndDriverId(request.bookingId(), driverId)) {
             throw ApiException.notFound("Booking not found");
         }
-        // Lock first thing: nothing about this payment or booking may be loaded before the lock is held.
-        Payment payment = payments.findByOrderIdForUpdate(request.orderId()).orElseThrow(this::verificationFailed);
-        if (!payment.getBooking().getId().equals(request.bookingId())
+        Long orderBookingId = payments.findBookingIdByOrderId(request.orderId()).orElseThrow(this::verificationFailed);
+        if (!orderBookingId.equals(request.bookingId())
                 || !provider.verifyPayment(request.orderId(), request.paymentId(), request.signature())) {
             throw verificationFailed();
         }
-        Booking booking = confirmLocked(payment, request.paymentId(), null, BookingActor.DRIVER);
-        return mapper.toDetail(booking);
+        Long bookingId = confirmPayment(request.orderId(), request.paymentId(), null, BookingActor.DRIVER);
+        return tx.execute(s -> mapper.toDetail(bookings.findById(bookingId).orElseThrow()));
     }
 
     private ApiException verificationFailed() {
@@ -140,28 +136,47 @@ public class PaymentService {
     // ---- confirmation ---------------------------------------------------------------------------------------
 
     /**
-     * Records a captured payment and moves the booking forward. Idempotent: the payment row is locked, and a payment
-     * that is already captured changes nothing. Used by the checkout verification and the provider webhook.
+     * Records a captured payment and moves the booking forward; returns the booking id. Idempotent: the payment and
+     * booking rows are locked, and a payment that is already captured changes nothing. Used by the checkout
+     * verification and the provider webhook. Opens its own transactions, so call it outside one.
+     *
+     * <p>Locking the booking row means the stale-hold sweep (a bulk update) cannot expire it between our status check
+     * and our write, and any competing reservation can only insert after we commit. If a lapsed booking turns out
+     * to have lost its slot anyway, the exclusion constraint rejects the revive (SQLState 23P01); that attempt is
+     * rolled back as a whole and repeated as a cancel-and-refund, so captured money is never left unaccounted for.
      */
-    @Transactional
-    public Booking confirmPayment(String orderId, String paymentId, String method, BookingActor actor) {
-        Payment payment = payments.findByOrderIdForUpdate(orderId)
-                .orElseThrow(() -> ApiException.notFound("Payment not found"));
-        return confirmLocked(payment, paymentId, method, actor);
+    public Long confirmPayment(String orderId, String paymentId, String method, BookingActor actor) {
+        try {
+            return tx.execute(s -> confirmAttempt(orderId, paymentId, method, actor, false));
+        } catch (RuntimeException e) {
+            if (!SqlStates.EXCLUSION_VIOLATION.equals(SqlStates.of(e))) {
+                throw e;
+            }
+            log.warn("Slot of the booking for order {} was taken while its payment arrived; refunding", orderId);
+            return tx.execute(s -> confirmAttempt(orderId, paymentId, method, actor, true));
+        }
     }
 
-    private Booking confirmLocked(Payment payment, String paymentId, String method, BookingActor actor) {
-        Booking booking = (Booking) Hibernate.unproxy(payment.getBooking());
+    private Long confirmAttempt(String orderId, String paymentId, String method, BookingActor actor,
+                                boolean slotTaken) {
+        Long bookingId = payments.findBookingIdByOrderId(orderId)
+                .orElseThrow(() -> ApiException.notFound("Payment not found"));
+        Instant now = clock.instant();
+        // Frees the slot from lapsed holds (possibly this booking's own). Clears the persistence context, so it
+        // must run before any entity is loaded in this transaction.
+        bookings.expireStaleHolds(List.of(bookings.findSlotIdById(bookingId)), now);
+
+        Payment payment = payments.findByOrderIdForUpdate(orderId)
+                .orElseThrow(() -> ApiException.notFound("Payment not found"));
+        Booking booking = bookings.findByIdForUpdate(bookingId).orElseThrow();
         if (payment.getPaymentId() != null && payment.getStatus() != PaymentStatus.CREATED
                 && payment.getStatus() != PaymentStatus.FAILED) {
             if (!payment.getPaymentId().equals(paymentId)) {
-                log.warn("Order {} is already paid by {}; ignoring payment {}", payment.getOrderId(),
-                        payment.getPaymentId(), paymentId);
+                log.warn("Order {} is already paid by {}; ignoring payment {}", orderId, payment.getPaymentId(), paymentId);
             }
-            return booking;
+            return bookingId;
         }
 
-        Instant now = clock.instant();
         payment.setStatus(PaymentStatus.CAPTURED);
         payment.setPaymentId(paymentId);
         payment.setMethod(method);
@@ -173,37 +188,43 @@ public class PaymentService {
         Duration approvalWindow = Duration.ofHours(bookingProperties.approvalHours());
         String note = "Payment received";
         switch (from) {
-            case PENDING_PAYMENT -> booking.acceptPayment(listing.isAutoApprove(), now, approvalWindow);
-            case EXPIRED -> {
-                if (!allocator.revive(booking.getId(), listing.isAutoApprove(), now, approvalWindow)) {
-                    cancelLatePayment(booking, payment, actor);
-                    return booking;
+            case PENDING_PAYMENT, EXPIRED -> {
+                String refundReason = slotTaken ? SLOT_TAKEN_REASON
+                        : from == BookingStatus.EXPIRED && !booking.getStartTime().isAfter(now) ? START_PASSED_REASON
+                        : null;
+                if (refundReason != null) {
+                    cancelAndRefund(booking, payment, from, refundReason, actor);
+                    return bookingId;
                 }
-                em.refresh(booking); // pick up what the separate transaction committed
-                note = LATE_PAYMENT_NOTE;
+                booking.acceptPayment(listing.isAutoApprove(), now, approvalWindow);
+                if (from == BookingStatus.EXPIRED) {
+                    bookings.flush(); // re-takes the slot now: a lost race surfaces here as SQLState 23P01
+                    note = LATE_PAYMENT_NOTE;
+                }
             }
             default -> {
                 log.warn("Payment {} captured for booking {} in status {}; leaving the booking unchanged",
                         paymentId, booking.getBookingCode(), from);
-                return booking;
+                return bookingId;
             }
         }
 
         invoices.issue(booking, payment);
         saveEarning(booking, listing);
-        addEvent(booking, from, booking.getStatus(), actor, note);
+        events.record(booking, from, booking.getStatus(), actor, note);
         queueEmails(booking, listing);
-        return booking;
+        return bookingId;
     }
 
-    /** The hold lapsed and someone else took the slot: cancel and give the money back. */
-    private void cancelLatePayment(Booking booking, Payment payment, BookingActor actor) {
+    /** The hold lapsed and the slot is gone (or the start has passed): cancel and give the money back. */
+    private void cancelAndRefund(Booking booking, Payment payment, BookingStatus from, String reason,
+                                 BookingActor actor) {
         booking.setStatus(BookingStatus.CANCELLED);
         booking.setCancelledBy(BookingActor.SYSTEM);
-        booking.setCancelReason(SLOT_TAKEN_REASON);
-        addEvent(booking, BookingStatus.EXPIRED, BookingStatus.CANCELLED, BookingActor.SYSTEM, SLOT_TAKEN_REASON);
-        Refund refund = refunds.refundFull(payment, SLOT_TAKEN_REASON);
-        log.warn("Late payment for booking {} (via {}): slot taken, refund {} is {}", booking.getBookingCode(), actor,
+        booking.setCancelReason(reason);
+        events.record(booking, from, BookingStatus.CANCELLED, BookingActor.SYSTEM, reason);
+        Refund refund = refunds.refundFull(payment, reason);
+        log.warn("Late payment for booking {} (via {}): {}; refund {} is {}", booking.getBookingCode(), actor, reason,
                 refund.getProviderRefundId(), refund.getStatus());
     }
 
@@ -216,16 +237,6 @@ public class PaymentService {
         earning.setNet(booking.getBaseAmount());
         earning.setStatus(EarningStatus.HELD);
         earnings.save(earning);
-    }
-
-    private void addEvent(Booking booking, BookingStatus from, BookingStatus to, BookingActor actor, String note) {
-        BookingEvent event = new BookingEvent();
-        event.setBooking(booking);
-        event.setFromStatus(from);
-        event.setToStatus(to);
-        event.setActor(actor);
-        event.setNote(note);
-        events.save(event);
     }
 
     /** Builds the emails now (lazy data) and sends them once the transaction has committed. */

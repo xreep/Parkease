@@ -5,6 +5,7 @@ import com.smartparking.booking.Booking;
 import com.smartparking.payment.Payment;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,7 +23,7 @@ public class InvoiceService {
         return invoices.findByBookingId(booking.getId()).orElseGet(() -> {
             Instant now = clock.instant();
             Invoice invoice = new Invoice();
-            invoice.setInvoiceNumber(String.format("INV-%d-%06d",
+            invoice.setInvoiceNumber(String.format(Locale.ROOT, "INV-%d-%06d",
                     now.atZone(AvailabilityEvaluator.ZONE).getYear(), invoices.nextNumber()));
             invoice.setBooking(booking);
             invoice.setPayment(payment);

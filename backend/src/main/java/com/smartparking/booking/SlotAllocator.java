@@ -1,13 +1,13 @@
 package com.smartparking.booking;
 
 import com.smartparking.common.model.VehicleType;
+import com.smartparking.common.util.SqlStates;
 import com.smartparking.listing.ParkingListing;
 import com.smartparking.pricing.Quote;
 import com.smartparking.slot.ParkingSlot;
 import com.smartparking.user.User;
 import com.smartparking.vehicle.Vehicle;
 import jakarta.persistence.EntityManager;
-import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -30,8 +30,6 @@ public class SlotAllocator {
 
     private static final Logger log = LoggerFactory.getLogger(SlotAllocator.class);
 
-    static final String EXCLUSION_VIOLATION = "23P01";
-    static final String UNIQUE_VIOLATION = "23505";
     static final int MAX_SLOT_ATTEMPTS = 5;
     static final int MAX_CODE_ATTEMPTS = 5;
 
@@ -44,13 +42,13 @@ public class SlotAllocator {
     }
 
     private final BookingRepository bookings;
-    private final BookingEventRepository events;
+    private final BookingEvents events;
     private final EntityManager em;
     private final BookingProperties properties;
     private final Clock clock;
     private final TransactionTemplate newTx;
 
-    public SlotAllocator(BookingRepository bookings, BookingEventRepository events, EntityManager em,
+    public SlotAllocator(BookingRepository bookings, BookingEvents events, EntityManager em,
                          BookingProperties properties, Clock clock, PlatformTransactionManager txManager) {
         this.bookings = bookings;
         this.events = events;
@@ -82,12 +80,12 @@ public class SlotAllocator {
                 Long bookingId = newTx.execute(status -> insertHold(slotId, code, draft));
                 return new Allocation(bookingId, code, slotId);
             } catch (DataIntegrityViolationException e) {
-                String sqlState = sqlState(e);
-                if (EXCLUSION_VIOLATION.equals(sqlState)) {
+                String sqlState = SqlStates.of(e);
+                if (SqlStates.EXCLUSION_VIOLATION.equals(sqlState)) {
                     log.info("Slot {} was taken before the hold could be placed", slotId);
                     return null;
                 }
-                if (UNIQUE_VIOLATION.equals(sqlState)) {
+                if (SqlStates.UNIQUE_VIOLATION.equals(sqlState)) {
                     continue; // booking code collision: draw another code
                 }
                 throw e;
@@ -125,30 +123,8 @@ public class SlotAllocator {
         booking.setHoldExpiresAt(now.plus(Duration.ofMinutes(properties.holdMinutes())));
         bookings.saveAndFlush(booking);
 
-        addEvent(booking, null, BookingStatus.PENDING_PAYMENT, BookingActor.DRIVER, null);
+        events.record(booking, null, BookingStatus.PENDING_PAYMENT, BookingActor.DRIVER, null);
         return booking.getId();
-    }
-
-    /**
-     * Brings an EXPIRED booking back to the live state a payment implies (CONFIRMED or AWAITING_APPROVAL), if its
-     * slot is still free. Runs in its own transaction; false when the exclusion constraint says the slot was taken.
-     */
-    public boolean revive(Long bookingId, boolean autoApprove, Instant now, Duration approvalWindow) {
-        try {
-            newTx.executeWithoutResult(status -> {
-                Long slotId = bookings.findSlotIdById(bookingId);
-                bookings.expireStaleHolds(List.of(slotId), now);
-                Booking booking = bookings.findById(bookingId).orElseThrow();
-                booking.acceptPayment(autoApprove, now, approvalWindow);
-                bookings.saveAndFlush(booking);
-            });
-            return true;
-        } catch (DataIntegrityViolationException e) {
-            if (EXCLUSION_VIOLATION.equals(sqlState(e))) {
-                return false;
-            }
-            throw e;
-        }
     }
 
     /** Gives up an unpaid hold (its payment order could not be created) and frees the slot. */
@@ -160,28 +136,7 @@ public class SlotAllocator {
             }
             booking.setStatus(BookingStatus.EXPIRED);
             bookings.saveAndFlush(booking);
-            addEvent(booking, BookingStatus.PENDING_PAYMENT, BookingStatus.EXPIRED, BookingActor.SYSTEM, note);
+            events.record(booking, BookingStatus.PENDING_PAYMENT, BookingStatus.EXPIRED, BookingActor.SYSTEM, note);
         });
-    }
-
-    private void addEvent(Booking booking, BookingStatus from, BookingStatus to, BookingActor actor, String note) {
-        BookingEvent event = new BookingEvent();
-        event.setBooking(booking);
-        event.setFromStatus(from);
-        event.setToStatus(to);
-        event.setActor(actor);
-        event.setNote(note);
-        events.save(event);
-    }
-
-    /** SQLState of the root {@link SQLException} in the cause chain, or null. */
-    static String sqlState(Throwable error) {
-        String state = null;
-        for (Throwable t = error; t != null; t = t.getCause()) {
-            if (t instanceof SQLException sql && sql.getSQLState() != null) {
-                state = sql.getSQLState();
-            }
-        }
-        return state;
     }
 }

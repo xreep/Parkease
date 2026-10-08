@@ -1,8 +1,8 @@
 package com.smartparking.payment;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -17,15 +17,11 @@ public class WebhookController {
 
     private final WebhookService service;
 
+    /** The body is read as bytes and decoded as UTF-8 so the signed bytes never depend on a default charset. */
     @PostMapping("/webhook")
-    public Map<String, String> webhook(@RequestBody String rawBody,
+    public Map<String, String> webhook(@RequestBody byte[] rawBody,
                                        @RequestHeader(value = "X-Razorpay-Signature", required = false) String signature,
                                        @RequestHeader(value = "X-Razorpay-Event-Id", required = false) String eventId) {
-        try {
-            return Map.of("status", service.handle(rawBody, signature, eventId));
-        } catch (DataIntegrityViolationException e) {
-            // Two deliveries of the same event raced; the other one won the unique event id.
-            return Map.of("status", WebhookService.DUPLICATE);
-        }
+        return Map.of("status", service.handle(new String(rawBody, StandardCharsets.UTF_8), signature, eventId));
     }
 }
