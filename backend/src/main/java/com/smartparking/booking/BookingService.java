@@ -100,20 +100,29 @@ public class BookingService {
         Allocation allocation = allocator.allocate(prepared.freeSlotIds(), prepared.draft())
                 .orElseThrow(() -> unavailable("FULLY_BOOKED"));
 
-        ProviderOrder order;
         try {
-            order = paymentService.createProviderOrder(allocation.bookingCode(),
+            ProviderOrder order = paymentService.createProviderOrder(allocation.bookingCode(),
                     prepared.draft().quote().totalAmount());
+            return tx.execute(s -> {
+                Booking booking = bookings.findById(allocation.bookingId()).orElseThrow();
+                Payment payment = paymentService.recordOrder(booking, order);
+                return new CheckoutDto(mapper.toDetail(booking), paymentService.checkoutInfo(booking, payment));
+            });
         } catch (RuntimeException e) {
-            log.error("Could not create a payment order for booking {}", allocation.bookingCode(), e);
-            allocator.release(allocation.bookingId(), "Payment order failed");
+            log.error("Could not finish checkout for booking {}; releasing its hold", allocation.bookingCode(), e);
+            releaseQuietly(allocation.bookingId(), e);
             throw e;
         }
-        return tx.execute(s -> {
-            Booking booking = bookings.findById(allocation.bookingId()).orElseThrow();
-            Payment payment = paymentService.recordOrder(booking, order);
-            return new CheckoutDto(mapper.toDetail(booking), paymentService.checkoutInfo(booking, payment));
-        });
+    }
+
+    /** Frees the slot again; a failure here must not hide the error that got us here. */
+    private void releaseQuietly(Long bookingId, RuntimeException original) {
+        try {
+            allocator.release(bookingId, "Payment order failed");
+        } catch (RuntimeException releaseFailure) {
+            log.error("Could not release the hold of booking {}", bookingId, releaseFailure);
+            original.addSuppressed(releaseFailure);
+        }
     }
 
     /** Re-reads the checkout of an unpaid booking whose hold is still running. */

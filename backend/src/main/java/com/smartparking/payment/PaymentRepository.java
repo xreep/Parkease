@@ -13,6 +13,12 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
     Optional<Payment> findByOrderId(String orderId);
 
+    boolean existsByOrderId(String orderId);
+
+    /** Booking id behind an order, without loading (or locking) any entity. */
+    @Query("select p.booking.id from Payment p where p.orderId = :orderId")
+    Optional<Long> findBookingIdByOrderId(@Param("orderId") String orderId);
+
     /** Row-locks the payment so concurrent confirmations (verify call, webhook) are serialised. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Payment p where p.orderId = :orderId")

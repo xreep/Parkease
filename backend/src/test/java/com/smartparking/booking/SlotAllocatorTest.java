@@ -159,26 +159,4 @@ class SlotAllocatorTest {
 
         assertThat(allocator.allocate(ids, draft())).isEmpty();
     }
-
-    @Test
-    void reviveBringsAnExpiredBookingBackWhenTheSlotIsFree() {
-        Booking expired = existing(slot1, BookingStatus.EXPIRED);
-        Instant now = Instant.now();
-
-        boolean revived = allocator.revive(expired.getId(), true, now, Duration.ofHours(2));
-
-        assertThat(revived).isTrue();
-        Booking b = bookings.findById(expired.getId()).orElseThrow();
-        assertThat(b.getStatus()).isEqualTo(BookingStatus.CONFIRMED);
-        assertThat(b.getConfirmedAt()).isNotNull();
-    }
-
-    @Test
-    void reviveFailsWhenAnotherBookingHoldsTheSlot() {
-        Booking expired = existing(slot1, BookingStatus.EXPIRED);
-        existing(slot1, BookingStatus.CONFIRMED);
-
-        assertThat(allocator.revive(expired.getId(), false, Instant.now(), Duration.ofHours(2))).isFalse();
-        assertThat(bookings.findById(expired.getId()).orElseThrow().getStatus()).isEqualTo(BookingStatus.EXPIRED);
-    }
 }

@@ -3,17 +3,24 @@ package com.smartparking.payment;
 import static com.smartparking.support.BookingApiSupport.bookingId;
 import static com.smartparking.support.BookingApiSupport.driverWithVehicle;
 import static com.smartparking.support.BookingApiSupport.orderId;
+import static com.smartparking.support.BookingApiSupport.mockPay;
 import static com.smartparking.support.BookingApiSupport.payOk;
 import static com.smartparking.support.BookingApiSupport.reserveOk;
 import static com.smartparking.support.BookingApiSupport.tomorrowAt;
+import static com.smartparking.support.BookingApiSupport.verify;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doCallRealMethod;
+import static org.mockito.Mockito.doThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.smartparking.booking.BookingEvents;
 import com.smartparking.common.security.JwtProperties;
 import com.smartparking.listing.ParkingListingRepository;
 import com.smartparking.location.CityRepository;
+import com.jayway.jsonpath.JsonPath;
 import com.smartparking.support.AuthTestSupport;
 import com.smartparking.support.BookingApiSupport.Driver;
 import com.smartparking.support.CommittedIntegrationTest;
@@ -21,8 +28,16 @@ import com.smartparking.support.DatabaseCleaner;
 import com.smartparking.support.ListingTestSupport;
 import com.smartparking.support.RecordingEmailSender;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,6 +47,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
@@ -62,6 +78,7 @@ class WebhookControllerTest {
     @Autowired RefundRepository refunds;
     @Autowired PaymentRepository payments;
     @Autowired RecordingEmailSender emails;
+    @MockitoSpyBean BookingEvents bookingEvents;
 
     private Driver driver;
     private Long listingId;
@@ -113,7 +130,8 @@ class WebhookControllerTest {
     }
 
     private ResultActions send(String body, String signature, String eventId) throws Exception {
-        var request = post("/api/v1/payments/webhook").contentType(MediaType.APPLICATION_JSON).content(body);
+        var request = post("/api/v1/payments/webhook").contentType(MediaType.APPLICATION_JSON)
+                .content(body.getBytes(StandardCharsets.UTF_8));
         if (signature != null) {
             request.header("X-Razorpay-Signature", signature);
         }
@@ -286,5 +304,105 @@ class WebhookControllerTest {
 
         assertThat(count("select count(*) from webhook_events")).isEqualTo(2);
         assertThat(count("select count(*) from invoices")).isZero();
+    }
+
+    @Test
+    void aFailureWhileApplyingTheEventIsA5xxAndTheSameEventSucceedsOnRetry() throws Exception {
+        Pending p = pendingBooking(10);
+        String body = capturedBody(p.orderId(), "pay_wh_retry");
+        // Fail after the invoice and earning were written, to prove the whole attempt rolls back.
+        doThrow(new IllegalStateException("boom")).doCallRealMethod()
+                .when(bookingEvents).record(any(), any(), any(), any(), any());
+
+        send(body, "evt_retry")
+                .andExpect(status().is5xxServerError())
+                .andExpect(jsonPath("$.code").value("WEBHOOK_PROCESSING_FAILED"));
+
+        assertThat(bookingStatus(p.bookingId())).isEqualTo("PENDING_PAYMENT");
+        assertThat(jdbc.queryForObject("select status from payments where booking_id = ?", String.class, p.bookingId()))
+                .isEqualTo("CREATED");
+        assertThat(count("select count(*) from invoices")).isZero();
+        assertThat(count("select count(*) from owner_earnings")).isZero();
+        assertThat(count("select count(*) from webhook_events where provider_event_id = 'evt_retry' "
+                + "and processed_at is null")).isEqualTo(1);
+
+        send(body, "evt_retry").andExpect(status().isOk()).andExpect(jsonPath("$.status").value("ok"));
+
+        assertThat(bookingStatus(p.bookingId())).isEqualTo("CONFIRMED");
+        assertThat(count("select count(*) from invoices")).isEqualTo(1);
+        assertThat(count("select count(*) from webhook_events where provider_event_id = 'evt_retry' "
+                + "and processed_at is not null")).isEqualTo(1);
+        assertThat(emails.sentTo("wh-driver@example.com")).hasSize(1);
+
+        send(body, "evt_retry").andExpect(status().isOk()).andExpect(jsonPath("$.status").value("duplicate"));
+        assertThat(count("select count(*) from invoices")).isEqualTo(1);
+    }
+
+    @Test
+    void oversizedEventIdsAreStoredAsTheirHash() throws Exception {
+        Pending p = pendingBooking(10);
+        String body = capturedBody(p.orderId(), "pay_wh_1");
+        String longId = "evt_" + "x".repeat(200);
+
+        send(body, longId).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("ok"));
+        send(body, longId).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("duplicate"));
+
+        assertThat(jdbc.queryForObject("select provider_event_id from webhook_events", String.class))
+                .hasSize(64).matches("[0-9a-f]{64}");
+    }
+
+    @Test
+    void nonAsciiBodiesAreVerifiedAndStoredAsUtf8() throws Exception {
+        Pending p = pendingBooking(10);
+        String body = """
+                {"entity":"event","event":"payment.failed","payload":{"payment":{"entity":
+                {"id":"pay_f","order_id":"%s","status":"failed","error_description":"₹ declined"}}}}"""
+                .formatted(p.orderId());
+
+        send(body, "evt_utf8").andExpect(status().isOk()).andExpect(jsonPath("$.status").value("ok"));
+
+        assertThat(jdbc.queryForObject("select failure_reason from payments where booking_id = ?", String.class,
+                p.bookingId())).isEqualTo("₹ declined");
+        assertThat(jdbc.queryForObject("select payload from webhook_events", String.class)).contains("₹ declined");
+    }
+
+    @Test
+    void webhookAndClientVerificationRacingConfirmTheOrderOnce() throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            for (int round = 0; round < 3; round++) {
+                Pending p = pendingBooking(8 + 3 * round);
+                String pay = mockPay(mvc, driver.auth(), p.bookingId());
+                String paymentId = JsonPath.read(pay, "$.paymentId");
+                String body = capturedBody(p.orderId(), paymentId);
+                CyclicBarrier barrier = new CyclicBarrier(2);
+                List<Callable<Integer>> calls = List.of(
+                        () -> {
+                            barrier.await(10, TimeUnit.SECONDS);
+                            return verify(mvc, driver.auth(), p.bookingId(), p.orderId(), paymentId,
+                                    JsonPath.read(pay, "$.signature")).andReturn().getResponse().getStatus();
+                        },
+                        () -> {
+                            barrier.await(10, TimeUnit.SECONDS);
+                            return send(body, "evt_race_" + p.bookingId()).andReturn().getResponse().getStatus();
+                        });
+                for (Future<Integer> f : pool.invokeAll(calls)) {
+                    assertThat(f.get()).isEqualTo(200);
+                }
+                assertThat(bookingStatus(p.bookingId())).isEqualTo("CONFIRMED");
+                Map<String, Object> payment = jdbc.queryForMap(
+                        "select status, provider_payment_id, captured_at from payments where booking_id = ?", p.bookingId());
+                assertThat(payment).containsEntry("status", "CAPTURED").containsEntry("provider_payment_id", paymentId);
+                assertThat(payment.get("captured_at")).isNotNull();
+                assertThat(count("select count(*) from invoices where booking_id = ?", p.bookingId())).isEqualTo(1);
+                assertThat(count("select count(*) from owner_earnings where booking_id = ?", p.bookingId())).isEqualTo(1);
+                assertThat(count("select count(*) from booking_events where booking_id = ? and to_status = 'CONFIRMED'",
+                        p.bookingId())).isEqualTo(1);
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+        assertThat(emails.sentTo("wh-driver@example.com")).hasSize(3);
+        assertThat(emails.sentTo("wh-owner@example.com")).hasSize(3);
     }
 }

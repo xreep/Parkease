@@ -38,9 +38,11 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -49,6 +51,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -383,6 +386,94 @@ class BookingFlowTest {
         assertThat(count("select count(*) from owner_earnings")).isZero();
         // The other driver's hold is untouched.
         assertThat(count("select count(*) from bookings where status = 'PENDING_PAYMENT'")).isEqualTo(1);
+    }
+
+    @Test
+    void slotTakenBetweenVerifyStartAndConfirmEndsCancelledAndRefunded() throws Exception {
+        Instant start = tomorrowAt(10);
+        long id = bookingId(reserveOk(mvc, driver.auth(), listingId, driver.vehicleId(), start, start.plusSeconds(7200)));
+        String pay = mockPay(mvc, driver.auth(), id);
+
+        // Hold the payment row so the verify request stalls right at the start of its confirmation.
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> holder = pool.submit(() -> tx.executeWithoutResult(s -> {
+                jdbc.queryForList("select id from payments where booking_id = ? for update", id);
+                locked.countDown();
+                try {
+                    release.await(30, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }));
+            assertThat(locked.await(10, TimeUnit.SECONDS)).isTrue();
+            Future<MvcResult> verifying = pool.submit(() -> verifyWith(pay, id).andReturn());
+            awaitBlockedStatement();
+
+            // While it waits: the hold lapses and another driver takes the slot.
+            expireHold(id);
+            reserveOk(mvc, other.auth(), listingId, other.vehicleId(), start, start.plusSeconds(7200));
+            release.countDown();
+            holder.get(30, TimeUnit.SECONDS);
+
+            MvcResult result = verifying.get(30, TimeUnit.SECONDS);
+            assertThat(result.getResponse().getStatus()).isEqualTo(200);
+            String body = result.getResponse().getContentAsString();
+            assertThat((String) JsonPath.read(body, "$.status")).isEqualTo("CANCELLED");
+            assertThat((String) JsonPath.read(body, "$.cancelReason"))
+                    .isEqualTo("Slot was taken before the payment arrived");
+            assertThat((String) JsonPath.read(body, "$.paymentStatus")).isEqualTo("REFUNDED");
+        } finally {
+            release.countDown();
+            pool.shutdownNow();
+        }
+        assertThat(jdbc.queryForObject("select status from payments where booking_id = ?", String.class, id))
+                .isEqualTo("REFUNDED");
+        Map<String, Object> refund = jdbc.queryForMap(
+                "select r.status, r.amount from refunds r join payments p on p.id = r.payment_id where p.booking_id = ?", id);
+        assertThat(refund.get("status")).isEqualTo("PROCESSED");
+        assertThat((BigDecimal) refund.get("amount")).isEqualByComparingTo("67.08");
+        assertThat(count("select count(*) from invoices")).isZero();
+        assertThat(count("select count(*) from owner_earnings")).isZero();
+        assertThat(count("select count(*) from bookings where status = 'PENDING_PAYMENT'")).isEqualTo(1);
+    }
+
+    /** Waits until some statement is blocked on a row lock, i.e. the stalled verify has reached the payment lock. */
+    private void awaitBlockedStatement() throws InterruptedException {
+        for (int i = 0; i < 100; i++) {
+            if (count("select count(*) from pg_stat_activity where datname = current_database() "
+                    + "and wait_event_type = 'Lock'") > 0) {
+                return;
+            }
+            Thread.sleep(100);
+        }
+        throw new AssertionError("The verify request never blocked on the payment row");
+    }
+
+    @Test
+    void latePaymentAfterTheStartTimeHasPassedIsRefundedInsteadOfRevived() throws Exception {
+        Instant start = tomorrowAt(10);
+        long id = bookingId(reserveOk(mvc, driver.auth(), listingId, driver.vehicleId(), start, start.plusSeconds(3600)));
+        String pay = mockPay(mvc, driver.auth(), id);
+        expireHold(id);
+        Booking b = bookings.findById(id).orElseThrow();
+        b.setStartTime(Instant.now().minusSeconds(1800));
+        b.setEndTime(Instant.now().plusSeconds(1800));
+        bookings.saveAndFlush(b);
+
+        verifyWith(pay, id)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.cancelledBy").value("SYSTEM"))
+                .andExpect(jsonPath("$.cancelReason").value("The booking start time passed before the payment arrived"))
+                .andExpect(jsonPath("$.refundAmount").value(33.54));
+
+        assertThat(jdbc.queryForObject(
+                "select r.status from refunds r join payments p on p.id = r.payment_id where p.booking_id = ?",
+                String.class, id)).isEqualTo("PROCESSED");
+        assertThat(count("select count(*) from invoices")).isZero();
     }
 
     @Test
