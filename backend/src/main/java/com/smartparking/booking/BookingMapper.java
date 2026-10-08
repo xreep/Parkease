@@ -42,7 +42,7 @@ public class BookingMapper {
         ParkingListing l = b.getListing();
         Payment payment = payments.findByBookingId(b.getId()).orElse(null);
         String invoiceNumber = invoices.findByBookingId(b.getId()).map(Invoice::getInvoiceNumber).orElse(null);
-        List<BookingDetailDto.Event> history = events.findByBookingIdOrderByCreatedAtAsc(b.getId()).stream()
+        List<BookingDetailDto.Event> history = events.findByBookingIdOrderByCreatedAtAscIdAsc(b.getId()).stream()
                 .map(e -> new BookingDetailDto.Event(e.getFromStatus(), e.getToStatus(), e.getActor(), e.getNote(),
                         e.getCreatedAt()))
                 .toList();
@@ -73,7 +73,7 @@ public class BookingMapper {
         return covers;
     }
 
-    private static String firstName(String name) {
+    static String firstName(String name) {
         String trimmed = name == null ? "" : name.trim();
         int space = trimmed.indexOf(' ');
         return space < 0 ? trimmed : trimmed.substring(0, space);

@@ -244,7 +244,7 @@ class BookingSchemaTest {
         assertThat(reloaded.getRefundAmount()).isEqualByComparingTo("0");
         assertThat(reloaded.getVehicle().getPlateNumber()).isEqualTo("MH12AB1234");
         assertThat(bookings.findByIdAndDriverId(reloaded.getId(), driver.getId())).isPresent();
-        assertThat(events.findByBookingIdOrderByCreatedAtAsc(reloaded.getId())).hasSize(1);
+        assertThat(events.findByBookingIdOrderByCreatedAtAscIdAsc(reloaded.getId())).hasSize(1);
         assertThat(payments.findByBookingId(reloaded.getId()).orElseThrow().getStatus())
                 .isEqualTo(PaymentStatus.CAPTURED);
         assertThat(payments.findByOrderId("order_mock_1")).isPresent();

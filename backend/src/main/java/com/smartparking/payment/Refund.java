@@ -36,4 +36,8 @@ public class Refund extends BaseEntity {
     private RefundStatus status;
 
     private String reason;
+
+    /** Provider attempts so far; the first try counts. */
+    @Column(nullable = false)
+    private int attempts = 1;
 }
