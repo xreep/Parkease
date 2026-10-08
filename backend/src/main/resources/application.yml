@@ -44,6 +44,17 @@ app:
   pricing:
     platform-fee-percent: 10
     gst-percent: 18
+  payments:
+    razorpay:
+      key-id: ${RAZORPAY_KEY_ID:}
+      key-secret: ${RAZORPAY_KEY_SECRET:}
+      webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:}
+  booking:
+    hold-minutes: 10
+    approval-hours: 2
+    max-active-holds: 3
+  jobs:
+    enabled: true
 
 springdoc:
   swagger-ui:
