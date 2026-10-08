@@ -15,6 +15,11 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     Optional<Booking> findByIdAndDriverId(Long id, Long driverId);
 
+    boolean existsByIdAndDriverId(Long id, Long driverId);
+
+    @Query("select b.slot.id from Booking b where b.id = :id")
+    Long findSlotIdById(@Param("id") Long id);
+
     Optional<Booking> findByBookingCode(String bookingCode);
 
     long countByDriverIdAndStatusAndHoldExpiresAtAfter(Long driverId, BookingStatus status, Instant now);
