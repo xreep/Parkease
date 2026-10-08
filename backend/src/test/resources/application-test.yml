@@ -13,3 +13,5 @@ app:
     host: ""
   storage:
     local-dir: target/test-uploads
+  jobs:
+    enabled: false
