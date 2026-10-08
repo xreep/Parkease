@@ -274,3 +274,14 @@ Install Java 21 and PostgreSQL 16 (Homebrew). Optional accounts/keys: Razorpay (
 - **Map:** React-Leaflet with `react-leaflet-cluster`; price-label markers; "Search this area" re-centres on the map.
 - **Reserve** button on the listing page sends signed-out users to login; actual booking arrives in Phase 4.
 - **Parameter names:** search takes `types` (repeatable) and `maxPricePerHour` (> 0, ≤ 100000; otherwise `INVALID_PARAMETER`), not `type`/`maxPrice`. `GET /listings/{id}/availability` and `/reviews` (§7) are not implemented yet; they arrive in Phase 6.
+
+## 19. Phase 4 Decisions (approved 2026-10-08)
+
+- **Scope:** driver vehicles; booking with 10-minute slot hold; checkout via Razorpay (test mode) or a built-in mock provider when keys are absent; signature verification + webhook backup; booking confirmation (auto-approve) or owner approval within 2 hours (reject/timeout → full refund); invoices (PDF generated on download); owner earnings ledger rows; basic driver "My bookings" + booking detail with QR code; owner booking requests. Driver cancellations, ACTIVE/COMPLETED transitions, notifications bell and reminders remain Phase 5.
+- **Money split:** driver pays `base + platform fee (10% of base) + GST (18% of fee)`. The owner earns the full `base`; the platform keeps the fee and remits GST. `owner_earnings`: `gross = base`, `commission = platformFee` (recorded for reporting), `net = base`.
+- **No double-booking:** PostgreSQL exclusion constraint (`btree_gist`) on `(slot_id, tstzrange(start,end,'[)'))` for live statuses `PENDING_PAYMENT, AWAITING_APPROVAL, CONFIRMED, ACTIVE`; stale holds are expired before allocation; allocation retries the next free slot on a constraint violation (SQLState `23P01`).
+- **Availability counts bookings:** search, quote and booking creation exclude slots with an overlapping live booking (a `PENDING_PAYMENT` booking counts only while `hold_expires_at > now`).
+- **Late payment:** a payment captured after its hold expired re-confirms the booking if its slot is still free; otherwise it is refunded in full automatically.
+- **Midnight rule:** a window ending exactly at 00:00 IST on the next day counts as ending at the end of the start day; it is allowed when that day's rule closes at 23:59.
+- **Abuse limits:** a driver may hold at most 3 unpaid bookings at once (`TOO_MANY_HOLDS`).
+- **Payments provider abstraction:** `PaymentProvider` with `RazorpayPaymentProvider` (orders + refunds via SDK, HMAC signature checks in our code) and `MockPaymentProvider` (selected when `RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET` are not set). Webhooks require `RAZORPAY_WEBHOOK_SECRET` and a public URL (Phase 8).
