@@ -1,18 +1,13 @@
 package com.smartparking.email;
 
-import com.smartparking.availability.AvailabilityEvaluator;
 import com.smartparking.booking.Booking;
+import com.smartparking.common.util.Ist;
 import com.smartparking.user.User;
 import java.time.Instant;
-import java.time.format.DateTimeFormatter;
-import java.util.Locale;
 import org.springframework.web.util.HtmlUtils;
 
 /** Plain-text + simple HTML account emails. Richer Thymeleaf templates arrive with booking emails in Phase 5. */
 public final class EmailTemplates {
-
-    private static final DateTimeFormatter WINDOW_FORMAT =
-            DateTimeFormatter.ofPattern("EEE d MMM, h:mm a", Locale.ENGLISH);
 
     private EmailTemplates() {
     }
@@ -82,6 +77,28 @@ public final class EmailTemplates {
                 "Review request", link);
     }
 
+    public static EmailMessage bookingApproved(User driver, Booking booking, String link) {
+        return build(driver, "Your booking is confirmed – ParkEase",
+                "The owner approved your request, so your parking is confirmed.\n\n" + details(booking),
+                "View booking", link);
+    }
+
+    public static EmailMessage bookingRejected(User driver, Booking booking, String reason, String link) {
+        return build(driver, "Booking request declined – ParkEase",
+                "The owner could not accept your booking request. Reason: " + reason + "\n\n"
+                        + "A full refund of ₹" + booking.getTotalAmount().toPlainString() + " is on its way.\n\n"
+                        + details(booking),
+                "View booking", link);
+    }
+
+    public static EmailMessage bookingAutoRejected(User driver, Booking booking, String link) {
+        return build(driver, "Booking request expired – ParkEase",
+                "The owner did not respond to your request in time, so it was declined automatically.\n\n"
+                        + "A full refund of ₹" + booking.getTotalAmount().toPlainString() + " is on its way.\n\n"
+                        + details(booking),
+                "View booking", link);
+    }
+
     private static String details(Booking b) {
         return "Booking " + b.getBookingCode() + "\n"
                 + b.getListing().getTitle() + ", slot " + b.getSlot().getLabel() + "\n"
@@ -90,7 +107,7 @@ public final class EmailTemplates {
     }
 
     private static String formatTime(Instant time) {
-        return WINDOW_FORMAT.format(time.atZone(AvailabilityEvaluator.ZONE));
+        return Ist.format(time);
     }
 
     private static EmailMessage build(User user, String subject, String body, String cta, String link) {
