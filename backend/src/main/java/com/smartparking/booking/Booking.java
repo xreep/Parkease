@@ -16,6 +16,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -98,6 +99,22 @@ public class Booking extends BaseEntity {
     private BookingActor cancelledBy;
 
     private String cancelReason;
+
+    /**
+     * Applies a received payment: auto-approve listings confirm immediately, others wait for the owner (until
+     * {@code now + approvalWindow}). The unpaid hold no longer applies.
+     */
+    public void acceptPayment(boolean autoApprove, Instant now, Duration approvalWindow) {
+        holdExpiresAt = null;
+        if (autoApprove) {
+            status = BookingStatus.CONFIRMED;
+            confirmedAt = now;
+            approvalDeadline = null;
+        } else {
+            status = BookingStatus.AWAITING_APPROVAL;
+            approvalDeadline = now.plus(approvalWindow);
+        }
+    }
 
     /** True when this booking currently blocks its slot: paid/approved states, or an unexpired unpaid hold. */
     public boolean isLiveAt(Instant now) {
