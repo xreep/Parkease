@@ -155,6 +155,28 @@ class BookingSchemaTest {
     }
 
     @Test
+    void liveOverlappingSlotIdsAreDistinct() {
+        Instant now = Instant.now();
+        bookings.saveAndFlush(booking(BookingStatus.CONFIRMED, 10, 12));
+        bookings.saveAndFlush(booking(BookingStatus.CONFIRMED, 12, 14));
+
+        assertThat(bookings.findLiveOverlappingSlotIds(List.of(listing.getId()),
+                tomorrow10, tomorrow10.plus(4, ChronoUnit.HOURS), now)).containsExactly(slot.getId());
+    }
+
+    @Test
+    void expiringStaleHoldsBumpsUpdatedAt() {
+        Instant now = Instant.now().plus(1, ChronoUnit.HOURS).truncatedTo(ChronoUnit.MICROS);
+        Booking hold = booking(BookingStatus.PENDING_PAYMENT, 10, 12);
+        hold.setHoldExpiresAt(now.minus(1, ChronoUnit.MINUTES));
+        bookings.saveAndFlush(hold);
+
+        assertThat(bookings.expireStaleHolds(List.of(slot.getId()), now)).isEqualTo(1);
+
+        assertThat(bookings.findById(hold.getId()).orElseThrow().getUpdatedAt()).isEqualTo(now);
+    }
+
+    @Test
     void relatedRowsPersistAndReload() {
         Vehicle vehicle = new Vehicle();
         vehicle.setUser(driver);
