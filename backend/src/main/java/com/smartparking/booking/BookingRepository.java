@@ -21,7 +21,7 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     /** Ids of slots (of the given listings) that a live booking blocks during [start, end). */
     @Query("""
-            select b.slot.id from Booking b
+            select distinct b.slot.id from Booking b
             where b.listing.id in :listingIds
               and b.startTime < :end and b.endTime > :start
               and (b.status in (com.smartparking.booking.BookingStatus.AWAITING_APPROVAL,
@@ -37,7 +37,7 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     /** Marks unpaid holds that already lapsed on the given slots as EXPIRED, freeing the exclusion constraint. */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("""
-            update Booking b set b.status = com.smartparking.booking.BookingStatus.EXPIRED
+            update Booking b set b.status = com.smartparking.booking.BookingStatus.EXPIRED, b.updatedAt = :now
             where b.status = com.smartparking.booking.BookingStatus.PENDING_PAYMENT
               and b.holdExpiresAt <= :now and b.slot.id in :slotIds
             """)
