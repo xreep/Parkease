@@ -136,6 +136,13 @@ function UpcomingActions({ booking, onChanged }: { booking: OwnerBookingDto; onC
   )
 }
 
+/** What the owner earns from the booking: the net of their earning (zero once it was refunded away), else their share. */
+function earningsLine(booking: OwnerBookingDto): string {
+  const refundedAway = booking.status === 'CANCELLED' || booking.status === 'REJECTED'
+  const net = booking.ownerNet ?? (refundedAway ? 0 : booking.baseAmount)
+  return net > 0 ? `You earn ${formatINR(net)}` : 'No earnings — refunded'
+}
+
 function BookingCard({ booking, view, onChanged }: { booking: OwnerBookingDto; view: OwnerBookingView; onChanged: () => Promise<unknown> }) {
   const isRequest = view === 'requests' && booking.status === 'AWAITING_APPROVAL'
   const now = useNow(view === 'upcoming', 30_000)
@@ -159,7 +166,7 @@ function BookingCard({ booking, view, onChanged }: { booking: OwnerBookingDto; v
         {isRequest && booking.approvalDeadline && <RespondBy deadline={booking.approvalDeadline} />}
       </div>
       <div className="flex flex-col gap-3 sm:items-end">
-        <p className="text-lg font-bold">{`You earn ${formatINR(booking.baseAmount)}`}</p>
+        <p className="text-lg font-bold">{earningsLine(booking)}</p>
         {isRequest && <RequestActions booking={booking} onChanged={onChanged} />}
         {canCancel && <UpcomingActions booking={booking} onChanged={onChanged} />}
       </div>

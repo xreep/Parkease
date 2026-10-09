@@ -84,7 +84,7 @@ describe('driver cancellation', () => {
 
     const dialog = await openDialog(user)
     expect(await within(dialog).findByText('Nothing has been charged yet.')).toBeInTheDocument()
-    expect(within(dialog).queryByText(/Non-refundable/)).not.toBeInTheDocument()
+    expect(within(dialog).queryByText(/Not refunded/)).not.toBeInTheDocument()
   })
 
   it('promises a full refund for a request the owner has not accepted', async () => {
@@ -95,10 +95,10 @@ describe('driver cancellation', () => {
 
     const dialog = await openDialog(user)
     expect(await within(dialog).findByText("You'll get ₹89.44 back (100%)")).toBeInTheDocument()
-    expect(within(dialog).queryByText(/Non-refundable/)).not.toBeInTheDocument()
+    expect(within(dialog).queryByText(/Not refunded/)).not.toBeInTheDocument()
   })
 
-  it('shows a full refund with the non-refundable fee and GST for a confirmed booking', async () => {
+  it('shows a full refund of the base with the fee and GST that are not refunded for a confirmed booking', async () => {
     mock.onGet('/bookings/91').reply(200, booking())
     mock.onGet('/bookings/91/cancellation-preview').reply(200, preview())
     const user = userEvent.setup()
@@ -106,7 +106,7 @@ describe('driver cancellation', () => {
 
     const dialog = await openDialog(user)
     expect(await within(dialog).findByText("You'll get ₹80 back (100%)")).toBeInTheDocument()
-    expect(within(dialog).getByText('Non-refundable: ₹9.44 (platform fee and GST are not refunded)')).toBeInTheDocument()
+    expect(within(dialog).getByText('Not refunded: ₹9.44 — includes platform fee and GST ₹9.44')).toBeInTheDocument()
     expect(within(dialog).getByText('Moderate policy: Full refund up to 24 hours before start, 50% from 24 to 2 hours before, none within 2 hours')).toBeInTheDocument()
     expect(within(dialog).getByText(REFUND_NOTE)).toBeInTheDocument()
   })
@@ -119,7 +119,8 @@ describe('driver cancellation', () => {
 
     const dialog = await openDialog(user)
     expect(await within(dialog).findByText("You'll get ₹40 back (50%)")).toBeInTheDocument()
-    expect(within(dialog).getByText('Non-refundable: ₹49.44 (platform fee and GST are not refunded)')).toBeInTheDocument()
+    expect(within(dialog).getByText('Not refunded: ₹49.44 — includes platform fee and GST ₹9.44')).toBeInTheDocument()
+    expect(within(dialog).queryByText(/are not refunded/)).not.toBeInTheDocument()
   })
 
   it('names the policy when no refund applies', async () => {
@@ -130,7 +131,7 @@ describe('driver cancellation', () => {
 
     const dialog = await openDialog(user)
     expect(await within(dialog).findByText('No refund applies — Strict policy')).toBeInTheDocument()
-    expect(within(dialog).getByText('Non-refundable: ₹89.44 (platform fee and GST are not refunded)')).toBeInTheDocument()
+    expect(within(dialog).getByText('Not refunded: ₹89.44 — includes platform fee and GST ₹9.44')).toBeInTheDocument()
     expect(within(dialog).getByText('Strict policy: 50% refund up to 48 hours before start, none after')).toBeInTheDocument()
   })
 
