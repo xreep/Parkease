@@ -67,7 +67,14 @@ function RequestActions({ booking, onChanged }: { booking: OwnerBookingDto; onCh
   }
 
   async function decline(reason: string) {
-    await rejectBooking(booking.id, reason)
+    try {
+      await rejectBooking(booking.id, reason)
+    } catch (error) {
+      // As with approve, a failure usually means the request was already decided or expired:
+      // refresh the list, and let the dialog show the reason.
+      await onChanged()
+      throw error
+    }
     toast.success('Booking declined — the driver will be refunded')
     setDeclining(false)
     await onChanged()

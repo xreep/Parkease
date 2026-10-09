@@ -111,6 +111,24 @@ describe('owner bookings', () => {
     await waitFor(() => expect(invalidatedKeys(invalidate)).toEqual(expect.arrayContaining(['owner', 'booking', 'bookings', 'quote', 'search'])))
   })
 
+  it('shows why a decline failed and still refreshes the list', async () => {
+    mock.onGet('/owner/bookings').reply(200, page([ownerBooking()]))
+    mock.onPost('/owner/bookings/5/reject').reply(409, { code: 'INVALID_STATUS', detail: 'This booking is no longer awaiting approval' })
+    const user = userEvent.setup()
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    renderApp('/owner/bookings', queryClient)
+
+    await user.click(await screen.findByRole('button', { name: 'Decline' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Decline this booking?' })
+    await user.type(within(dialog).getByLabelText('Reason'), 'Closed that day')
+    await user.click(within(dialog).getByRole('button', { name: 'Decline' }))
+
+    expect(toast.success).not.toHaveBeenCalled()
+    await waitFor(() => expect(invalidatedKeys(invalidate)).toEqual(expect.arrayContaining(['owner', 'bookings', 'booking'])))
+    await waitFor(() => expect(listCalls().length).toBeGreaterThan(1))
+  })
+
   it('requires a reason to decline', async () => {
     mock.onGet('/owner/bookings').reply(200, page([ownerBooking()]))
     const user = userEvent.setup()
