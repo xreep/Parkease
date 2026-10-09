@@ -19,6 +19,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Limit;
@@ -171,29 +173,39 @@ public class BookingJobs {
     @Scheduled(fixedDelay = 60_000)
     public void advanceLifecycle() {
         Instant now = clock.instant();
-        int completed = 0;
-        for (Long id : tx.execute(s -> bookings.findDueToCompleteIds(now, Limit.of(LIFECYCLE_BATCH)))) {
-            try {
-                if (Boolean.TRUE.equals(tx.execute(s -> completeOne(id, now)))) {
-                    completed++;
-                }
-            } catch (RuntimeException e) {
-                log.error("Could not complete booking {}", id, e);
-            }
-        }
-        int started = 0;
-        for (Long id : tx.execute(s -> bookings.findDueToStartIds(now, Limit.of(LIFECYCLE_BATCH)))) {
-            try {
-                if (Boolean.TRUE.equals(tx.execute(s -> startOne(id, now)))) {
-                    started++;
-                }
-            } catch (RuntimeException e) {
-                log.error("Could not start booking {}", id, e);
-            }
-        }
+        int completed = sweep("complete", () -> bookings.findDueToCompleteIds(now, Limit.of(LIFECYCLE_BATCH)),
+                id -> completeOne(id, now));
+        int started = sweep("start", () -> bookings.findDueToStartIds(now, Limit.of(LIFECYCLE_BATCH)),
+                id -> startOne(id, now));
         if (started > 0 || completed > 0) {
             log.info("Lifecycle: {} bookings started, {} completed", started, completed);
         }
+    }
+
+    /**
+     * One phase of a job: reads the due ids, then handles each in its own transaction. A failing query or a failing
+     * booking is logged and skipped, so it never stops the other bookings or the job's other phases. Returns how many
+     * bookings were actually changed.
+     */
+    private int sweep(String what, Supplier<List<Long>> dueIds, Predicate<Long> handle) {
+        List<Long> ids;
+        try {
+            ids = tx.execute(s -> dueIds.get());
+        } catch (RuntimeException e) {
+            log.error("Could not list the bookings to {}", what, e);
+            return 0;
+        }
+        int changed = 0;
+        for (Long id : ids) {
+            try {
+                if (Boolean.TRUE.equals(tx.execute(s -> handle.test(id)))) {
+                    changed++;
+                }
+            } catch (RuntimeException e) {
+                log.error("Could not {} booking {}", what, id, e);
+            }
+        }
+        return changed;
     }
 
     private boolean startOne(Long id, Instant now) {
@@ -217,12 +229,13 @@ public class BookingJobs {
         booking.setCompletedAt(now);
         events.record(booking, from, BookingStatus.COMPLETED, BookingActor.SYSTEM, COMPLETED_NOTE);
         // Only a held earning becomes payable; paid-out, reversed or already released ones are left alone.
+        // A held earning with nothing left (refunded away) is reversed instead.
         earnings.findByBookingId(id).ifPresent(earning -> {
             if (earning.getStatus() == EarningStatus.HELD) {
-                earning.setStatus(EarningStatus.PENDING_PAYOUT);
+                earning.setStatus(earning.getNet().signum() > 0 ? EarningStatus.PENDING_PAYOUT : EarningStatus.REVERSED);
             }
         });
-        String path = driverPath(booking);
+        String path = BookingPaths.driver(booking);
         notifier.notify(booking.getDriver(), NotificationType.BOOKING_COMPLETED, "Booking completed",
                 "Thanks for parking with ParkEase. Your booking " + booking.getBookingCode() + " at "
                         + booking.getListing().getTitle() + " is complete.", path, null);
@@ -238,28 +251,10 @@ public class BookingJobs {
     @Scheduled(fixedDelay = 60_000)
     public void sendReminders() {
         Instant now = clock.instant();
-        int reminded = 0;
-        for (Long id : tx.execute(s -> bookings.findDueForReminderIds(now, now.plus(REMINDER_LEAD),
-                Limit.of(LIFECYCLE_BATCH)))) {
-            try {
-                if (Boolean.TRUE.equals(tx.execute(s -> remindDriver(id, now)))) {
-                    reminded++;
-                }
-            } catch (RuntimeException e) {
-                log.error("Could not send the start reminder of booking {}", id, e);
-            }
-        }
-        int nudged = 0;
-        for (Long id : tx.execute(s -> bookings.findDueForApprovalNudgeIds(now, now.plus(NUDGE_LEAD),
-                Limit.of(LIFECYCLE_BATCH)))) {
-            try {
-                if (Boolean.TRUE.equals(tx.execute(s -> nudgeOwner(id, now)))) {
-                    nudged++;
-                }
-            } catch (RuntimeException e) {
-                log.error("Could not send the approval reminder of booking {}", id, e);
-            }
-        }
+        int reminded = sweep("send the start reminder of", () -> bookings.findDueForReminderIds(now,
+                now.plus(REMINDER_LEAD), Limit.of(LIFECYCLE_BATCH)), id -> remindDriver(id, now));
+        int nudged = sweep("send the approval reminder of", () -> bookings.findDueForApprovalNudgeIds(now,
+                now.plus(NUDGE_LEAD), Limit.of(LIFECYCLE_BATCH)), id -> nudgeOwner(id, now));
         if (reminded > 0 || nudged > 0) {
             log.info("Reminders: {} drivers, {} owners", reminded, nudged);
         }
@@ -272,7 +267,7 @@ public class BookingJobs {
             return false;
         }
         booking.setReminderSentAt(now);
-        String path = driverPath(booking);
+        String path = BookingPaths.driver(booking);
         notifier.notify(booking.getDriver(), NotificationType.BOOKING_STARTING_SOON, "Your parking starts soon",
                 "Your booking " + booking.getBookingCode() + " at " + booking.getListing().getTitle()
                         + " starts at " + Ist.format(booking.getStartTime()) + ".", path,
@@ -294,10 +289,6 @@ public class BookingJobs {
                         + " expires at " + Ist.format(deadline) + ". Approve or decline it before then.",
                 OWNER_PATH, EmailTemplates.approvalReminder(owner, booking, app.frontendUrl() + OWNER_PATH));
         return true;
-    }
-
-    private static String driverPath(Booking booking) {
-        return "/driver/bookings/" + booking.getId();
     }
 
     /** Gives FAILED refunds another go (at most {@value RefundService#MAX_ATTEMPTS} provider tries in total). */

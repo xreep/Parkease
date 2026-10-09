@@ -105,6 +105,9 @@ public class OwnerBookingService {
                 || booking.getApprovalDeadline() == null || !booking.getApprovalDeadline().isAfter(now)) {
             throw invalidStatus("approved", booking);
         }
+        if (!booking.getStartTime().isAfter(now)) {
+            throw ApiException.conflict("INVALID_STATUS", "This booking's start time has passed");
+        }
         booking.setStatus(BookingStatus.CONFIRMED);
         booking.setConfirmedAt(now);
         booking.setApprovalDeadline(null);
@@ -112,7 +115,7 @@ public class OwnerBookingService {
                 "Approved by owner");
         notifier.notify(booking.getDriver(), NotificationType.BOOKING_APPROVED, "Booking approved",
                 "Your booking " + booking.getBookingCode() + " at " + booking.getListing().getTitle()
-                        + " was approved.", driverPath(booking),
+                        + " was approved.", BookingPaths.driver(booking),
                 EmailTemplates.bookingApproved(booking.getDriver(), booking, driverLink(booking)));
         return toDto(booking);
     }
@@ -128,7 +131,7 @@ public class OwnerBookingService {
         unwind(booking, BookingActor.OWNER, reason);
         notifier.notify(booking.getDriver(), NotificationType.BOOKING_DECLINED, "Booking request declined",
                 "Your request " + booking.getBookingCode() + " at " + booking.getListing().getTitle()
-                        + " was declined. You will be refunded in full.", driverPath(booking),
+                        + " was declined. You will be refunded in full.", BookingPaths.driver(booking),
                 EmailTemplates.bookingRejected(booking.getDriver(), booking, reason, driverLink(booking)));
         return toDto(booking);
     }
@@ -141,21 +144,25 @@ public class OwnerBookingService {
     public boolean autoRejectIfOverdue(Long bookingId) {
         Booking booking = locks.lock(bookingId);
         Instant now = clock.instant();
-        if (booking.getStatus() != BookingStatus.AWAITING_APPROVAL
-                || booking.getApprovalDeadline() == null || booking.getApprovalDeadline().isAfter(now)) {
+        Instant deadline = booking.getApprovalDeadline();
+        boolean overdue = (deadline != null && !deadline.isAfter(now)) || !booking.getStartTime().isAfter(now);
+        if (booking.getStatus() != BookingStatus.AWAITING_APPROVAL || !overdue) {
             return false;
         }
         unwind(booking, BookingActor.SYSTEM, autoRejectReason(booking));
         notifier.notify(booking.getDriver(), NotificationType.BOOKING_EXPIRED_REQUEST, "Booking request expired",
                 "Your request " + booking.getBookingCode() + " at " + booking.getListing().getTitle()
-                        + " expired without an answer. You will be refunded in full.", driverPath(booking),
+                        + " expired without an answer. You will be refunded in full.", BookingPaths.driver(booking),
                 EmailTemplates.bookingAutoRejected(booking.getDriver(), booking, driverLink(booking)));
         return true;
     }
 
-    /** The deadline equals the start time when the cap applied: then the start, not the window, ran out. */
+    /**
+     * A deadline at (or, for requests older than the cap, after) the start time means the start, not the response
+     * window, ran out; an earlier deadline is a plain timeout even if the start has passed since.
+     */
     String autoRejectReason(Booking booking) {
-        if (booking.getApprovalDeadline().equals(booking.getStartTime())) {
+        if (booking.getApprovalDeadline() == null || !booking.getApprovalDeadline().isBefore(booking.getStartTime())) {
             return START_PASSED_REASON;
         }
         int hours = properties.approvalHours();
@@ -189,12 +196,8 @@ public class OwnerBookingService {
                 "This request can no longer be " + action + " (" + booking.getStatus() + ")");
     }
 
-    private static String driverPath(Booking booking) {
-        return "/driver/bookings/" + booking.getId();
-    }
-
     private String driverLink(Booking booking) {
-        return app.frontendUrl() + driverPath(booking);
+        return app.frontendUrl() + BookingPaths.driver(booking);
     }
 
     static OwnerBookingDto toDto(Booking b) {

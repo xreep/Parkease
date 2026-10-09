@@ -65,10 +65,14 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
             """)
     List<Long> findLapsedHoldIds(@Param("cutoff") Instant cutoff, Limit limit);
 
-    /** Ids of paid requests whose owner response deadline passed at or before {@code cutoff}, oldest first. */
+    /**
+     * Ids of paid requests that can no longer be answered at {@code cutoff}: the owner response deadline or the start
+     * time passed (older requests may have a deadline after their start), oldest first.
+     */
     @Query("""
             select b.id from Booking b
-            where b.status = com.smartparking.booking.BookingStatus.AWAITING_APPROVAL and b.approvalDeadline <= :cutoff
+            where b.status = com.smartparking.booking.BookingStatus.AWAITING_APPROVAL
+              and (b.approvalDeadline <= :cutoff or b.startTime <= :cutoff)
             order by b.id
             """)
     List<Long> findOverdueApprovalIds(@Param("cutoff") Instant cutoff, Limit limit);
