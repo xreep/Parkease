@@ -17,6 +17,29 @@ import org.springframework.data.repository.query.Param;
 
 public interface BookingRepository extends JpaRepository<Booking, Long> {
 
+    /** The slot and time span of a booking, without loading the booking itself. */
+    interface SlotWindow {
+        Long getSlotId();
+
+        Instant getStartTime();
+
+        Instant getEndTime();
+    }
+
+    /** Slot and time span of the listing's live bookings that overlap [start, end), in one query. */
+    @Query("""
+            select b.slot.id as slotId, b.startTime as startTime, b.endTime as endTime from Booking b
+            where b.listing.id = :listingId
+              and b.startTime < :end and b.endTime > :start
+              and (b.status in (com.smartparking.booking.BookingStatus.AWAITING_APPROVAL,
+                                com.smartparking.booking.BookingStatus.CONFIRMED,
+                                com.smartparking.booking.BookingStatus.ACTIVE)
+                   or (b.status = com.smartparking.booking.BookingStatus.PENDING_PAYMENT
+                       and b.holdExpiresAt > :now))
+            """)
+    List<SlotWindow> findLiveWindows(@Param("listingId") Long listingId, @Param("start") Instant start,
+                                     @Param("end") Instant end, @Param("now") Instant now);
+
     Optional<Booking> findByIdAndDriverId(Long id, Long driverId);
 
     /** Row-locks the booking so status checks and transitions cannot interleave with the stale-hold sweep. */
