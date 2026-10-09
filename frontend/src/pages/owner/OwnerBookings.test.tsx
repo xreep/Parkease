@@ -224,6 +224,8 @@ describe('owner bookings', () => {
 
       expect(await within(dialog).findByText("Bookings can't be cancelled once they've started")).toBeInTheDocument()
       expect(toast.success).not.toHaveBeenCalled()
+      // The refresh can unmount the dialog, so the message must also survive as a toast.
+      expect(toast.error).toHaveBeenCalledWith("Bookings can't be cancelled once they've started")
     })
   })
 

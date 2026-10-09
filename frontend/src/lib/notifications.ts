@@ -33,6 +33,19 @@ export type NotificationDto = {
   createdAt: string
 }
 
+/**
+ * Only a plain path inside the app: one slash, then anything but a second slash or a backslash (`//host` and `/\host`
+ * both make browsers and the router leave the site), with no whitespace or control characters.
+ */
+export function isSafeAppLink(link: string | null | undefined): link is string {
+  if (!link || !/^\/(?![/\\])/.test(link)) return false
+  for (const ch of link) {
+    const code = ch.codePointAt(0)!
+    if (code <= 0x20 || code === 0x7f || /\s/.test(ch)) return false
+  }
+  return true
+}
+
 export const UNREAD_REFRESH_MS = 30_000
 
 export const listNotifications = async (page = 0, size = 20) =>

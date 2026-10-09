@@ -241,7 +241,7 @@ function BookingContent({ booking, isNew }: { booking: BookingDetailDto; isNew: 
         </div>
       </div>
       {cancelling && (
-        <CancelBookingDialog bookingId={booking.id} status={booking.status} onClose={() => setCancelling(false)} />
+        <CancelBookingDialog bookingId={booking.id} onClose={() => setCancelling(false)} />
       )}
     </div>
   )

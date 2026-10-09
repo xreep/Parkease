@@ -2,7 +2,7 @@ import clsx from 'clsx'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { errorMessage } from '../../lib/errors'
-import { useNotificationActions, type NotificationDto } from '../../lib/notifications'
+import { isSafeAppLink, useNotificationActions, type NotificationDto } from '../../lib/notifications'
 import { formatRelativeTime } from '../../lib/time'
 
 /** A notification row: unread ones are bold with a dot. Clicking marks it read and opens its link. */
@@ -15,7 +15,7 @@ export function NotificationItem({ notification, now, onOpen }: { notification: 
       markRead(notification.id).catch((error: unknown) => toast.error(errorMessage(error)))
     }
     onOpen?.()
-    if (notification.link?.startsWith('/')) navigate(notification.link)
+    if (isSafeAppLink(notification.link)) navigate(notification.link)
   }
 
   return (

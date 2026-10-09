@@ -7,6 +7,7 @@ import { api } from '../lib/api'
 import { tokenStore } from '../lib/tokenStore'
 import type { ListingQuoteResponse, PublicListingDto } from '../lib/search'
 import { nextQuarter } from '../lib/time'
+import { REFUND_NOTE } from '../lib/format'
 import { renderApp } from '../test/renderApp'
 
 vi.mock('../components/owner/LocationPicker', () => ({
@@ -100,6 +101,14 @@ describe('ListingPage', () => {
     expect(screen.getByText('No overnight parking.')).toBeInTheDocument()
     expect(screen.getByText(/full refund up to 24 hours before start/i)).toBeInTheDocument()
     expect(screen.getByText('Hosted by Priya')).toBeInTheDocument()
+  })
+
+  it('shows the cancellation policy with the refund note', async () => {
+    renderApp(URL_7)
+
+    await screen.findByRole('heading', { level: 1, name: 'Metro Hub Parking' })
+    expect(screen.getByText(/Full refund up to 24 hours before start, 50% from 24 to 2 hours before, none within 2 hours/)).toBeInTheDocument()
+    expect(screen.getByText(REFUND_NOTE)).toBeInTheDocument()
   })
 
   it('labels the opening hours as IST', async () => {

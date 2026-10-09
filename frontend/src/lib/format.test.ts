@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatAddress, formatINR, listingStatusLabel, verificationStatusLabel } from './format'
+import { CANCELLATION_POLICIES, REFUND_NOTE, formatAddress, formatINR, listingStatusLabel, verificationStatusLabel } from './format'
 
 describe('format helpers', () => {
   it('formats rupees', () => {
@@ -20,5 +20,14 @@ describe('format helpers', () => {
     expect(formatAddress({ ...base, address: '14 Viman Nagar Road' })).toBe('14 Viman Nagar Road, Pune, Maharashtra 411014')
     expect(formatAddress({ ...base, address: 'Off Airport Road, Viman Nagar, PUNE' }))
       .toBe('Off Airport Road, Viman Nagar, PUNE, Maharashtra 411014')
+  })
+
+  it('describes each cancellation policy exactly as the backend applies it', () => {
+    expect(CANCELLATION_POLICIES.map((p) => p.help)).toEqual([
+      'Full refund up to 1 hour before start, 50% after',
+      'Full refund up to 24 hours before start, 50% from 24 to 2 hours before, none within 2 hours',
+      '50% refund up to 48 hours before start, none after',
+    ])
+    expect(REFUND_NOTE).toBe("Refunds apply to the parking charge; platform fee and GST aren't refunded on driver cancellations.")
   })
 })

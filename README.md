@@ -88,13 +88,13 @@ Reserve signs you in. To book, add a vehicle under **My parking → Vehicles** (
 ### Try it: cancellations, lifecycle and notifications
 
 - **Lifecycle:** a confirmed booking becomes **Active** when its start time arrives and **Completed** when it ends (background jobs, on a one-minute cycle). Drivers get a "starting soon" reminder when their parking is within the hour of starting, and owners are warned when a request is within 30 minutes of lapsing.
-- **Driver cancellations:** open a booking and press **Cancel booking**. The dialog shows what you get back before you confirm. An unpaid booking costs nothing, and a request the owner has not accepted yet is refunded in full. A confirmed booking follows the listing's cancellation policy (below); the platform fee and GST are never refunded for a paid booking. Bookings that have started cannot be cancelled.
+- **Driver cancellations:** open a booking and press **Cancel booking**. The dialog shows what you get back before you confirm. An unpaid booking costs nothing, and a request the owner has not accepted yet is refunded in full. A confirmed booking follows the listing's cancellation policy (below); when a driver cancels a confirmed booking, the platform fee and GST are not refunded. Bookings that have started cannot be cancelled.
 - **Owner cancellations:** under **Owner dashboard → Bookings → Upcoming**, an owner can cancel a confirmed booking that has not started. A reason is required (it is sent to the driver) and the driver is refunded in full.
 - **Notifications:** the bell in the navigation bar shows unread notifications for every signed-in user (drivers, owners and admins); open it for the latest ten, or go to `/notifications` for the full list. Each important event also sends an email.
 
 #### Cancellation policy
 
-The refund is a share of the **parking charge**; the platform fee and GST are not refundable once a booking is paid. Each listing has one policy, shown on the listing page and at checkout.
+When a driver cancels a confirmed booking, the refund is a share of the **parking charge**; the platform fee and GST are not refunded. (A request the owner has not accepted yet is refunded in full, fee and GST included.) Each listing has one policy, shown on the listing page and at checkout.
 
 | Policy | Full refund | Half refund | No refund |
 |---|---|---|---|

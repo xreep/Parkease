@@ -17,6 +17,14 @@ function notification(overrides: Partial<NotificationDto> = {}): NotificationDto
   }
 }
 
+/** Yesterday at 12:00 local: "Yesterday" whatever the time of day the test runs. */
+function yesterdayNoon() {
+  const d = new Date()
+  d.setDate(d.getDate() - 1)
+  d.setHours(12, 0, 0, 0)
+  return d.toISOString()
+}
+
 const page = (content: NotificationDto[]) => ({ content, page: 0, size: 10, totalElements: content.length, totalPages: 1 })
 
 describe('notification bell', () => {
@@ -69,7 +77,7 @@ describe('notification bell', () => {
     mock.onGet('/notifications/unread-count').reply(200, { count: 2 })
     mock.onGet('/notifications').reply(200, page([
       notification(),
-      notification({ id: 8, title: 'Reminder', body: 'Your parking starts soon.', link: null, read: true, createdAt: new Date(Date.now() - 26 * 3_600_000).toISOString() }),
+      notification({ id: 8, title: 'Reminder', body: 'Your parking starts soon.', link: null, read: true, createdAt: yesterdayNoon() }),
     ]))
     mock.onPost('/notifications/7/read').reply(204)
     const user = userEvent.setup()
