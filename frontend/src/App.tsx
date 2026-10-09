@@ -5,6 +5,7 @@ import { AccountPage } from './pages/AccountPage'
 import { ListingPage } from './pages/ListingPage'
 import { CityPage } from './pages/CityPage'
 import { HomePage } from './pages/HomePage'
+import { NotificationsPage } from './pages/NotificationsPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { SearchPage } from './pages/SearchPage'
 import { StatePage } from './pages/StatePage'
@@ -47,6 +48,7 @@ export default function App() {
         <Route path="reset-password" element={<ResetPasswordPage />} />
         <Route path="verify-email" element={<VerifyEmailPage />} />
         <Route path="account" element={<RequireRole><AccountPage /></RequireRole>} />
+        <Route path="notifications" element={<RequireRole><NotificationsPage /></RequireRole>} />
         <Route path="driver" element={<RequireRole roles={['DRIVER']}><DriverLayout /></RequireRole>}>
           <Route index element={<DriverHomePage />} />
           <Route path="bookings" element={<MyBookingsPage />} />

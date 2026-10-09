@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { currentQuarter, defaultWindow, durationLabel, formatWindow, fromLocalInputValue, nextQuarter, toLocalInputValue } from './time'
+import { currentQuarter, defaultWindow, durationLabel, formatRelativeTime, formatWindow, fromLocalInputValue, nextQuarter, toLocalInputValue } from './time'
 
 describe('time helpers', () => {
   it('rounds up to the next quarter hour', () => {
@@ -55,5 +55,23 @@ describe('time helpers', () => {
     expect(durationLabel(2880)).toBe('2 days')
     expect(durationLabel(45)).toBe('45 minutes')
     expect(durationLabel(90)).toBe('1 hour 30 minutes')
+  })
+})
+
+describe('formatRelativeTime', () => {
+  const now = new Date(2026, 9, 9, 15, 0).getTime()
+  const ago = (ms: number) => new Date(now - ms).toISOString()
+
+  it('reads naturally from seconds to a week', () => {
+    expect(formatRelativeTime(ago(20_000), now)).toBe('Just now')
+    expect(formatRelativeTime(ago(5 * 60_000), now)).toBe('5 min ago')
+    expect(formatRelativeTime(ago(3 * 3_600_000), now)).toBe('3 hr ago')
+    expect(formatRelativeTime(new Date(2026, 9, 8, 23, 0).toISOString(), now)).toBe('Yesterday')
+    expect(formatRelativeTime(new Date(2026, 9, 6, 9, 0).toISOString(), now)).toBe('3 days ago')
+    expect(formatRelativeTime(new Date(2026, 8, 20, 9, 0).toISOString(), now)).toBe('20 Sep 2026')
+  })
+
+  it('never goes negative for a clock slightly ahead', () => {
+    expect(formatRelativeTime(new Date(now + 5_000).toISOString(), now)).toBe('Just now')
   })
 })
