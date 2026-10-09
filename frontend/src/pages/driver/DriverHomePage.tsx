@@ -4,8 +4,9 @@ import { FormError } from '../../components/AuthCard'
 import { Spinner } from '../../components/ui/Spinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useBookings } from '../../lib/bookings'
+import { useDriverStats } from '../../lib/driver'
 import { errorMessage } from '../../lib/errors'
-import { VEHICLE_TYPE_LABELS } from '../../lib/format'
+import { VEHICLE_TYPE_LABELS, formatINR } from '../../lib/format'
 import { formatWindow } from '../../lib/time'
 import { useVehicles } from '../../lib/vehicles'
 
@@ -84,6 +85,55 @@ function VehiclesCard() {
   )
 }
 
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div role="group" aria-label={label} className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <p className="text-sm text-slate-600 dark:text-slate-400">{label}</p>
+      <p className="mt-1 text-2xl font-bold">{value}</p>
+    </div>
+  )
+}
+
+/**
+ * Reviews are waiting. The stats only carry a count, so the link goes to the newest completed booking (its review
+ * card is at `#review`), or to the Past tab when none is in the latest few.
+ */
+function ReviewPrompt({ count }: { count: number }) {
+  const { data } = useBookings('past', 0, 5)
+  const completed = data?.content.find((b) => b.status === 'COMPLETED')
+  return (
+    <section aria-labelledby="review-prompt" className="rounded-2xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900 dark:bg-amber-950/40">
+      <h2 id="review-prompt" className="sr-only">Rate your parking</h2>
+      <p className="font-medium text-amber-900 dark:text-amber-200">
+        {count === 1 ? '1 booking is waiting for your review.' : `${count} bookings are waiting for your review.`}
+      </p>
+      <Link
+        to={completed ? `/driver/bookings/${completed.id}#review` : '/driver/bookings?view=past'}
+        className="mt-2 inline-block text-sm font-semibold text-brand-700 hover:underline dark:text-brand-400"
+      >
+        Rate your parking
+      </Link>
+    </section>
+  )
+}
+
+function StatsSection() {
+  const { data, isPending, error } = useDriverStats()
+  if (isPending && !error) return <Spinner className="h-5 w-5 text-brand-600" />
+  if (!data) return <p className="text-sm text-slate-600 dark:text-slate-400">Your stats are unavailable right now.</p>
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Stat label="Bookings" value={String(data.totalBookings)} />
+        <Stat label="Completed" value={String(data.completedBookings)} />
+        <Stat label="Spent" value={formatINR(data.amountSpent)} />
+        <Stat label="Hours parked" value={String(data.hoursParked)} />
+      </div>
+      {data.pendingReviews > 0 && <ReviewPrompt count={data.pendingReviews} />}
+    </div>
+  )
+}
+
 export function DriverHomePage() {
   const { user } = useAuth()
   if (!user) return null
@@ -95,6 +145,7 @@ export function DriverHomePage() {
           Find parking near your destination and manage your bookings here.
         </p>
       </div>
+      <StatsSection />
       <div className="grid gap-6 md:grid-cols-2">
         <NextBookingCard />
         <VehiclesCard />

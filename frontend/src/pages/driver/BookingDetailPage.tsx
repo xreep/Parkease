@@ -18,6 +18,7 @@ import {
   downloadReceipt,
   useBooking,
   type BookingDetailDto,
+  type BookingEventDto,
 } from '../../lib/bookings'
 import { saveBlob } from '../../lib/download'
 import { errorMessage } from '../../lib/errors'
@@ -45,6 +46,15 @@ function Row({ label, children, className }: { label: string; children: React.Re
       <dd className="min-w-0 break-words text-right font-medium">{children}</dd>
     </div>
   )
+}
+
+/**
+ * A refund is recorded as an event that leaves the status where it was (or says so in its note); showing it under the
+ * status name would read as a second cancellation.
+ */
+function eventLabel(event: BookingEventDto): string {
+  const isRefund = /^refund/i.test(event.note ?? '') || event.fromStatus === event.toStatus
+  return isRefund ? 'Refund' : BOOKING_STATUS_LABELS[event.toStatus]
 }
 
 function SuccessBanner({ booking }: { booking: BookingDetailDto }) {
@@ -282,7 +292,7 @@ function BookingContent({ booking, isNew }: { booking: BookingDetailDto; isNew: 
             <ol aria-label="Booking timeline" className="space-y-3">
               {booking.events.map((event, i) => (
                 <li key={`${event.at}-${i}`} className="border-l-2 border-brand-200 pl-3 dark:border-brand-800">
-                  <p className="font-medium">{`${BOOKING_STATUS_LABELS[event.toStatus]} · ${formatDateTime(event.at)}`}</p>
+                  <p className="font-medium">{`${eventLabel(event)} · ${formatDateTime(event.at)}`}</p>
                   {event.note && <p className="text-slate-600 dark:text-slate-400">{event.note}</p>}
                 </li>
               ))}

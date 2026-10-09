@@ -1,5 +1,6 @@
 import clsx from 'clsx'
-import { BOOKING_STATUS_LABELS, type BookingStatus } from '../../lib/bookings'
+import { BOOKING_STATUS_LABELS, type BookingStatus, type PaymentStatus } from '../../lib/bookings'
+import { PAYMENT_STATUS_LABELS } from '../../lib/driver'
 import { EARNING_STATUS_LABELS, type EarningStatus } from '../../lib/ownerDashboard'
 import { listingStatusLabel, verificationStatusLabel, type ListingStatus, type VerificationStatus } from '../../lib/format'
 
@@ -45,11 +46,20 @@ const earningTone: Record<EarningStatus, keyof typeof tones> = {
   REVERSED: 'slate',
 }
 
+const paymentTone: Record<PaymentStatus, keyof typeof tones> = {
+  CREATED: 'amber',
+  CAPTURED: 'emerald',
+  FAILED: 'red',
+  REFUNDED: 'sky',
+  PARTIALLY_REFUNDED: 'sky',
+}
+
 export type StatusBadgeProps =
   | { kind: 'listing'; status: ListingStatus }
   | { kind: 'verification'; status: VerificationStatus }
   | { kind: 'booking'; status: BookingStatus }
   | { kind: 'earning'; status: EarningStatus }
+  | { kind: 'payment'; status: PaymentStatus }
 
 export function StatusBadge(props: StatusBadgeProps) {
   const label =
@@ -59,7 +69,9 @@ export function StatusBadge(props: StatusBadgeProps) {
         ? verificationStatusLabel(props.status)
         : props.kind === 'earning'
           ? EARNING_STATUS_LABELS[props.status]
-          : BOOKING_STATUS_LABELS[props.status]
+          : props.kind === 'payment'
+            ? PAYMENT_STATUS_LABELS[props.status]
+            : BOOKING_STATUS_LABELS[props.status]
   const tone =
     props.kind === 'listing'
       ? listingTone[props.status]
@@ -67,7 +79,9 @@ export function StatusBadge(props: StatusBadgeProps) {
         ? verificationTone[props.status]
         : props.kind === 'earning'
           ? earningTone[props.status]
-          : bookingTone[props.status]
+          : props.kind === 'payment'
+            ? paymentTone[props.status]
+            : bookingTone[props.status]
   return (
     <span className={clsx('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold', tones[tone])}>
       {label}
