@@ -13,7 +13,7 @@ A web platform where private parking owners rent out unused slots and drivers fi
 | 1 | Scaffold, auth (register/login/refresh/verify/reset), profile, all-India states & cities | ✅ |
 | 2 | Owner verification, listings wizard, slots, opening hours, blocked times, photo/document uploads, admin approval queues, demo listings in every state | ✅ |
 | 3 | Parking search with map and filters, availability + live price quotes, public listing pages, city pages | ✅ |
-| 4 | Booking, pricing, Razorpay payments, invoices | ⏳ |
+| 4 | Booking, pricing, Razorpay payments, invoices | ✅ |
 | 5 | Lifecycle jobs, cancellations/refunds, notifications | ⏳ |
 | 6 | Owner dashboard, earnings, reviews | ⏳ |
 | 7 | Admin panel, reports, disputes, payouts | ⏳ |
@@ -80,7 +80,23 @@ With both servers running, open http://localhost:5173 and search for a place, fo
 - open a listing to see photos, opening hours, rules and the cancellation policy, and a live price quote (parking + platform fee + GST) for your times;
 - browse a state, pick a city (`/in/<state>/<city>`) to see the parking listed around it.
 
-Reserve signs you in; booking itself arrives in Phase 4.
+Reserve signs you in. To book, add a vehicle under **My parking → Vehicles** (or while reserving), pick your times on a listing and press Reserve: the slot is held for 10 minutes while you pay. Afterwards:
+
+- **Drivers** get a booking page with a QR code to show at the entrance (`/driver/bookings`), a downloadable PDF receipt, and a status timeline. Listings that need approval show "Waiting for owner" until the owner responds; if they don't, the driver is refunded in full.
+- **Owners** see requests under **Owner dashboard → Bookings**, where they can approve or decline (with a reason), and see upcoming and past bookings with what they earn.
+
+### Payments
+
+Payments use a **mock provider by default**: checkout shows a "test payment" dialog, so no keys or accounts are needed. To try real Razorpay checkout in test mode, create a free Razorpay account, switch the dashboard to **Test mode**, generate API keys, and add them to `backend/.env` (never commit it; see [`backend/.env.example`](backend/.env.example)):
+
+```bash
+RAZORPAY_KEY_ID=rzp_test_xxxxxxxx
+RAZORPAY_KEY_SECRET=xxxxxxxx
+```
+
+With both set, the backend switches to Razorpay automatically; remove them to go back to the mock provider. In test mode use card `4111 1111 1111 1111` with any future expiry and any CVV, or test UPI ID `success@razorpay`.
+
+`RAZORPAY_WEBHOOK_SECRET` is only needed for webhooks. Razorpay has to reach your server, so webhooks need a public URL; that comes with deployment in Phase 8. Until then payments are confirmed when the browser verifies the payment after checkout.
 
 ### Uploads
 
