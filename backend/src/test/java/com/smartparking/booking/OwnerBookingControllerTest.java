@@ -229,6 +229,7 @@ class OwnerBookingControllerTest {
         assertThat(jdbc.queryForObject("select status from payments where booking_id = ?", String.class, id))
                 .isEqualTo("REFUNDED");
         assertThat(earnings.findByBookingId(id).orElseThrow().getStatus()).isEqualTo(EarningStatus.REVERSED);
+        assertThat(earnings.findByBookingId(id).orElseThrow().getNet()).isEqualByComparingTo("0.00");
         assertThat(emails.sentTo(DRIVER_EMAIL)).extracting(EmailMessage::subject)
                 .containsExactly("Booking request declined – ParkEase");
         assertThat(emails.lastTo(DRIVER_EMAIL).textBody())

@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom/vitest'
+import { configure } from '@testing-library/react'
 
 import { isAxiosError } from 'axios'
 import MockAdapter from 'axios-mock-adapter'
@@ -19,3 +20,8 @@ MockAdapter.prototype.adapter = function adapter(this: MockAdapter) {
     }
   }
 }
+
+// findBy*/waitFor give up after one second by default, which a loaded machine (a parallel run, a busy laptop) can
+// exceed for pages that fetch several things. Four seconds only changes tests that would otherwise fail; the
+// per-test limit (testTimeout) is set in vite.config.ts and stays well above this.
+configure({ asyncUtilTimeout: 4000 })

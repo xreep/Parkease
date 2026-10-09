@@ -1,9 +1,10 @@
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
-import { isAxiosError } from 'axios'
 import { useCallback } from 'react'
 import { api } from './api'
+import { blobProblem } from './download'
 import { invalidateNotifications } from './notifications'
 import type { CancellationPolicy, Page, VehicleType } from './owner'
+import type { ReviewDto } from './reviews'
 import type { PricingMode } from './search'
 
 export type BookingStatus =
@@ -75,6 +76,9 @@ export type BookingDetailDto = BookingSummaryDto & {
   autoApprove: boolean
   ownerFirstName: string
   events: BookingEventDto[]
+  /** The driver can review it now (completed, not yet reviewed). */
+  reviewable: boolean
+  review: ReviewDto | null
 }
 
 /**
@@ -120,7 +124,7 @@ export type CheckoutDto = { booking: BookingDetailDto; payment: CheckoutPayment 
 export type BookingRequest = { listingId: number; vehicleId: number; start: string; end: string }
 export type VerifyBody = { bookingId: number; orderId: string; paymentId: string; signature: string }
 export type MockPayResponse = { orderId: string; paymentId: string; signature: string }
-export type BookingView = 'upcoming' | 'past'
+export type BookingView = 'upcoming' | 'active' | 'past' | 'cancelled' | 'all'
 
 export const createBooking = async (body: BookingRequest) => (await api.post<CheckoutDto>('/bookings', body)).data
 export const getCheckout = async (id: number | string) => (await api.get<CheckoutDto>(`/bookings/${id}/checkout`)).data
@@ -157,16 +161,7 @@ export async function downloadReceipt(id: number | string): Promise<Blob> {
   try {
     return (await api.get<Blob>(`/bookings/${id}/receipt`, { responseType: 'blob' })).data
   } catch (error) {
-    const body = isAxiosError(error) ? error.response?.data : undefined
-    if (body instanceof Blob) {
-      try {
-        const detail = (JSON.parse(await body.text()) as { detail?: unknown }).detail
-        if (typeof detail === 'string' && detail) throw new Error(detail)
-      } catch (parsed) {
-        if (parsed instanceof Error && !(parsed instanceof SyntaxError)) throw parsed
-      }
-    }
-    throw error
+    throw await blobProblem(error)
   }
 }
 export const verifyPayment = async (body: VerifyBody) => (await api.post<BookingDetailDto>('/payments/verify', body)).data
@@ -175,12 +170,12 @@ export const mockPay = async (bookingId: number) =>
 
 /**
  * Refetches everything a booking or a status change can affect: the driver's lists and details,
- * and the availability shown by quotes and search results. Checkouts are left alone: one is fixed
+ * the driver's payments and stats, and the availability shown by quotes and search results. Checkouts are left alone: one is fixed
  * until it is paid or expires, and refetching it right after paying would only fail.
  */
 export function invalidateBookingQueries(queryClient: QueryClient) {
   return Promise.all([
-    ...['bookings', 'booking', 'quote', 'search'].map((key) => queryClient.invalidateQueries({ queryKey: [key] })),
+    ...['bookings', 'booking', 'quote', 'search', 'availability', 'driver'].map((key) => queryClient.invalidateQueries({ queryKey: [key] })),
     // Booking changes (a cancellation, an approval) leave a notification behind.
     invalidateNotifications(queryClient),
   ]).then(() => undefined)
@@ -200,7 +195,11 @@ export function useOwnerBookings(view: OwnerBookingView, page = 0, size = 20) {
 }
 
 export function invalidateOwnerBookings(queryClient: QueryClient) {
-  return queryClient.invalidateQueries({ queryKey: ['owner', 'bookings'] })
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['owner', 'bookings'] }),
+    // A decision also changes the dashboard figures, the earnings ledger and the slot calendar.
+    ...['stats', 'earnings', 'calendar'].map((key) => queryClient.invalidateQueries({ queryKey: ['owner', key] })),
+  ]).then(() => undefined)
 }
 
 /** Statuses that change without the driver doing anything (payment confirming, the owner replying). */

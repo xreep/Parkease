@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../lib/api'
 import type { OwnerBookingDto } from '../../lib/bookings'
 import { formatDateTime } from '../../lib/format'
+import { formatWindow } from '../../lib/time'
 import { tokenStore } from '../../lib/tokenStore'
 import { renderApp } from '../../test/renderApp'
 
@@ -104,7 +105,7 @@ describe('owner bookings', () => {
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Booking approved'))
     expect(mock.history.post.map((r) => r.url)).toEqual(['/owner/bookings/5/approve'])
     // The driver's booking, lists and the availability shown by quotes and search change too.
-    await waitFor(() => expect(invalidatedKeys(invalidate)).toEqual(expect.arrayContaining(['owner', 'bookings', 'booking', 'quote', 'search'])))
+    await waitFor(() => expect(invalidatedKeys(invalidate)).toEqual(expect.arrayContaining(['owner', 'bookings', 'booking', 'quote', 'search', 'availability'])))
     // The list is refetched after the decision.
     await waitFor(() => expect(listCalls().length).toBeGreaterThan(1))
   })
@@ -145,6 +146,18 @@ describe('owner bookings', () => {
     expect(toast.success).not.toHaveBeenCalled()
     await waitFor(() => expect(invalidatedKeys(invalidate)).toEqual(expect.arrayContaining(['owner', 'bookings', 'booking'])))
     await waitFor(() => expect(listCalls().length).toBeGreaterThan(1))
+  })
+
+  it('shows the booking being declined in the dialog', async () => {
+    mock.onGet('/owner/bookings').reply(200, page([ownerBooking()]))
+    const user = userEvent.setup()
+    renderApp('/owner/bookings')
+
+    await user.click(await screen.findByRole('button', { name: 'Decline' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Decline this booking?' })
+
+    expect(within(dialog).getByText('PE-REQ001')).toBeInTheDocument()
+    expect(within(dialog).getByText(/Rahul/)).toBeInTheDocument()
   })
 
   it('requires a reason to decline', async () => {
@@ -191,6 +204,19 @@ describe('owner bookings', () => {
       expect(within(await screen.findByRole('article', { name: 'PE-UP0001' })).getByRole('button', { name: 'Cancel booking' })).toBeInTheDocument()
       expect(within(screen.getByRole('article', { name: 'PE-ACT001' })).queryByRole('button', { name: 'Cancel booking' })).not.toBeInTheDocument()
       expect(within(screen.getByRole('article', { name: 'PE-GONE01' })).queryByRole('button', { name: 'Cancel booking' })).not.toBeInTheDocument()
+    })
+
+    it('says which booking is being cancelled: its code, the driver and the time', async () => {
+      mock.onGet('/owner/bookings', { params: { view: 'upcoming', page: 0, size: 20 } }).reply(200, page([upcoming()]))
+      const user = userEvent.setup()
+      renderApp('/owner/bookings')
+
+      const dialog = await openUpcoming(user)
+
+      expect(within(dialog).getByText('PE-UP0001')).toBeInTheDocument()
+      expect(within(dialog).getByText(/Rahul/)).toBeInTheDocument()
+      const { startTime, endTime } = upcoming()
+      expect(within(dialog).getByText(formatWindow(startTime, endTime))).toBeInTheDocument()
     })
 
     it('requires a reason, then cancels and refreshes', async () => {

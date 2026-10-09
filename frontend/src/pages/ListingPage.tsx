@@ -1,8 +1,11 @@
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ExternalLink } from 'lucide-react'
+import { AvailabilityCalendar } from '../components/listing/AvailabilityCalendar'
 import { BookingCard } from '../components/listing/BookingCard'
 import { PhotoGallery } from '../components/listing/PhotoGallery'
 import { LocationPicker } from '../components/owner/LocationPicker'
+import { ListingReviews } from '../components/reviews/ListingReviews'
 import { Spinner } from '../components/ui/Spinner'
 import { toProblem } from '../lib/errors'
 import {
@@ -13,7 +16,9 @@ import {
   formatAddress,
   LISTING_TYPE_LABELS,
 } from '../lib/format'
+import { windowForDay } from '../lib/availability'
 import { usePublicListing, type PublicListingDto } from '../lib/search'
+import { toLocalInputValue } from '../lib/time'
 import { NotFoundPage } from './NotFoundPage'
 
 const noop = () => undefined
@@ -68,6 +73,7 @@ function HoursSection({ listing }: { listing: PublicListingDto }) {
 
 function ListingView({ id }: { id: string }) {
   const { data: listing, isPending, error } = usePublicListing(id)
+  const [requested, setRequested] = useState<{ start: string; end: string } | null>(null)
 
   if (isPending && !error) {
     return (
@@ -122,6 +128,13 @@ function ListingView({ id }: { id: string }) {
 
           <SlotsSection summary={listing.slotSummary} />
           <HoursSection listing={listing} />
+          <AvailabilityCalendar
+            listingId={listing.id}
+            onPick={(day) => {
+              const { start, end } = windowForDay(day)
+              setRequested({ start: toLocalInputValue(start), end: toLocalInputValue(end) })
+            }}
+          />
 
           {listing.amenities.length > 0 && (
             <Section title="Amenities">
@@ -154,6 +167,8 @@ function ListingView({ id }: { id: string }) {
             </p>
           </Section>
 
+          <ListingReviews listingId={listing.id} />
+
           <p className="text-sm text-slate-600 dark:text-slate-400">{`Hosted by ${listing.ownerFirstName}`}</p>
           <Link to="/search" className="inline-block text-sm font-medium text-brand-700 hover:underline dark:text-brand-400">
             Search for more parking
@@ -161,7 +176,7 @@ function ListingView({ id }: { id: string }) {
         </div>
 
         <aside className="lg:sticky lg:top-20">
-          <BookingCard listing={listing} />
+          <BookingCard listing={listing} requested={requested} />
         </aside>
       </div>
     </div>

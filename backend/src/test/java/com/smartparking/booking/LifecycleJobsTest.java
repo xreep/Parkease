@@ -197,7 +197,7 @@ class LifecycleJobsTest {
                 "select n.title, n.body, n.link from notifications n join users u on u.id = n.user_id "
                         + "where u.email = ? and n.type = 'BOOKING_COMPLETED'", DRIVER_EMAIL);
         assertThat((String) notification.get("body")).contains("Thanks for parking with ParkEase");
-        assertThat(notification.get("link")).isEqualTo("/driver/bookings/" + id);
+        assertThat(notification.get("link")).isEqualTo("/driver/bookings/" + id + "#review");
 
         jobs.advanceLifecycle(); // idempotent
         assertThat(notificationCount(DRIVER_EMAIL, "BOOKING_COMPLETED")).isEqualTo(1);
@@ -219,7 +219,7 @@ class LifecycleJobsTest {
         assertThat(booking(recent)).containsEntry("status", "COMPLETED");
         assertThat(earnings.findByBookingId(old).orElseThrow().getStatus()).isEqualTo(EarningStatus.PENDING_PAYOUT);
         assertThat(jdbc.queryForList("select n.link from notifications n where n.type = 'BOOKING_COMPLETED'",
-                String.class)).containsExactly("/driver/bookings/" + recent);
+                String.class)).containsExactly("/driver/bookings/" + recent + "#review");
     }
 
     @Test

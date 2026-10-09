@@ -15,7 +15,7 @@ A web platform where private parking owners rent out unused slots and drivers fi
 | 3 | Parking search with map and filters, availability + live price quotes, public listing pages, city pages | ✅ |
 | 4 | Booking, pricing, Razorpay payments, invoices | ✅ |
 | 5 | Booking lifecycle (active → completed), cancellations with policy refunds, in-app notifications, reminders | ✅ |
-| 6 | Owner dashboard, earnings, reviews | ⏳ |
+| 6 | Owner dashboard, earnings, reviews, driver payments and stats | ✅ |
 | 7 | Admin panel, reports, disputes, payouts | ⏳ |
 | 8 | Full seed data, polish, deployment | ⏳ |
 
@@ -91,6 +91,13 @@ Reserve signs you in. To book, add a vehicle under **My parking → Vehicles** (
 - **Driver cancellations:** open a booking and press **Cancel booking**. The dialog shows what you get back before you confirm. An unpaid booking costs nothing, and a request the owner has not accepted yet is refunded in full. A confirmed booking follows the listing's cancellation policy (below); when a driver cancels a confirmed booking, the platform fee and GST are not refunded. Bookings that have started cannot be cancelled.
 - **Owner cancellations:** under **Owner dashboard → Bookings → Upcoming**, an owner can cancel a confirmed booking that has not started. A reason is required (it is sent to the driver) and the driver is refunded in full.
 - **Notifications:** the bell in the navigation bar shows unread notifications for every signed-in user (drivers, owners and admins); open it for the latest ten, or go to `/notifications` for the full list. Each important event also sends an email.
+
+### Try it: reviews, dashboards and earnings (Phase 6)
+
+- **Reviews and replies:** after a booking completes, the driver sees **Rate your parking** on the booking page (1 to 5 stars and an optional comment). Reviews show on the listing page with a rating summary, a distribution chart and "Show more". Owners reply once per review under **Owner dashboard → Reviews**, which can be filtered by listing.
+- **Availability calendar:** listing pages show a month calendar (today to 90 days ahead) with Available / Limited / Full / Closed days; picking a day fills the booking card.
+- **Owner dashboard:** **Overview** has a 7 / 30 / 90 day range, key figures (earnings, bookings, occupancy, rating, pending approvals), held / pending payout / paid balances, earnings and bookings charts and the next bookings. **Earnings** is the ledger with status and date filters and a **Download CSV** export. **Calendar** is a week grid of slots by day with bookings and blocked times (IST).
+- **Driver pages:** **Bookings** has Upcoming / Active / Past / Cancelled tabs (the tab is in the URL), **Payments** lists payments, refunds and receipts, and the **Overview** shows booking, spend and parking-hours stats with a prompt for bookings still waiting for a review.
 
 #### Cancellation policy
 

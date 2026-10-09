@@ -88,6 +88,16 @@ public class OwnerBookingService {
         return PageResponse.from(result.map(b -> toDto(b, nets.get(b.getId()))));
     }
 
+    /** The next {@code limit} paid bookings (confirmed or awaiting the owner's answer) that have not started yet. */
+    @Transactional(readOnly = true)
+    public List<OwnerBookingDto> nextUpcoming(Long ownerId, int limit) {
+        List<Booking> result = bookings.findByListingOwnerIdAndStatusInAndStartTimeAfter(ownerId,
+                List.of(BookingStatus.CONFIRMED, BookingStatus.AWAITING_APPROVAL), clock.instant(),
+                PageRequest.of(0, limit, Sort.by("startTime", "id")));
+        Map<Long, BigDecimal> nets = ownerNets(result.stream().map(Booking::getId).toList());
+        return result.stream().map(b -> toDto(b, nets.get(b.getId()))).toList();
+    }
+
     private enum View { REQUESTS, UPCOMING, PAST }
 
     private static View parseView(String view) {

@@ -298,3 +298,13 @@ Install Java 21 and PostgreSQL 16 (Homebrew). Optional accounts/keys: Razorpay (
 - **Owner cancellation** of a `CONFIRMED` booking before start: reason required, driver refunded the full total, earning reversed.
 - **Partial refunds:** refunds carry an amount ≤ remaining refundable; payment becomes `PARTIALLY_REFUNDED` or `REFUNDED`; `booking.refundAmount` = sum of non-failed refunds; owner earning `net` = base − refunded base (status `REVERSED` when net reaches 0).
 - **Reminders:** driver reminder ~1 hour before start (once, `reminder_sent_at`); owner nudge 30 minutes before an approval deadline (once).
+
+## 21. Phase 6 Decisions (approved 2026-10-09)
+
+- **Reviews:** one review per `COMPLETED` booking, written by its driver within 30 days of the booking end; rating 1–5 (integer), optional comment ≤ 1000 chars. Reviews are immutable once posted. The listing owner may post **one** public reply (≤ 500 chars). Listing `avg_rating` (1 decimal, HALF_UP) and `review_count` are recomputed in the same transaction. Public list shows the reviewer as first name + last initial. Owner gets `OWNER_NEW_REVIEW`; the completion notification links to the review form. Admin moderation (hiding) is Phase 7.
+- **Availability calendar (public):** `GET /listings/{id}/availability?from&to` (IST dates, ≤ 31 days, within today … today + 90). Per day: `CLOSED` (not open), otherwise the share of open slot-minutes taken by live bookings and blocks → `AVAILABLE` (< 60%), `LIMITED` (60% – < 98%), `FULL` (≥ 98%). Indicative only; the quote at booking time stays authoritative.
+- **Owner dashboard:** `GET /owner/stats?from&to` (IST dates; default last 30 days; ≤ 366 days) with KPI totals, a daily series (earnings, bookings) and pending approvals / next upcoming bookings. Occupancy = booked slot-minutes (CONFIRMED/ACTIVE/COMPLETED) ÷ open slot-minutes of the owner's APPROVED listings in the range. Earnings are attributed to the booking's start date; `REVERSED` earnings count as 0.
+- **Owner earnings:** `GET /owner/earnings?status&from&to&page&size` (+ `format=csv`) with totals per status. Reversing an earning sets its `net` to 0 (existing reversed rows are fixed by migration).
+- **Owner calendar:** `GET /owner/calendar?listingId&from&to` (≤ 14 days): slots, live bookings and blocks for a week grid.
+- **Driver pages:** bookings tabs Upcoming / Active / Past / Cancelled (`view=upcoming|active|past|cancelled`); `GET /me/payments` (payments & receipts); `GET /me/stats` (bookings, amount spent net of refunds, hours parked, reviews pending).
+- **Charts:** small in-house SVG components (no chart library).

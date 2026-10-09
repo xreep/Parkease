@@ -1,12 +1,25 @@
 import { describe, expect, it } from 'vitest'
-import { CANCELLATION_POLICIES, REFUND_NOTE, formatAddress, formatINR, listingStatusLabel, verificationStatusLabel } from './format'
+import { CANCELLATION_POLICIES, REFUND_NOTE, formatAddress, formatCompactINR, formatINR, listingStatusLabel, verificationStatusLabel } from './format'
 
 describe('format helpers', () => {
   it('formats rupees', () => {
     expect(formatINR(30)).toBe('₹30')
-    expect(formatINR(1250.5)).toMatch(/^₹1,250\.50?$/)
-    expect(formatINR('99.5')).toMatch(/^₹99\.50?$/)
+    expect(formatINR(1250.5)).toBe('₹1,250.50')
+    expect(formatINR('99.5')).toBe('₹99.50')
+    expect(formatINR(610.8)).toBe('₹610.80')
+    expect(formatINR('2.16')).toBe('₹2.16')
     expect(formatINR(null)).toBe('—')
+  })
+
+  it('formats rupees compactly for chart axes, in the Indian system', () => {
+    expect(formatCompactINR(0)).toBe('₹0')
+    expect(formatCompactINR(500)).toBe('₹500')
+    expect(formatCompactINR(2000)).toBe('₹2k')
+    expect(formatCompactINR(50000)).toBe('₹50k')
+    expect(formatCompactINR(100000)).toBe('₹1L')
+    expect(formatCompactINR(250000)).toBe('₹2.5L')
+    expect(formatCompactINR(10000000)).toBe('₹1Cr')
+    expect(formatCompactINR(25000000)).toBe('₹2.5Cr')
   })
 
   it('labels statuses', () => {
@@ -29,5 +42,14 @@ describe('format helpers', () => {
       '50% refund up to 48 hours before start, none after',
     ])
     expect(REFUND_NOTE).toBe("Refunds apply to the parking charge; platform fee and GST aren't refunded on driver cancellations.")
+  })
+})
+
+describe('ratingText', () => {
+  it('always shows one decimal so ratings read the same everywhere', async () => {
+    const { ratingText } = await import('./reviews')
+    expect(ratingText(4)).toBe('4.0')
+    expect(ratingText(4.25)).toBe('4.3')
+    expect(ratingText(4.6)).toBe('4.6')
   })
 })

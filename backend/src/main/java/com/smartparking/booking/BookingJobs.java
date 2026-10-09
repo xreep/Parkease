@@ -240,7 +240,7 @@ public class BookingJobs {
         if (booking.getEndTime().isBefore(now.minus(STALE_COMPLETION))) {
             return true; // history swept up long after the fact (a first deploy): complete it, but don't announce it
         }
-        String path = BookingPaths.driver(booking);
+        String path = BookingPaths.driver(booking) + "#review"; // opens the review form
         notifier.notify(booking.getDriver(), NotificationType.BOOKING_COMPLETED, "Booking completed",
                 "Thanks for parking with ParkEase. Your booking " + booking.getBookingCode() + " at "
                         + booking.getListing().getTitle() + " is complete.", path, null);

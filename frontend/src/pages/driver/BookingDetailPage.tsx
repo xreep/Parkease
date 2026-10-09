@@ -1,11 +1,15 @@
 import clsx from 'clsx'
 import { Check, Copy, Download, ExternalLink } from 'lucide-react'
-import { useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { FormError } from '../../components/AuthCard'
 import { BookingQr } from '../../components/booking/BookingQr'
 import { CancelBookingDialog } from '../../components/booking/CancelBookingDialog'
+import { OwnerReply } from '../../components/reviews/ReviewCard'
+import { ReviewForm } from '../../components/reviews/ReviewForm'
+import { Stars } from '../../components/reviews/Stars'
 import { Button } from '../../components/ui/Button'
 import { Spinner } from '../../components/ui/Spinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -14,9 +18,12 @@ import {
   downloadReceipt,
   useBooking,
   type BookingDetailDto,
+  type BookingEventDto,
 } from '../../lib/bookings'
+import { saveBlob } from '../../lib/download'
 import { errorMessage } from '../../lib/errors'
 import { VEHICLE_TYPE_LABELS, formatDateTime, formatINR } from '../../lib/format'
+import { invalidateReviewQueries, type ReviewDto } from '../../lib/reviews'
 import { useNow } from '../../lib/useNow'
 import { durationLabel, formatWindow } from '../../lib/time'
 
@@ -39,6 +46,16 @@ function Row({ label, children, className }: { label: string; children: React.Re
       <dd className="min-w-0 break-words text-right font-medium">{children}</dd>
     </div>
   )
+}
+
+/**
+ * A refund is recorded as an event that leaves the status where it was, with a note that starts with "Refund";
+ * showing it under the status name would read as a second cancellation. Both must hold: a cancellation whose reason
+ * happens to start with "Refund" is still a cancellation.
+ */
+function eventLabel(event: BookingEventDto): string {
+  const isRefund = event.fromStatus === event.toStatus && (event.note ?? '').startsWith('Refund')
+  return isRefund ? 'Refund' : BOOKING_STATUS_LABELS[event.toStatus]
 }
 
 function SuccessBanner({ booking }: { booking: BookingDetailDto }) {
@@ -112,15 +129,7 @@ function ReceiptButton({ booking }: { booking: BookingDetailDto }) {
     setError(null)
     try {
       const blob = await downloadReceipt(booking.id)
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `ParkEase-${booking.invoiceNumber}.pdf`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      // Revoking right away can cancel the download in some browsers, so give it a moment.
-      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      saveBlob(blob, `ParkEase-${booking.invoiceNumber}.pdf`)
     } catch (e) {
       setError(errorMessage(e))
     } finally {
@@ -136,6 +145,57 @@ function ReceiptButton({ booking }: { booking: BookingDetailDto }) {
         Download receipt
       </Button>
     </div>
+  )
+}
+
+/**
+ * Rate a completed booking, or read the review that was left. `id="review"` is the target of `#review` links (the
+ * "review your parking" notification), which scroll here.
+ */
+function ReviewPanel({ booking }: { booking: BookingDetailDto }) {
+  const queryClient = useQueryClient()
+  const { hash } = useLocation()
+  // What was just posted shows at once; the refetch that follows then agrees with it.
+  const [posted, setPosted] = useState<ReviewDto | null>(null)
+  const review = posted ?? booking.review
+  const show = review !== null || booking.reviewable
+
+  useEffect(() => {
+    if (hash === '#review' && show) document.getElementById('review')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+  }, [hash, show])
+
+  if (!show) return null
+  const title = review ? 'Your review' : 'Rate your parking'
+  return (
+    <section
+      id="review"
+      aria-labelledby="review-heading"
+      className="scroll-mt-24 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900"
+    >
+      <h3 id="review-heading" className="text-base font-semibold">{title}</h3>
+      <div className="mt-3 text-sm">
+        {review ? (
+          <div className="space-y-2">
+            <Stars value={review.rating} />
+            {review.comment ? (
+              <p className="whitespace-pre-line break-words">{review.comment}</p>
+            ) : (
+              <p className="text-slate-500">No comment</p>
+            )}
+            <OwnerReply review={review} />
+          </div>
+        ) : (
+          <ReviewForm
+            bookingId={booking.id}
+            onPosted={(r) => {
+              setPosted(r)
+              void invalidateReviewQueries(queryClient)
+            }}
+            onStale={() => void invalidateReviewQueries(queryClient)}
+          />
+        )}
+      </div>
+    </section>
   )
 }
 
@@ -228,11 +288,12 @@ function BookingContent({ booking, isNew }: { booking: BookingDetailDto; isNew: 
 
         <div className="min-w-0 space-y-6">
           {showQr && <BookingQr bookingCode={booking.bookingCode} />}
+          <ReviewPanel booking={booking} />
           <Panel title="Timeline">
             <ol aria-label="Booking timeline" className="space-y-3">
               {booking.events.map((event, i) => (
                 <li key={`${event.at}-${i}`} className="border-l-2 border-brand-200 pl-3 dark:border-brand-800">
-                  <p className="font-medium">{`${BOOKING_STATUS_LABELS[event.toStatus]} · ${formatDateTime(event.at)}`}</p>
+                  <p className="font-medium">{`${eventLabel(event)} · ${formatDateTime(event.at)}`}</p>
                   {event.note && <p className="text-slate-600 dark:text-slate-400">{event.note}</p>}
                 </li>
               ))}

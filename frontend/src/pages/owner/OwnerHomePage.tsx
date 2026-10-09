@@ -1,11 +1,20 @@
+import clsx from 'clsx'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthProvider'
 import { FormError } from '../../components/AuthCard'
+import { BarChart } from '../../components/charts/BarChart'
+import { LineChart } from '../../components/charts/LineChart'
+import { Select } from '../../components/ui/Select'
 import { Spinner } from '../../components/ui/Spinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useOwnerBookings } from '../../lib/bookings'
 import { errorMessage } from '../../lib/errors'
+import { VEHICLE_TYPE_LABELS, formatCompactINR, formatINR } from '../../lib/format'
 import { useMyListings, useOwnerProfile, type OwnerProfile } from '../../lib/owner'
+import { STATS_RANGES, useOwnerStats, type OwnerStatsDto, type StatsRange } from '../../lib/ownerDashboard'
+import { ratingText } from '../../lib/reviews'
+import { formatShortDate, formatWindow } from '../../lib/time'
 
 const primaryLink =
   'inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700'
@@ -101,9 +110,146 @@ function RequestsCard() {
   )
 }
 
+function Kpi({ label, value, note, children }: { label: string; value: string; note?: string; children?: React.ReactNode }) {
+  return (
+    <div role="group" aria-label={label} className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <p className="text-sm text-slate-600 dark:text-slate-400">{label}</p>
+      <p className="mt-1 text-2xl font-bold">{value}</p>
+      {note && <p className="text-xs text-slate-500">{note}</p>}
+      {children}
+    </div>
+  )
+}
+
+function Balance({ label, value }: { label: string; value: number }) {
+  return (
+    <div role="group" aria-label={label}>
+      <p className="text-sm text-slate-600 dark:text-slate-400">{label}</p>
+      <p className="text-xl font-semibold">{formatINR(value)}</p>
+    </div>
+  )
+}
+
+function StatsView({ stats }: { stats: OwnerStatsDto }) {
+  const { totals, balances } = stats
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <Kpi label="Earnings" value={formatINR(totals.earningsNet)} note="After commission" />
+        <Kpi label="Bookings" value={String(totals.bookings)} note={totals.cancellations > 0 ? `${totals.cancellations} cancelled` : undefined} />
+        <Kpi label="Occupancy" value={`${totals.occupancyPercent}%`} />
+        <Kpi
+          label="Rating"
+          value={totals.reviewCount > 0 ? ratingText(totals.avgRating) : '—'}
+          note={`${totals.reviewCount} ${totals.reviewCount === 1 ? 'review' : 'reviews'}`}
+        />
+        <Kpi label="Pending approvals" value={String(stats.pendingApprovals)}>
+          {stats.pendingApprovals > 0 && (
+            <Link to="/owner/bookings" className="mt-1 inline-block text-sm font-medium text-brand-700 hover:underline dark:text-brand-400">
+              Review approvals
+            </Link>
+          )}
+        </Kpi>
+      </div>
+
+      <section aria-labelledby="balances-heading" className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h3 id="balances-heading" className="font-semibold">Balances</h3>
+          <Link to="/owner/earnings" className="text-sm font-medium text-brand-700 hover:underline dark:text-brand-400">See all earnings</Link>
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Balance label="Held" value={balances.held} />
+          <Balance label="Pending payout" value={balances.pendingPayout} />
+          <Balance label="Paid" value={balances.paid} />
+        </div>
+      </section>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section className="space-y-2">
+          <h3 className="font-semibold">Earnings</h3>
+          <BarChart
+            title="Earnings per day"
+            points={stats.series.map((d) => ({ label: formatShortDate(d.date), value: d.earningsNet }))}
+            formatValue={formatINR}
+            formatAxis={formatCompactINR}
+          />
+        </section>
+        <section className="space-y-2">
+          <h3 className="font-semibold">Bookings</h3>
+          <LineChart
+            title="Bookings per day"
+            points={stats.series.map((d) => ({ label: formatShortDate(d.date), value: d.bookings }))}
+            formatValue={(n) => String(n)}
+          />
+        </section>
+      </div>
+
+      <section className="space-y-2">
+        <h3 className="font-semibold">Upcoming bookings</h3>
+        {stats.upcoming.length === 0 ? (
+          <p className="text-sm text-slate-600 dark:text-slate-400">No upcoming bookings.</p>
+        ) : (
+          <ul aria-label="Upcoming bookings" className="divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
+            {stats.upcoming.map((b) => (
+              <li key={b.id} className="flex flex-wrap items-start justify-between gap-2 p-4 text-sm">
+                <div className="min-w-0 space-y-0.5">
+                  <p className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono font-semibold">{b.bookingCode}</span>
+                    <StatusBadge kind="booking" status={b.status} />
+                  </p>
+                  <p className="break-words font-medium">{b.listingTitle}</p>
+                  <p className="text-slate-600 dark:text-slate-400">{`${formatWindow(b.startTime, b.endTime)} · Slot ${b.slotLabel}`}</p>
+                  <p className="text-slate-600 dark:text-slate-400">{`${b.driverFirstName} · ${VEHICLE_TYPE_LABELS[b.vehicleType]}`}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  )
+}
+
+function Overview() {
+  const [days, setDays] = useState<StatsRange>(30)
+  const { data, error, isPending, isPlaceholderData } = useOwnerStats(days)
+  return (
+    <section aria-label="Overview" className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <h3 className="text-lg font-semibold">Your numbers</h3>
+        <Select
+          label="Range"
+          value={days}
+          onChange={(e) => setDays(Number(e.target.value) as StatsRange)}
+        >
+          {STATS_RANGES.map((n) => (
+            <option key={n} value={n}>{`Last ${n} days`}</option>
+          ))}
+        </Select>
+      </div>
+      {isPending && !error ? (
+        <div className="flex justify-center py-12">
+          <Spinner className="h-8 w-8 text-brand-600" />
+        </div>
+      ) : error && !data ? (
+        <FormError message={errorMessage(error)} />
+      ) : data ? (
+        <div className={clsx('transition-opacity', isPlaceholderData && 'opacity-60')} aria-busy={isPlaceholderData}>
+          <StatsView stats={data} />
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
 export function OwnerHomePage() {
   const { user } = useAuth()
+  const profile = useOwnerProfile()
   if (!user) return null
+  // Until verified, the prompt leads the page; afterwards it is one card among the rest. It waits for the profile, so
+  // it never appears in one place and then moves.
+  const profileKnown = !profile.isPending
+  const needsVerification = profile.data !== undefined && profile.data.verificationStatus !== 'VERIFIED'
   return (
     <div className="space-y-6">
       <div>
@@ -112,8 +258,10 @@ export function OwnerHomePage() {
           Manage your spaces, prices and availability as a parking owner.
         </p>
       </div>
+      {needsVerification && <VerificationCard />}
+      <Overview />
       <div className="grid gap-6 md:grid-cols-2">
-        <VerificationCard />
+        {profileKnown && !needsVerification && <VerificationCard />}
         <ListingsCard />
         <RequestsCard />
       </div>
