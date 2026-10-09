@@ -4,6 +4,7 @@ import { Tabs } from '../../components/ui/Tabs'
 const tabs = [
   { to: '/owner', label: 'Overview', end: true },
   { to: '/owner/listings', label: 'Listings' },
+  { to: '/owner/bookings', label: 'Bookings' },
   { to: '/owner/verification', label: 'Verification' },
 ]
 

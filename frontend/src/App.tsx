@@ -27,6 +27,7 @@ import { OwnerQueuePage } from './pages/admin/OwnerQueuePage'
 import { ListingBlocksPage } from './pages/owner/ListingBlocksPage'
 import { ListingWizardPage } from './pages/owner/ListingWizardPage'
 import { MyListingsPage } from './pages/owner/MyListingsPage'
+import { OwnerBookingsPage } from './pages/owner/OwnerBookingsPage'
 import { OwnerHomePage } from './pages/owner/OwnerHomePage'
 import { OwnerLayout } from './pages/owner/OwnerLayout'
 import { OwnerVerificationPage } from './pages/owner/OwnerVerificationPage'
@@ -55,6 +56,7 @@ export default function App() {
         <Route path="checkout/:bookingId" element={<RequireRole roles={['DRIVER']}><CheckoutPage /></RequireRole>} />
         <Route path="owner" element={<RequireRole roles={['OWNER']}><OwnerLayout /></RequireRole>}>
           <Route index element={<OwnerHomePage />} />
+          <Route path="bookings" element={<OwnerBookingsPage />} />
           <Route path="verification" element={<OwnerVerificationPage />} />
           <Route path="listings" element={<MyListingsPage />} />
           <Route path="listings/new" element={<ListingWizardPage />} />

@@ -1,5 +1,5 @@
 import { Check, Copy, Download, ExternalLink } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { FormError } from '../../components/AuthCard'
@@ -15,6 +15,7 @@ import {
 } from '../../lib/bookings'
 import { errorMessage } from '../../lib/errors'
 import { VEHICLE_TYPE_LABELS, formatDateTime, formatINR } from '../../lib/format'
+import { useNow } from '../../lib/useNow'
 import { durationLabel, formatWindow } from '../../lib/time'
 
 const primaryLink =
@@ -106,17 +107,6 @@ function ReceiptButton({ booking }: { booking: BookingDetailDto }) {
       </Button>
     </div>
   )
-}
-
-/** The current time, re-read every `ms` while `active`, so a hold that lapses stops offering payment. */
-function useNow(active: boolean, ms: number) {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    if (!active) return
-    const timer = setInterval(() => setNow(Date.now()), ms)
-    return () => clearInterval(timer)
-  }, [active, ms])
-  return now
 }
 
 function BookingContent({ booking, isNew }: { booking: BookingDetailDto; isNew: boolean }) {
