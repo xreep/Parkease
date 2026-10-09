@@ -329,17 +329,90 @@ describe('ListingPage', () => {
       expect(JSON.parse(bookingPosts()[0].data).vehicleId).toBe(11)
     })
 
-    it('asks for a vehicle of the chosen type when the driver only has the other type', async () => {
+    it('hints to add a vehicle of the chosen type, instead of opening the dialog on Reserve', async () => {
       mock.onGet('/me/vehicles').reply(200, [bike])
       renderApp(URL_7)
       await screen.findByText('3 slots free')
-      await waitFor(() => expect(screen.getByRole('button', { name: 'Reserve' })).toBeEnabled())
-      expect(screen.queryByLabelText('Vehicle')).not.toBeInTheDocument()
 
-      await userEvent.click(screen.getByRole('button', { name: 'Reserve' }))
+      expect(await screen.findByText('You have no car saved — add one or switch vehicle type')).toBeInTheDocument()
+      expect(screen.queryByLabelText('Vehicle')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Reserve' })).toBeDisabled()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+      await userEvent.click(screen.getByRole('button', { name: 'Add a car' }))
 
       expect(within(screen.getByRole('dialog', { name: 'Add your vehicle' })).getByLabelText('Vehicle type')).toHaveValue('FOUR_WHEELER')
       expect(bookingPosts()).toHaveLength(0)
+    })
+
+    it('adding a vehicle from the hint does not reserve, and enables Reserve', async () => {
+      mock.onGet('/me/vehicles').replyOnce(200, [bike]).onGet('/me/vehicles').reply(200, [bike, car])
+      mock.onPost('/me/vehicles').reply(201, car)
+      renderApp(URL_7)
+      await userEvent.click(await screen.findByRole('button', { name: 'Add a car' }))
+
+      const dialog = within(screen.getByRole('dialog'))
+      await userEvent.type(dialog.getByLabelText('Number plate'), 'MH12AB1234')
+      await userEvent.click(dialog.getByRole('button', { name: 'Add vehicle' }))
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(bookingPosts()).toHaveLength(0)
+      expect(await screen.findByLabelText('Vehicle')).toHaveValue('11')
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Reserve' })).toBeEnabled())
+    })
+
+    it('starts from the type of the default vehicle when the URL names none (a driver with only a bike)', async () => {
+      mock.onGet('/me/vehicles').reply(200, [bike])
+      mock.onPost('/bookings').reply(201, checkoutDto)
+      renderApp('/listings/7')
+
+      await waitFor(() => expect(screen.getByLabelText('Vehicle type')).toHaveValue('TWO_WHEELER'))
+      expect(await screen.findByLabelText('Vehicle')).toHaveValue('12')
+      expect(screen.queryByText(/You have no/)).not.toBeInTheDocument()
+      await waitFor(() => expect(quoteCalls().at(-1)!.params.vehicleType).toBe('TWO_WHEELER'))
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Reserve' })).toBeEnabled())
+      await userEvent.click(screen.getByRole('button', { name: 'Reserve' }))
+
+      await waitFor(() => expect(bookingPosts()).toHaveLength(1))
+      expect(JSON.parse(bookingPosts()[0].data).vehicleId).toBe(12)
+    })
+
+    it("starts from the default vehicle's type even when it isn't the first vehicle", async () => {
+      mock.onGet('/me/vehicles').reply(200, [{ ...car, isDefault: false }, { ...bike, isDefault: true }])
+      renderApp('/listings/7')
+
+      await waitFor(() => expect(screen.getByLabelText('Vehicle type')).toHaveValue('TWO_WHEELER'))
+    })
+
+    it('keeps the type from the URL even when the default vehicle is of another type', async () => {
+      mock.onGet('/me/vehicles').reply(200, [{ ...bike, isDefault: true }])
+      renderApp(URL_7)
+
+      await screen.findByText('You have no car saved — add one or switch vehicle type')
+      expect(screen.getByLabelText('Vehicle type')).toHaveValue('FOUR_WHEELER')
+    })
+
+    it('keeps the listing-based default type when the driver has no vehicles', async () => {
+      mock.onGet('/me/vehicles').reply(200, [])
+      renderApp('/listings/7')
+      await screen.findByText('3 slots free')
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Reserve' })).toBeEnabled())
+
+      expect(screen.getByLabelText('Vehicle type')).toHaveValue('FOUR_WHEELER')
+    })
+
+    it('sends one booking request when Reserve is double-clicked', async () => {
+      mock.onGet('/me/vehicles').reply(200, [car])
+      mock.onPost('/bookings').reply(() => new Promise((resolve) => setTimeout(() => resolve([201, checkoutDto]), 50)))
+      renderApp(URL_7)
+      await screen.findByLabelText('Vehicle')
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Reserve' })).toBeEnabled())
+
+      await userEvent.dblClick(screen.getByRole('button', { name: 'Reserve' }))
+
+      await waitFor(() => expect(bookingPosts()).toHaveLength(1))
+      await new Promise((r) => setTimeout(r, 100))
+      expect(bookingPosts()).toHaveLength(1)
     })
 
     it('closes the add-vehicle dialog without reserving when cancelled', async () => {

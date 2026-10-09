@@ -63,12 +63,14 @@ export function loadRazorpay(): Promise<boolean> {
     const script = document.createElement('script')
     script.src = CHECKOUT_SRC
     script.async = true
-    script.onload = () => resolve(Boolean(window.Razorpay))
-    script.onerror = () => {
+    const fail = () => {
+      // Forget this attempt (and its tag) so the next click tries again.
       script.remove()
       loading = null
       resolve(false)
     }
+    script.onload = () => (window.Razorpay ? resolve(true) : fail())
+    script.onerror = fail
     document.body.appendChild(script)
   })
   return loading
