@@ -3,11 +3,13 @@ package com.smartparking.admin;
 import com.smartparking.admin.dto.AdminOwnerDto;
 import com.smartparking.admin.dto.QueueCountsDto;
 import com.smartparking.admin.dto.ReasonRequest;
+import com.smartparking.common.security.AuthUser;
 import com.smartparking.common.web.PageResponse;
 import com.smartparking.owner.VerificationStatus;
 import com.smartparking.storage.SignedUrlDto;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -41,12 +43,13 @@ public class AdminOwnerController {
     }
 
     @PostMapping("/owners/{userId}/verify")
-    public AdminOwnerDto verify(@PathVariable Long userId) {
-        return service.verifyOwner(userId);
+    public AdminOwnerDto verify(@AuthenticationPrincipal AuthUser admin, @PathVariable Long userId) {
+        return service.verifyOwner(admin, userId);
     }
 
     @PostMapping("/owners/{userId}/reject")
-    public AdminOwnerDto reject(@PathVariable Long userId, @Valid @RequestBody ReasonRequest request) {
-        return service.rejectOwner(userId, request.reason());
+    public AdminOwnerDto reject(@AuthenticationPrincipal AuthUser admin, @PathVariable Long userId,
+                                @Valid @RequestBody ReasonRequest request) {
+        return service.rejectOwner(admin, userId, request.reason());
     }
 }

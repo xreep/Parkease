@@ -7,7 +7,7 @@ import com.smartparking.common.web.PageResponse;
 import com.smartparking.invoice.Invoice;
 import com.smartparking.invoice.InvoiceRepository;
 import com.smartparking.invoice.ReceiptPdf;
-import com.smartparking.pricing.PricingProperties;
+import com.smartparking.settings.PlatformSettings;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Locale;
@@ -34,7 +34,7 @@ public class BookingQueryService {
     private final BookingRepository bookings;
     private final InvoiceRepository invoices;
     private final BookingMapper mapper;
-    private final PricingProperties pricing;
+    private final PlatformSettings settings;
     private final Clock clock;
 
     /**
@@ -71,7 +71,7 @@ public class BookingQueryService {
         Invoice invoice = invoices.findByBookingId(booking.getId())
                 .orElseThrow(() -> ApiException.conflict("NOT_PAID", "There is no receipt until the booking is paid"));
         return new Receipt("ParkEase-" + invoice.getInvoiceNumber() + ".pdf",
-                ReceiptPdf.render(invoice, pricing.gstPercent()));
+                ReceiptPdf.render(invoice, settings.gstPercent()));
     }
 
     private Booking owned(Long driverId, Long bookingId) {

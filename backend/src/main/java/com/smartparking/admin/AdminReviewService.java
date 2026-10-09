@@ -1,5 +1,6 @@
 package com.smartparking.admin;
 
+import com.smartparking.admin.audit.AdminAuditService;
 import com.smartparking.admin.dto.AdminListingDetailDto;
 import com.smartparking.admin.dto.AdminListingSummaryDto;
 import com.smartparking.admin.dto.AdminOwnerDto;
@@ -7,6 +8,7 @@ import com.smartparking.admin.dto.QueueCountsDto;
 import com.smartparking.availability.AvailabilityRuleRepository;
 import com.smartparking.common.config.AppProperties;
 import com.smartparking.common.error.ApiException;
+import com.smartparking.common.security.AuthUser;
 import com.smartparking.common.web.PageResponse;
 import com.smartparking.email.EmailTemplates;
 import com.smartparking.listing.ListingCompleteness;
@@ -47,6 +49,7 @@ public class AdminReviewService {
     private final ListingMapper mapper;
     private final ListingCompleteness completeness;
     private final Notifier notifier;
+    private final AdminAuditService audit;
     private final AppProperties app;
     private final Clock clock;
 
@@ -71,12 +74,13 @@ public class AdminReviewService {
     }
 
     @Transactional
-    public AdminOwnerDto verifyOwner(Long userId) {
+    public AdminOwnerDto verifyOwner(AuthUser admin, Long userId) {
         OwnerProfile profile = requirePendingOwner(userId);
         profile.setVerificationStatus(VerificationStatus.VERIFIED);
         profile.setVerifiedAt(clock.instant());
         profile.setRejectionReason(null);
         ownerProfiles.save(profile);
+        audit.record(admin, "OWNER_VERIFIED", "OWNER", userId, null);
         notifier.notify(profile.getUser(), NotificationType.OWNER_VERIFIED, "You're verified",
                 "Your identity has been verified. You can now submit parking listings for approval.",
                 "/owner/verification",
@@ -85,12 +89,13 @@ public class AdminReviewService {
     }
 
     @Transactional
-    public AdminOwnerDto rejectOwner(Long userId, String reason) {
+    public AdminOwnerDto rejectOwner(AuthUser admin, Long userId, String reason) {
         OwnerProfile profile = requirePendingOwner(userId);
         String trimmed = reason.trim();
         profile.setVerificationStatus(VerificationStatus.REJECTED);
         profile.setRejectionReason(trimmed);
         ownerProfiles.save(profile);
+        audit.record(admin, "OWNER_REJECTED", "OWNER", userId, "Reason: " + trimmed);
         notifier.notify(profile.getUser(), NotificationType.OWNER_REJECTED, "Verification needs attention",
                 "We could not verify your document. Reason: " + trimmed, "/owner/verification",
                 EmailTemplates.ownerRejected(profile.getUser(), trimmed, app.frontendUrl() + "/owner/verification"));
@@ -129,7 +134,7 @@ public class AdminReviewService {
     }
 
     @Transactional
-    public AdminListingDetailDto approveListing(Long id) {
+    public AdminListingDetailDto approveListing(AuthUser admin, Long id) {
         ParkingListing listing = requirePendingListing(id);
         List<String> missing = completeness.missingParts(listing);
         if (!missing.isEmpty()) {
@@ -140,6 +145,7 @@ public class AdminReviewService {
         listing.setApprovedAt(clock.instant());
         listing.setRejectionReason(null);
         listings.save(listing);
+        audit.record(admin, "LISTING_APPROVED", "LISTING", id, null);
         notifier.notify(listing.getOwner(), NotificationType.LISTING_APPROVED, "Listing approved",
                 "\"" + listing.getTitle() + "\" has been approved and is now live.", "/owner/listings",
                 EmailTemplates.listingApproved(listing.getOwner(), listing.getTitle(),
@@ -148,12 +154,13 @@ public class AdminReviewService {
     }
 
     @Transactional
-    public AdminListingDetailDto rejectListing(Long id, String reason) {
+    public AdminListingDetailDto rejectListing(AuthUser admin, Long id, String reason) {
         ParkingListing listing = requirePendingListing(id);
         String trimmed = reason.trim();
         listing.setStatus(ListingStatus.REJECTED);
         listing.setRejectionReason(trimmed);
         listings.save(listing);
+        audit.record(admin, "LISTING_REJECTED", "LISTING", id, "Reason: " + trimmed);
         notifier.notify(listing.getOwner(), NotificationType.LISTING_REJECTED, "Listing needs changes",
                 "\"" + listing.getTitle() + "\" was not approved. Reason: " + trimmed, "/owner/listings",
                 EmailTemplates.listingRejected(listing.getOwner(), listing.getTitle(), trimmed,

@@ -1,6 +1,7 @@
 package com.smartparking.pricing;
 
 import com.smartparking.listing.ParkingListing;
+import com.smartparking.settings.PlatformSettings;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
@@ -15,10 +16,10 @@ public class PricingService {
     private static final long MONTH_MINUTES = 43200;
     private static final BigDecimal HUNDRED = new BigDecimal("100");
 
-    private final PricingProperties properties;
+    private final PlatformSettings settings;
 
-    public PricingService(PricingProperties properties) {
-        this.properties = properties;
+    public PricingService(PlatformSettings settings) {
+        this.settings = settings;
     }
 
     public Quote quote(ParkingListing l, Instant start, Instant end) {
@@ -40,8 +41,8 @@ public class PricingService {
         }
 
         BigDecimal base = best.amount.setScale(2, RoundingMode.HALF_UP);
-        BigDecimal fee = base.multiply(properties.platformFeePercent()).divide(HUNDRED, 2, RoundingMode.HALF_UP);
-        BigDecimal gst = fee.multiply(properties.gstPercent()).divide(HUNDRED, 2, RoundingMode.HALF_UP);
+        BigDecimal fee = base.multiply(settings.platformFeePercent()).divide(HUNDRED, 2, RoundingMode.HALF_UP);
+        BigDecimal gst = fee.multiply(settings.gstPercent()).divide(HUNDRED, 2, RoundingMode.HALF_UP);
         BigDecimal total = base.add(fee).add(gst);
         return new Quote(best.mode, minutes, base, fee, gst, total, best.breakdown);
     }
