@@ -2,11 +2,14 @@ import '@testing-library/jest-dom/vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import MockAdapter from 'axios-mock-adapter'
+import { toast } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { api } from '../../lib/api'
 import type { OwnerEarningDto } from '../../lib/ownerDashboard'
 import { tokenStore } from '../../lib/tokenStore'
 import { renderApp } from '../../test/renderApp'
+
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() }, Toaster: () => null }))
 
 const owner = { id: 3, name: 'Ravi Kumar', email: 'ravi@example.com', phone: null, role: 'OWNER', emailVerified: true, avatarUrl: null }
 
@@ -30,6 +33,7 @@ describe('owner earnings', () => {
     tokenStore.set('a', 'r')
     mock = new MockAdapter(api)
     mock.onGet('/me').reply(200, owner)
+    vi.mocked(toast.warning).mockClear()
   })
 
   afterEach(() => {
@@ -165,6 +169,29 @@ describe('owner earnings', () => {
       const csv = calls().find((r) => r.params.format === 'csv')!
       expect(csv.params).toEqual({ status: 'PAID', from: '2026-10-01', format: 'csv' })
       expect(csv.responseType).toBe('blob')
+    })
+
+    it('warns when the server cut the export at 10,000 rows, and not otherwise', async () => {
+      mock.onGet('/owner/earnings').reply((config) =>
+        config.params.format === 'csv'
+          ? [200, new Blob(['a,b']), { 'x-truncated': 'true', 'content-disposition': 'attachment; filename="e.csv"' }]
+          : [200, body([earning(1)])],
+      )
+      const downloads = captureDownload()
+      const user = userEvent.setup()
+      renderApp('/owner/earnings')
+      await user.click(await screen.findByRole('button', { name: 'Download CSV' }))
+
+      await waitFor(() => expect(toast.warning).toHaveBeenCalledWith('Only the newest 10,000 rows were exported — narrow the dates.'))
+      expect(downloads).toHaveLength(1)
+
+      vi.mocked(toast.warning).mockClear()
+      mock.onGet('/owner/earnings').reply((config) =>
+        config.params.format === 'csv' ? [200, new Blob(['a,b']), { 'x-truncated': 'false' }] : [200, body([earning(1)])],
+      )
+      await user.click(screen.getByRole('button', { name: 'Download CSV' }))
+      await waitFor(() => expect(downloads).toHaveLength(2))
+      expect(toast.warning).not.toHaveBeenCalled()
     })
 
     it('falls back to a plain filename and shows why a download failed', async () => {

@@ -34,7 +34,7 @@ export const submitReview = async (bookingId: number, rating: number, comment?: 
 export const listOwnerReviews = async (listingId: number | undefined, page = 0, size = OWNER_REVIEWS_PAGE_SIZE) =>
   (await api.get<Page<OwnerReviewDto>>('/owner/reviews', { params: { ...(listingId !== undefined && { listingId }), page, size } })).data
 export const replyToReview = async (id: number, reply: string) =>
-  (await api.post<OwnerReviewDto>(`/owner/reviews/${id}/reply`, { reply })).data
+  (await api.post<ReviewDto>(`/owner/reviews/${id}/reply`, { reply })).data
 
 /** A listing's reviews, a page at a time ("Show more" appends); the summary comes with every page. */
 export function useListingReviews(listingId: number | string) {

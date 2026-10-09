@@ -87,6 +87,22 @@ describe('owner overview', () => {
     expect(within(within(balances).getByRole('group', { name: 'Paid' })).getByText('₹7,880')).toBeInTheDocument()
   })
 
+  it('stacks the balances on a narrow screen', async () => {
+    renderApp('/owner')
+
+    const balances = await screen.findByRole('region', { name: 'Balances' })
+    const grid = within(balances).getByRole('group', { name: 'Held' }).parentElement!
+    expect(grid).toHaveClass('grid-cols-1', 'sm:grid-cols-3')
+  })
+
+  it('writes large earnings on the chart axis in a short form', async () => {
+    mock.onGet('/owner/stats').reply(200, stats(30, { series: [{ date: '2026-10-09', earningsNet: 100000, bookings: 3 }] }))
+    renderApp('/owner')
+
+    const chart = await screen.findByRole('img', { name: 'Earnings per day' })
+    expect(chart.closest('figure')!.querySelector('[data-axis="max"]')).toHaveTextContent('₹1L')
+  })
+
   it('draws the earnings bars and the bookings line from the daily series', async () => {
     renderApp('/owner')
 

@@ -10,7 +10,7 @@ import { Spinner } from '../../components/ui/Spinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useOwnerBookings } from '../../lib/bookings'
 import { errorMessage } from '../../lib/errors'
-import { VEHICLE_TYPE_LABELS, formatINR } from '../../lib/format'
+import { VEHICLE_TYPE_LABELS, formatCompactINR, formatINR } from '../../lib/format'
 import { useMyListings, useOwnerProfile, type OwnerProfile } from '../../lib/owner'
 import { STATS_RANGES, useOwnerStats, type OwnerStatsDto, type StatsRange } from '../../lib/ownerDashboard'
 import { ratingText } from '../../lib/reviews'
@@ -157,7 +157,7 @@ function StatsView({ stats }: { stats: OwnerStatsDto }) {
           <h3 id="balances-heading" className="font-semibold">Balances</h3>
           <Link to="/owner/earnings" className="text-sm font-medium text-brand-700 hover:underline dark:text-brand-400">See all earnings</Link>
         </div>
-        <div className="mt-3 grid grid-cols-3 gap-3">
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Balance label="Held" value={balances.held} />
           <Balance label="Pending payout" value={balances.pendingPayout} />
           <Balance label="Paid" value={balances.paid} />
@@ -171,6 +171,7 @@ function StatsView({ stats }: { stats: OwnerStatsDto }) {
             title="Earnings per day"
             points={stats.series.map((d) => ({ label: formatShortDate(d.date), value: d.earningsNet }))}
             formatValue={formatINR}
+            formatAxis={formatCompactINR}
           />
         </section>
         <section className="space-y-2">

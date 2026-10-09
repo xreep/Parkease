@@ -92,14 +92,15 @@ const earningsParams = (filters: EarningsFilters) => ({
 export const getOwnerEarnings = async (filters: EarningsFilters, page = 0, size = EARNINGS_PAGE_SIZE) =>
   (await api.get<OwnerEarningsDto>('/owner/earnings', { params: { ...earningsParams(filters), page, size } })).data
 
-/** Every row for the filters as a CSV; the server names the file. */
-export async function downloadEarningsCsv(filters: EarningsFilters): Promise<void> {
+/** Every row for the filters as a CSV (the server names the file); `truncated` when it cut the export at its row limit. */
+export async function downloadEarningsCsv(filters: EarningsFilters): Promise<{ truncated: boolean }> {
   try {
     const response = await api.get<Blob>('/owner/earnings', {
       params: { ...earningsParams(filters), format: 'csv' },
       responseType: 'blob',
     })
     saveBlob(response.data, filenameFrom(response.headers['content-disposition']) ?? 'earnings.csv')
+    return { truncated: String(response.headers['x-truncated']).toLowerCase() === 'true' }
   } catch (error) {
     throw await blobProblem(error)
   }

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from './api'
-import { istInstant, nextQuarter } from './time'
+import { istDate, istInstant, nextQuarter } from './time'
 
 export type DayLevel = 'AVAILABLE' | 'LIMITED' | 'FULL' | 'CLOSED'
 
@@ -52,4 +52,16 @@ export function windowForDay(day: DayAvailabilityDto, now: Date = new Date()): {
     if (close.getTime() > start.getTime() && close.getTime() < end.getTime()) end = close
   }
   return { start, end }
+}
+
+/**
+ * Today, with no time left to book: the earliest start (the next quarter hour) is at or past closing time. Hours that
+ * run past midnight are not guessed at.
+ */
+export function isClosedForToday(day: DayAvailabilityDto, now: Date = new Date()): boolean {
+  if (day.date !== istDate(now) || !day.closeTime) return false
+  const open = istInstant(day.date, day.openTime ?? '00:00')
+  const close = istInstant(day.date, day.closeTime)
+  if (close.getTime() <= open.getTime()) return false
+  return nextQuarter(now).getTime() >= close.getTime()
 }

@@ -11,11 +11,14 @@ export function LineChart({
   title,
   points,
   formatValue,
+  formatAxis,
   className = 'stroke-emerald-600 dark:stroke-emerald-400',
 }: {
   title: string
   points: ChartPoint[]
   formatValue: (value: number) => string
+  /** How the top of the axis is written, when it needs to be shorter than a value (default: `formatValue`). */
+  formatAxis?: (value: number) => string
   className?: string
 }) {
   const titleId = useId()
@@ -23,7 +26,7 @@ export function LineChart({
   const x = (i: number) => (points.length === 1 ? WIDTH / 2 : PAD + (i * (WIDTH - 2 * PAD)) / (points.length - 1))
   const y = (value: number) => HEIGHT - PAD - (Math.max(0, Math.min(value / top, 1)) * (HEIGHT - 2 * PAD))
   return (
-    <ChartFrame title={title} points={points} max={formatValue(top)} formatValue={formatValue}>
+    <ChartFrame title={title} points={points} max={(formatAxis ?? formatValue)(top)} formatValue={formatValue}>
       <svg
         role="img"
         aria-labelledby={titleId}

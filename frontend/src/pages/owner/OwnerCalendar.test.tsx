@@ -163,6 +163,15 @@ describe('owner calendar', () => {
     expect(table.parentElement).toHaveClass('overflow-x-auto')
   })
 
+  it('lets the week controls wrap on a narrow screen', async () => {
+    renderApp('/owner/calendar')
+
+    const label = await screen.findByText('5 Oct – 11 Oct 2026')
+    expect(label).toHaveClass('sm:min-w-40')
+    expect(label).not.toHaveClass('min-w-40')
+    expect(label.parentElement).toHaveClass('flex-wrap')
+  })
+
   it('moves a week at a time and back to this week', async () => {
     const user = userEvent.setup()
     renderApp('/owner/calendar')
