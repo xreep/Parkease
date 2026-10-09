@@ -44,9 +44,12 @@ function cancelledMessage(refunded: number, preview: CancellationPreview): strin
 /** Shows what a cancellation would refund and, once confirmed, cancels with an optional reason. Mount it to open it. */
 export function CancelBookingDialog({
   bookingId,
+  fees,
   onClose,
 }: {
   bookingId: number
+  /** The platform fee and GST of the booking: the part of what is not refunded that is never refunded. */
+  fees: number
   onClose: () => void
 }) {
   const queryClient = useQueryClient()
@@ -93,7 +96,9 @@ export function CancelBookingDialog({
             <p role="status" className="text-base font-semibold">{result.headline}</p>
             {preview.nonRefundableAmount > 0 && (
               <p className="text-slate-700 dark:text-slate-300">
-                {`Non-refundable: ${formatINR(preview.nonRefundableAmount)} (platform fee and GST are not refunded)`}
+                {`Not refunded: ${formatINR(preview.nonRefundableAmount)}${
+                  fees > 0 ? ` — includes platform fee and GST ${formatINR(Math.round(fees * 100) / 100)}` : ''
+                }`}
               </p>
             )}
             {result.detail && <p className="text-slate-600 dark:text-slate-400">{result.detail}</p>}

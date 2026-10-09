@@ -19,7 +19,7 @@ function ownerBooking(overrides: Partial<OwnerBookingDto> = {}): OwnerBookingDto
   return {
     id: 5, bookingCode: 'PE-REQ001', status: 'AWAITING_APPROVAL', listingId: 7, listingTitle: 'FC Road Parking', slotLabel: 'A-3',
     startTime: '2026-10-12T04:30:00Z', endTime: '2026-10-12T06:30:00Z', vehicleType: 'FOUR_WHEELER', plateNumber: 'MH12AB1234',
-    driverFirstName: 'Rahul', baseAmount: 240, approvalDeadline: new Date(Date.now() + 5 * 3_600_000).toISOString(),
+    driverFirstName: 'Rahul', baseAmount: 240, ownerNet: 240, approvalDeadline: new Date(Date.now() + 5 * 3_600_000).toISOString(),
     createdAt: '2026-10-09T08:00:00Z', ...overrides,
   }
 }
@@ -59,6 +59,24 @@ describe('owner bookings', () => {
     expect(respondBy.className).not.toMatch(/red/)
     expect(listCalls()[0].params).toEqual({ view: 'requests', page: 0, size: 20 })
     expect(screen.getByRole('tab', { name: 'Requests' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('shows what the owner still earns from cancelled, declined and partly refunded bookings', async () => {
+    mock.onGet('/owner/bookings').reply(200, page([
+      ownerBooking({ id: 6, bookingCode: 'PE-CAN001', status: 'CANCELLED', ownerNet: 0 }),
+      ownerBooking({ id: 7, bookingCode: 'PE-REJ001', status: 'REJECTED', ownerNet: 0 }),
+      ownerBooking({ id: 8, bookingCode: 'PE-PAR001', status: 'CANCELLED', ownerNet: 120 }),
+      ownerBooking({ id: 9, bookingCode: 'PE-NON001', status: 'COMPLETED', ownerNet: null }),
+    ]))
+    renderApp('/owner/bookings')
+
+    const cancelled = await screen.findByRole('article', { name: 'PE-CAN001' })
+    expect(within(cancelled).getByText('No earnings — refunded')).toBeInTheDocument()
+    expect(within(cancelled).queryByText(/You earn/)).not.toBeInTheDocument()
+    expect(within(screen.getByRole('article', { name: 'PE-REJ001' })).getByText('No earnings — refunded')).toBeInTheDocument()
+    expect(within(screen.getByRole('article', { name: 'PE-PAR001' })).getByText('You earn ₹120')).toBeInTheDocument()
+    // No earning recorded: fall back to the booking's own share.
+    expect(within(screen.getByRole('article', { name: 'PE-NON001' })).getByText('You earn ₹240')).toBeInTheDocument()
   })
 
   it('highlights a deadline less than 30 minutes away', async () => {

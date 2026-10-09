@@ -77,7 +77,10 @@ export type BookingDetailDto = BookingSummaryDto & {
   events: BookingEventDto[]
 }
 
-/** A booking as the listing's owner sees it: their share (`baseAmount`) and the driver's first name only. */
+/**
+ * A booking as the listing's owner sees it: their share (`baseAmount`), what of it they still earn (`ownerNet`: null
+ * without an earning, 0 once the booking was refunded away) and the driver's first name only.
+ */
 export type OwnerBookingDto = {
   id: number
   bookingCode: string
@@ -91,6 +94,7 @@ export type OwnerBookingDto = {
   plateNumber: string
   driverFirstName: string
   baseAmount: number
+  ownerNet: number | null
   approvalDeadline: string | null
   createdAt: string
 }
