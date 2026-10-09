@@ -92,6 +92,7 @@ function RequestActions({ booking, onChanged }: { booking: OwnerBookingDto; onCh
       <ReasonDialog
         open={declining}
         title="Decline this booking?"
+        summary={<BookingSummary booking={booking} />}
         confirmLabel="Decline"
         onConfirm={decline}
         onClose={() => setDeclining(false)}
@@ -126,6 +127,7 @@ function UpcomingActions({ booking, onChanged }: { booking: OwnerBookingDto; onC
       <ReasonDialog
         open={cancelling}
         title="Cancel this booking?"
+        summary={<BookingSummary booking={booking} />}
         confirmLabel="Cancel booking"
         helper="The driver will be refunded in full."
         maxLength={300}
@@ -133,6 +135,17 @@ function UpcomingActions({ booking, onChanged }: { booking: OwnerBookingDto; onC
         onClose={() => setCancelling(false)}
       />
     </>
+  )
+}
+
+/** Which booking a dialog is about: its code, the driver and when. */
+function BookingSummary({ booking }: { booking: OwnerBookingDto }) {
+  return (
+    <div className="space-y-0.5 rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800/60">
+      <p className="font-mono font-semibold">{booking.bookingCode}</p>
+      <p>{`${booking.driverFirstName} · ${booking.listingTitle}`}</p>
+      <p className="text-slate-600 dark:text-slate-400">{formatWindow(booking.startTime, booking.endTime)}</p>
+    </div>
   )
 }
 

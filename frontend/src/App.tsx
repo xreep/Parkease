@@ -29,6 +29,8 @@ import { ListingBlocksPage } from './pages/owner/ListingBlocksPage'
 import { ListingWizardPage } from './pages/owner/ListingWizardPage'
 import { MyListingsPage } from './pages/owner/MyListingsPage'
 import { OwnerBookingsPage } from './pages/owner/OwnerBookingsPage'
+import { OwnerCalendarPage } from './pages/owner/OwnerCalendarPage'
+import { OwnerEarningsPage } from './pages/owner/OwnerEarningsPage'
 import { OwnerHomePage } from './pages/owner/OwnerHomePage'
 import { OwnerLayout } from './pages/owner/OwnerLayout'
 import { OwnerReviewsPage } from './pages/owner/OwnerReviewsPage'
@@ -60,6 +62,8 @@ export default function App() {
         <Route path="owner" element={<RequireRole roles={['OWNER']}><OwnerLayout /></RequireRole>}>
           <Route index element={<OwnerHomePage />} />
           <Route path="bookings" element={<OwnerBookingsPage />} />
+          <Route path="earnings" element={<OwnerEarningsPage />} />
+          <Route path="calendar" element={<OwnerCalendarPage />} />
           <Route path="reviews" element={<OwnerReviewsPage />} />
           <Route path="verification" element={<OwnerVerificationPage />} />
           <Route path="listings" element={<MyListingsPage />} />
