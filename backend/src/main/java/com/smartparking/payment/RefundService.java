@@ -6,12 +6,12 @@ import com.smartparking.booking.BookingEvents;
 import com.smartparking.booking.BookingLocks;
 import com.smartparking.common.config.AppProperties;
 import com.smartparking.common.error.ApiException;
-import com.smartparking.common.util.AfterCommit;
 import com.smartparking.earning.EarningStatus;
 import com.smartparking.earning.OwnerEarningRepository;
 import com.smartparking.email.EmailMessage;
-import com.smartparking.email.EmailSender;
 import com.smartparking.email.EmailTemplates;
+import com.smartparking.notification.NotificationType;
+import com.smartparking.notification.Notifier;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
@@ -47,20 +47,20 @@ public class RefundService {
     private final BookingLocks locks;
     private final OwnerEarningRepository earnings;
     private final BookingEvents events;
-    private final EmailSender emailSender;
+    private final Notifier notifier;
     private final AppProperties app;
     private final TransactionTemplate tx;
 
     public RefundService(PaymentProvider provider, RefundRepository refunds, PaymentRepository payments,
                          BookingLocks locks, OwnerEarningRepository earnings, BookingEvents events,
-                         EmailSender emailSender, AppProperties app, PlatformTransactionManager txManager) {
+                         Notifier notifier, AppProperties app, PlatformTransactionManager txManager) {
         this.provider = provider;
         this.refunds = refunds;
         this.payments = payments;
         this.locks = locks;
         this.earnings = earnings;
         this.events = events;
-        this.emailSender = emailSender;
+        this.notifier = notifier;
         this.app = app;
         this.tx = new TransactionTemplate(txManager);
     }
@@ -181,10 +181,15 @@ public class RefundService {
         if (refund.getNotice() == null || refund.getStatus() == RefundStatus.FAILED) {
             return;
         }
+        boolean pending = refund.getStatus() == RefundStatus.PENDING;
+        String path = "/driver/bookings/" + booking.getId();
         EmailMessage message = EmailTemplates.paymentRefunded(booking.getDriver(), booking,
-                app.frontendUrl() + "/driver/bookings/" + booking.getId(), refund.getNotice(),
-                refund.getStatus() == RefundStatus.PENDING);
-        AfterCommit.run(() -> emailSender.send(message));
+                app.frontendUrl() + path, refund.getNotice(), pending);
+        notifier.notify(booking.getDriver(), NotificationType.BOOKING_REFUNDED,
+                pending ? "Refund initiated" : "Refund issued",
+                "Your refund of ₹" + refund.getAmount().toPlainString() + " for booking " + booking.getBookingCode()
+                        + (pending ? " is on its way." : " has been issued."),
+                path, message);
     }
 
     /** Ids of FAILED refunds that still have attempts left, oldest first. */
