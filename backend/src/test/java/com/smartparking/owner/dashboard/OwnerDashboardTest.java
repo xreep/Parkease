@@ -28,6 +28,12 @@ import com.smartparking.listing.ParkingListing;
 import com.smartparking.listing.ParkingListingRepository;
 import com.smartparking.location.CityRepository;
 import com.smartparking.owner.OwnerProfileRepository;
+import com.smartparking.payment.Payment;
+import com.smartparking.payment.PaymentProviderType;
+import com.smartparking.payment.PaymentRepository;
+import com.smartparking.payment.PaymentStatus;
+import com.smartparking.review.Review;
+import com.smartparking.review.ReviewRepository;
 import com.smartparking.slot.ParkingSlot;
 import com.smartparking.slot.ParkingSlotRepository;
 import com.smartparking.support.AuthTestSupport;
@@ -67,6 +73,8 @@ class OwnerDashboardTest {
     @Autowired OwnerEarningRepository earnings;
     @Autowired AvailabilityBlockRepository blocks;
     @Autowired OwnerEarningsService earningsService;
+    @Autowired PaymentRepository payments;
+    @Autowired ReviewRepository reviews;
 
     String ownerAuth;
     String otherOwnerAuth;
@@ -109,6 +117,29 @@ class OwnerDashboardTest {
         return booking(listing, slot, st, day, from, to);
     }
 
+    private static int paymentSeq;
+
+    private Booking withPayment(Booking b, PaymentStatus status) {
+        Payment p = new Payment();
+        p.setBooking(b);
+        p.setProvider(PaymentProviderType.MOCK);
+        p.setOrderId("order_dash_" + (++paymentSeq) + "_" + System.nanoTime());
+        p.setAmount(new BigDecimal("67.08"));
+        p.setStatus(status);
+        payments.saveAndFlush(p);
+        return b;
+    }
+
+    private void review(ParkingListing l, ParkingSlot s, int rating, LocalDate day, String from, String to) {
+        Booking b = booking(l, s, BookingStatus.COMPLETED, day, from, to);
+        Review r = new Review();
+        r.setBooking(b);
+        r.setListing(l);
+        r.setDriver(driver);
+        r.setRating((short) rating);
+        reviews.saveAndFlush(r);
+    }
+
     private OwnerEarning earning(Booking b, User who, String net, EarningStatus st) {
         OwnerEarning e = new OwnerEarning();
         e.setBooking(b);
@@ -141,17 +172,25 @@ class OwnerDashboardTest {
         earning(booking(BookingStatus.COMPLETED, d1, "10:00", "12:00"), "54.00", EarningStatus.PENDING_PAYOUT);
         earning(booking(BookingStatus.COMPLETED, d1, "14:00", "16:00"), "27.00", EarningStatus.PAID);
         earning(booking(BookingStatus.CONFIRMED, d2, "10:00", "14:00"), "90.00", EarningStatus.HELD);
-        earning(booking(BookingStatus.CANCELLED, d2, "16:00", "18:00"), "0.00", EarningStatus.REVERSED);
-        booking(BookingStatus.REJECTED, d3, "10:00", "12:00");
+        earning(withPayment(booking(BookingStatus.CANCELLED, d2, "16:00", "18:00"), PaymentStatus.REFUNDED), "0.00",
+                EarningStatus.REVERSED);
+        withPayment(booking(BookingStatus.REJECTED, d3, "10:00", "12:00"), PaymentStatus.REFUNDED);
+        // Holds the driver cancelled before paying: no money moved, so no cancellation for the owner.
+        withPayment(booking(BookingStatus.CANCELLED, d3, "16:00", "17:00"), PaymentStatus.FAILED);
+        booking(BookingStatus.CANCELLED, d3, "18:00", "19:00");
         booking(BookingStatus.EXPIRED, d3, "13:00", "14:00");          // never paid: not counted anywhere
         booking(BookingStatus.PENDING_PAYMENT, d3, "15:00", "16:00");  // idem
         earning(booking(BookingStatus.COMPLETED, d1.minusDays(2), "10:00", "12:00"), "1000.00", EarningStatus.HELD);
 
         // A second listing of the owner: paused, so outside the occupancy, but its bookings and reviews count.
-        listing.setAvgRating(new BigDecimal("4.5"));
-        listing.setReviewCount(2);
-        listings.saveAndFlush(listing);
         ParkingListing second = pausedListing();
+        // Ratings 5, 4, 4 on one listing and 4 on the other: 17 / 4 = 4.25 -> 4.3 (averaging the listings' rounded
+        // averages would give 4.2).
+        LocalDate old = d1.minusDays(5);
+        review(listing, slot, 5, old, "08:00", "09:00");
+        review(listing, slot, 4, old, "10:00", "11:00");
+        review(listing, slot, 4, old, "12:00", "13:00");
+        review(second, secondSlot, 4, old, "08:00", "09:00");
         earning(booking(second, secondSlot, BookingStatus.COMPLETED, d1, "11:00", "13:00"), "20.00",
                 EarningStatus.PENDING_PAYOUT);
 
@@ -169,8 +208,6 @@ class OwnerDashboardTest {
             Long id = approvedListingAt(mvc, ownerAuth, listings, puneCityId(cities), "Paused Spot", 18.53, 73.85, 30);
             ParkingListing l = listings.findById(id).orElseThrow();
             l.setStatus(ListingStatus.PAUSED);
-            l.setAvgRating(new BigDecimal("3.0"));
-            l.setReviewCount(1);
             listings.saveAndFlush(l);
             secondSlot = slots.findByListingIdOrderByLabelAsc(id).get(0);
             return l;
@@ -208,8 +245,8 @@ class OwnerDashboardTest {
                 .andExpect(jsonPath("$.totals.bookings").value(4))
                 .andExpect(jsonPath("$.totals.cancellations").value(2))
                 .andExpect(jsonPath("$.totals.occupancyPercent").value(11.1)) // 8 booked of 72 open slot-hours
-                .andExpect(jsonPath("$.totals.avgRating").value(4.0))        // (4.5 * 2 + 3.0 * 1) / 3
-                .andExpect(jsonPath("$.totals.reviewCount").value(3))
+                .andExpect(jsonPath("$.totals.avgRating").value(4.3))
+                .andExpect(jsonPath("$.totals.reviewCount").value(4))
                 .andExpect(jsonPath("$.balances.held").value(1090.0))
                 .andExpect(jsonPath("$.balances.pendingPayout").value(74.0))
                 .andExpect(jsonPath("$.balances.paid").value(27.0))
@@ -422,6 +459,9 @@ class OwnerDashboardTest {
         Booking lapsed = booking(BookingStatus.PENDING_PAYMENT, from, "17:00", "18:00");
         lapsed.setHoldExpiresAt(Instant.now().minusSeconds(60));
         bookings.saveAndFlush(lapsed);
+        Booking hold = booking(BookingStatus.PENDING_PAYMENT, from, "18:00", "19:00"); // owners never see unpaid holds
+        hold.setHoldExpiresAt(Instant.now().plusSeconds(600));
+        bookings.saveAndFlush(hold);
         booking(BookingStatus.CONFIRMED, from.plusDays(14), "10:00", "12:00"); // outside the range
         AvailabilityBlock slotBlock = new AvailabilityBlock();
         slotBlock.setListing(listing);

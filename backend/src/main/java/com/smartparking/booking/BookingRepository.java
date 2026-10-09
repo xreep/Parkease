@@ -247,6 +247,21 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
                                            @Param("statuses") Collection<BookingStatus> statuses,
                                            @Param("from") Instant from, @Param("to") Instant to);
 
+    /**
+     * Cancelled or rejected bookings of the owner that start in [from, to) and had been paid: an unpaid hold the
+     * driver abandoned is no cancellation for the owner.
+     */
+    @Query("""
+            select count(b) from Booking b
+            where b.listing.owner.id = :ownerId
+              and b.status in (com.smartparking.booking.BookingStatus.CANCELLED,
+                               com.smartparking.booking.BookingStatus.REJECTED)
+              and b.startTime >= :from and b.startTime < :to
+              and exists (select 1 from Payment p where p.booking = b and p.status in :paymentStatuses)
+            """)
+    long countPaidCancellations(@Param("ownerId") Long ownerId, @Param("from") Instant from, @Param("to") Instant to,
+                                @Param("paymentStatuses") Collection<PaymentStatus> paymentStatuses);
+
     /** Booked spans (CONFIRMED, ACTIVE, COMPLETED) of the owner's APPROVED listings overlapping [from, to). */
     @Query("""
             select b.listing.id as listingId, b.slot.id as slotId, b.startTime as startTime, b.endTime as endTime
@@ -261,20 +276,19 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     List<ListingSlotWindow> findBookedWindows(@Param("ownerId") Long ownerId, @Param("from") Instant from,
                                               @Param("to") Instant to);
 
-    /** Live and completed bookings of one listing overlapping [from, to), for the owner's calendar. */
+    /** Paid bookings of one listing overlapping [from, to), for the owner's calendar (never unpaid holds). */
     @EntityGraph(attributePaths = {"slot", "driver"})
     @Query("""
             select b from Booking b
             where b.listing.id = :listingId and b.startTime < :to and b.endTime > :from
-              and (b.status in (com.smartparking.booking.BookingStatus.AWAITING_APPROVAL,
-                                com.smartparking.booking.BookingStatus.CONFIRMED,
-                                com.smartparking.booking.BookingStatus.ACTIVE,
-                                com.smartparking.booking.BookingStatus.COMPLETED)
-                   or (b.status = com.smartparking.booking.BookingStatus.PENDING_PAYMENT and b.holdExpiresAt > :now))
+              and b.status in (com.smartparking.booking.BookingStatus.AWAITING_APPROVAL,
+                               com.smartparking.booking.BookingStatus.CONFIRMED,
+                               com.smartparking.booking.BookingStatus.ACTIVE,
+                               com.smartparking.booking.BookingStatus.COMPLETED)
             order by b.startTime, b.id
             """)
     List<Booking> findForCalendar(@Param("listingId") Long listingId, @Param("from") Instant from,
-                                  @Param("to") Instant to, @Param("now") Instant now);
+                                  @Param("to") Instant to);
 
     // ---- driver account -------------------------------------------------------------------------------------
 

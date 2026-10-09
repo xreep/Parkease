@@ -32,9 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class DriverAccountService {
 
-    /** Payments that moved money: captured, and those since refunded in part or in full. */
-    private static final List<PaymentStatus> MONEY_MOVED = List.of(PaymentStatus.CAPTURED,
-            PaymentStatus.PARTIALLY_REFUNDED, PaymentStatus.REFUNDED);
+    private static final List<PaymentStatus> MONEY_MOVED = PaymentStatus.MONEY_MOVED;
 
     private final PaymentRepository payments;
     private final InvoiceRepository invoices;

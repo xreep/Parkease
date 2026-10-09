@@ -21,6 +21,9 @@ import com.smartparking.listing.ListingStatus;
 import com.smartparking.listing.ParkingListing;
 import com.smartparking.listing.ParkingListingRepository;
 import com.smartparking.owner.dashboard.dto.OwnerStatsDto;
+import com.smartparking.payment.PaymentStatus;
+import com.smartparking.review.ReviewRepository;
+import com.smartparking.review.ReviewRepository.RatingTotals;
 import com.smartparking.slot.ParkingSlot;
 import com.smartparking.slot.ParkingSlotRepository;
 import java.math.BigDecimal;
@@ -55,13 +58,13 @@ public class OwnerStatsService {
 
     private static final Set<BookingStatus> COUNTED = Set.of(BookingStatus.CONFIRMED, BookingStatus.ACTIVE,
             BookingStatus.COMPLETED);
-    private static final Set<BookingStatus> CANCELLED = Set.of(BookingStatus.CANCELLED, BookingStatus.REJECTED);
 
     private final BookingRepository bookings;
     private final OwnerEarningRepository earnings;
     private final ParkingListingRepository listings;
     private final ParkingSlotRepository slots;
     private final AvailabilityRuleRepository rules;
+    private final ReviewRepository reviews;
     private final OwnerBookingService ownerBookings;
     private final Clock clock;
 
@@ -87,25 +90,20 @@ public class OwnerStatsService {
             dayEarnings.merge(dateOf(e.getStartTime()), e.getNet(), BigDecimal::add);
         }
         int booked = 0;
-        int cancelled = 0;
-        List<BookingStatus> statuses = new ArrayList<>(COUNTED);
-        statuses.addAll(CANCELLED);
-        for (StartAndStatus b : bookings.findStartsInRange(ownerId, statuses, rangeStart, rangeEnd)) {
-            if (COUNTED.contains(b.getStatus())) {
-                booked++;
-                dayBookings.merge(dateOf(b.getStartTime()), 1, Integer::sum);
-            } else {
-                cancelled++;
-            }
+        for (StartAndStatus b : bookings.findStartsInRange(ownerId, COUNTED, rangeStart, rangeEnd)) {
+            booked++;
+            dayBookings.merge(dateOf(b.getStartTime()), 1, Integer::sum);
         }
+        int cancelled = (int) bookings.countPaidCancellations(ownerId, rangeStart, rangeEnd, PaymentStatus.MONEY_MOVED);
 
         List<ParkingListing> owned = listings.findByOwnerId(ownerId);
         List<OwnerStatsDto.DayPoint> series = dayEarnings.entrySet().stream()
                 .map(e -> new OwnerStatsDto.DayPoint(e.getKey(), money(e.getValue()), dayBookings.get(e.getKey())))
                 .toList();
+        Ratings ratings = ratings(ownerId);
         return new OwnerStatsDto(from, to,
                 new OwnerStatsDto.Totals(money(earned), booked, cancelled, occupancy(ownerId, owned, from, to),
-                        weightedRating(owned), owned.stream().mapToInt(ParkingListing::getReviewCount).sum()),
+                        ratings.average(), ratings.count()),
                 balances(ownerId),
                 (int) bookings.countByListingOwnerIdAndStatus(ownerId, BookingStatus.AWAITING_APPROVAL),
                 ownerBookings.nextUpcoming(ownerId, UPCOMING), series);
@@ -121,16 +119,16 @@ public class OwnerStatsService {
                 money(byStatus.getOrDefault(EarningStatus.PAID, BigDecimal.ZERO)));
     }
 
-    /** Average of the listings' ratings weighted by their review counts; zero without reviews. */
-    private static BigDecimal weightedRating(List<ParkingListing> owned) {
-        BigDecimal sum = BigDecimal.ZERO;
-        long count = 0;
-        for (ParkingListing l : owned) {
-            sum = sum.add(l.getAvgRating().multiply(BigDecimal.valueOf(l.getReviewCount())));
-            count += l.getReviewCount();
-        }
-        return count == 0 ? BigDecimal.ZERO.setScale(1)
-                : sum.divide(BigDecimal.valueOf(count), 1, RoundingMode.HALF_UP);
+    private record Ratings(BigDecimal average, int count) {
+    }
+
+    /** Average (one decimal, HALF_UP) and number of all reviews of the owner's listings, straight from the reviews. */
+    private Ratings ratings(Long ownerId) {
+        RatingTotals totals = reviews.totalsForOwner(ownerId);
+        long count = totals.getRatingCount();
+        BigDecimal average = count == 0 ? BigDecimal.ZERO.setScale(1)
+                : BigDecimal.valueOf(totals.getRatingSum()).divide(BigDecimal.valueOf(count), 1, RoundingMode.HALF_UP);
+        return new Ratings(average, (int) count);
     }
 
     /** Booked slot-time as a share of open slot-time of the owner's approved listings, one decimal. */

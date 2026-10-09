@@ -45,6 +45,9 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.test.web.servlet.ResultActions;
 
 @CommittedIntegrationTest
@@ -60,6 +63,7 @@ class ReviewFlowTest {
     @Autowired CityRepository cities;
     @Autowired ParkingListingRepository listings;
     @Autowired RecordingEmailSender emails;
+    @Autowired PlatformTransactionManager txManager;
 
     private String ownerAuth;
     private String otherOwnerAuth;
@@ -139,6 +143,41 @@ class ReviewFlowTest {
                 .andExpect(jsonPath("$.ownerReply").value(nullValue()))
                 .andExpect(jsonPath("$.ownerRepliedAt").value(nullValue()));
 
+        assertThat(((BigDecimal) listingRow().get("avg_rating"))).isEqualByComparingTo("5.0");
+        assertThat(listingRow()).containsEntry("review_count", 1);
+    }
+
+    @Test
+    void anOwnerEditAfterAReviewKeepsTheAggregates() throws Exception {
+        reviewOk(driver, completed(driver, 10), 5, null);
+
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put("/api/v1/owner/listings/" + listingId + "/pricing")
+                        .header(HttpHeaders.AUTHORIZATION, ownerAuth).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"pricePerHour\":35,\"cancellationPolicy\":\"MODERATE\",\"autoApprove\":true,"
+                                + "\"amenities\":[\"CCTV\"]}"))
+                .andExpect(status().is2xxSuccessful());
+
+        assertThat(((BigDecimal) listingRow().get("avg_rating"))).isEqualByComparingTo("5.0");
+        assertThat(listingRow()).containsEntry("review_count", 1);
+    }
+
+    @Test
+    void anEditThatStartedBeforeAReviewDoesNotOverwriteTheAggregatesItNeverTouched() throws Exception {
+        TransactionTemplate edit = new TransactionTemplate(txManager);
+        TransactionTemplate other = new TransactionTemplate(txManager);
+        other.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+
+        edit.executeWithoutResult(status -> {
+            ParkingListing stale = listings.findById(listingId).orElseThrow(); // sees 0 reviews
+            stale.setTitle("Renamed Spot");
+            // Meanwhile a review commits in another transaction.
+            other.executeWithoutResult(s -> jdbc.update(
+                    "update parking_listings set avg_rating = 5.0, review_count = 1 where id = ?", listingId));
+        });
+
+        assertThat(jdbc.queryForObject("select title from parking_listings where id = ?", String.class, listingId))
+                .isEqualTo("Renamed Spot");
         assertThat(((BigDecimal) listingRow().get("avg_rating"))).isEqualByComparingTo("5.0");
         assertThat(listingRow()).containsEntry("review_count", 1);
     }
