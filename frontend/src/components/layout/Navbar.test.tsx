@@ -39,4 +39,19 @@ describe('Navbar logout', () => {
     renderApp('/')
     expect(screen.getByRole('link', { name: 'Find parking' })).toHaveAttribute('href', '/search')
   })
+
+  it('gives drivers a My bookings link, and owners none', async () => {
+    tokenStore.set('a', 'r')
+    mock.onGet('/me').reply(200, driver)
+    renderApp('/account')
+    expect((await screen.findAllByRole('link', { name: 'My bookings' }))[0]).toHaveAttribute('href', '/driver/bookings')
+  })
+
+  it('does not show My bookings to owners', async () => {
+    tokenStore.set('a', 'r')
+    mock.onGet('/me').reply(200, { ...driver, role: 'OWNER' })
+    renderApp('/account')
+    await screen.findByRole('heading', { name: /your account/i })
+    expect(screen.queryByRole('link', { name: 'My bookings' })).not.toBeInTheDocument()
+  })
 })
