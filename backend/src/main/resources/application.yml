@@ -45,6 +45,7 @@ app:
     platform-fee-percent: 10
     gst-percent: 18
   payments:
+    mock-enabled: ${PAYMENTS_MOCK_ENABLED:true}
     razorpay:
       key-id: ${RAZORPAY_KEY_ID:}
       key-secret: ${RAZORPAY_KEY_SECRET:}
