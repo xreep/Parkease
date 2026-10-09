@@ -96,6 +96,14 @@ RAZORPAY_KEY_SECRET=xxxxxxxx
 
 With both set, the backend switches to Razorpay automatically; remove them to go back to the mock provider. In test mode use card `4111 1111 1111 1111` with any future expiry and any CVV, or test UPI ID `success@razorpay`.
 
+#### Before using real Razorpay keys
+
+- [ ] Set `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` in `backend/.env` (never commit it).
+- [ ] Enable auto-capture in the Razorpay dashboard (the app also captures authorized payments itself).
+- [ ] Set `PAYMENTS_MOCK_ENABLED=false` in production (production refuses to start without keys).
+- [ ] Once deployed (Phase 8), configure the webhook URL in the Razorpay dashboard and set `RAZORPAY_WEBHOOK_SECRET`.
+- [ ] Test with card `4111 1111 1111 1111` (any future expiry, any CVV) or UPI `success@razorpay`.
+
 `RAZORPAY_WEBHOOK_SECRET` is only needed for webhooks. Razorpay has to reach your server, so webhooks need a public URL; that comes with deployment in Phase 8. Until then payments are confirmed when the browser verifies the payment after checkout.
 
 ### Uploads
