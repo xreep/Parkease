@@ -26,6 +26,13 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
         Instant getEndTime();
     }
 
+    /** Start and end of a booking. */
+    interface TimeSpan {
+        Instant getStartTime();
+
+        Instant getEndTime();
+    }
+
     /** Start time and status of a booking. */
     interface StartAndStatus {
         Instant getStartTime();
@@ -190,32 +197,34 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     // ---- driver views ---------------------------------------------------------------------------------------
 
-    /** Bookings that still lie ahead: not ended, and either paid for or on an unexpired payment hold. */
-    @EntityGraph(attributePaths = {"listing", "listing.city"})
-    @Query("""
-            select b from Booking b
-            where b.driver.id = :driverId and b.endTime > :now
-              and (b.status in (com.smartparking.booking.BookingStatus.AWAITING_APPROVAL,
-                                com.smartparking.booking.BookingStatus.CONFIRMED,
-                                com.smartparking.booking.BookingStatus.ACTIVE)
-                   or (b.status = com.smartparking.booking.BookingStatus.PENDING_PAYMENT and b.holdExpiresAt > :now))
-            """)
-    Page<Booking> findUpcomingForDriver(@Param("driverId") Long driverId, @Param("now") Instant now, Pageable pageable);
-
-    /** Everything that is not upcoming: ended, finished, cancelled, rejected, or an unpaid hold that lapsed. */
+    /** Bookings still to come: awaiting the owner, confirmed, or on an unexpired payment hold. */
     @EntityGraph(attributePaths = {"listing", "listing.city"})
     @Query("""
             select b from Booking b
             where b.driver.id = :driverId
-              and (b.endTime <= :now
-                   or b.status in (com.smartparking.booking.BookingStatus.COMPLETED,
-                                   com.smartparking.booking.BookingStatus.CANCELLED,
-                                   com.smartparking.booking.BookingStatus.REJECTED,
-                                   com.smartparking.booking.BookingStatus.EXPIRED)
+              and (b.status in (com.smartparking.booking.BookingStatus.AWAITING_APPROVAL,
+                                com.smartparking.booking.BookingStatus.CONFIRMED)
+                   or (b.status = com.smartparking.booking.BookingStatus.PENDING_PAYMENT and b.holdExpiresAt > :now))
+            """)
+    Page<Booking> findUpcomingForDriver(@Param("driverId") Long driverId, @Param("now") Instant now, Pageable pageable);
+
+    /** The driver's bookings in one status. */
+    @EntityGraph(attributePaths = {"listing", "listing.city"})
+    Page<Booking> findByDriverIdAndStatus(Long driverId, BookingStatus status, Pageable pageable);
+
+    /** Cancelled, rejected and expired bookings, and unpaid holds that lapsed (the sweep has not expired them yet). */
+    @EntityGraph(attributePaths = {"listing", "listing.city"})
+    @Query("""
+            select b from Booking b
+            where b.driver.id = :driverId
+              and (b.status in (com.smartparking.booking.BookingStatus.CANCELLED,
+                                com.smartparking.booking.BookingStatus.REJECTED,
+                                com.smartparking.booking.BookingStatus.EXPIRED)
                    or (b.status = com.smartparking.booking.BookingStatus.PENDING_PAYMENT
                        and (b.holdExpiresAt is null or b.holdExpiresAt <= :now)))
             """)
-    Page<Booking> findPastForDriver(@Param("driverId") Long driverId, @Param("now") Instant now, Pageable pageable);
+    Page<Booking> findCancelledForDriver(@Param("driverId") Long driverId, @Param("now") Instant now,
+                                         Pageable pageable);
 
     @EntityGraph(attributePaths = {"listing", "listing.city"})
     Page<Booking> findByDriverId(Long driverId, Pageable pageable);
@@ -269,4 +278,24 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
             """)
     List<Booking> findForCalendar(@Param("listingId") Long listingId, @Param("from") Instant from,
                                   @Param("to") Instant to, @Param("now") Instant now);
+
+    // ---- driver account -------------------------------------------------------------------------------------
+
+    long countByDriverIdAndStatusIn(Long driverId, Collection<BookingStatus> statuses);
+
+    @Query("""
+            select b.startTime as startTime, b.endTime as endTime from Booking b
+            where b.driver.id = :driverId and b.status = com.smartparking.booking.BookingStatus.COMPLETED
+            """)
+    List<TimeSpan> findCompletedSpans(@Param("driverId") Long driverId);
+
+    /** Ids of the driver's completed bookings that ended at or after {@code cutoff} and have no review, latest end first. */
+    @Query("""
+            select b.id from Booking b
+            where b.driver.id = :driverId and b.status = com.smartparking.booking.BookingStatus.COMPLETED
+              and b.endTime >= :cutoff
+              and not exists (select 1 from Review r where r.booking = b)
+            order by b.endTime desc, b.id desc
+            """)
+    List<Long> findReviewableIds(@Param("driverId") Long driverId, @Param("cutoff") Instant cutoff);
 }

@@ -29,7 +29,7 @@ public class BookingQueryService {
     public record Receipt(String fileName, byte[] pdf) {
     }
 
-    private enum View { UPCOMING, PAST, ALL }
+    private enum View { UPCOMING, ACTIVE, PAST, CANCELLED, ALL }
 
     private final BookingRepository bookings;
     private final InvoiceRepository invoices;
@@ -38,18 +38,23 @@ public class BookingQueryService {
     private final Clock clock;
 
     /**
-     * {@code upcoming} (default): not ended and paid or on a running payment hold, soonest first. {@code past}: the
-     * rest, newest first. {@code all}: everything, newest first.
+     * {@code upcoming} (default): unexpired payment holds, requests awaiting the owner and confirmed bookings, soonest
+     * first. {@code active}: bookings under way. {@code past}: completed ones, newest first. {@code cancelled}:
+     * cancelled, rejected and expired ones (lapsed unpaid holds too), newest first. {@code all}: everything.
      */
     public PageResponse<BookingSummaryDto> list(Long driverId, String view, int page, int size) {
         Instant now = clock.instant();
         int pageNumber = Math.max(page, 0);
         int pageSize = Math.min(Math.max(size, 1), 100);
         Sort newestFirst = Sort.by(Sort.Order.desc("startTime"), Sort.Order.desc("id"));
+        Sort soonestFirst = Sort.by("startTime", "id");
         Page<Booking> result = switch (parseView(view)) {
-            case UPCOMING -> bookings.findUpcomingForDriver(driverId, now, paged(pageNumber, pageSize,
-                    Sort.by("startTime", "id")));
-            case PAST -> bookings.findPastForDriver(driverId, now, paged(pageNumber, pageSize, newestFirst));
+            case UPCOMING -> bookings.findUpcomingForDriver(driverId, now, paged(pageNumber, pageSize, soonestFirst));
+            case ACTIVE -> bookings.findByDriverIdAndStatus(driverId, BookingStatus.ACTIVE,
+                    paged(pageNumber, pageSize, soonestFirst));
+            case PAST -> bookings.findByDriverIdAndStatus(driverId, BookingStatus.COMPLETED,
+                    paged(pageNumber, pageSize, newestFirst));
+            case CANCELLED -> bookings.findCancelledForDriver(driverId, now, paged(pageNumber, pageSize, newestFirst));
             case ALL -> bookings.findByDriverId(driverId, paged(pageNumber, pageSize, newestFirst));
         };
         return new PageResponse<>(mapper.toSummaries(result.getContent()), result.getNumber(), result.getSize(),
@@ -85,7 +90,7 @@ public class BookingQueryService {
         try {
             return View.valueOf(view.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            throw ApiException.badRequest("INVALID_VIEW", "view must be upcoming, past or all");
+            throw ApiException.badRequest("INVALID_VIEW", "view must be upcoming, active, past, cancelled or all");
         }
     }
 }
