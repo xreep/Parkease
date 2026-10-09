@@ -49,11 +49,12 @@ function Row({ label, children, className }: { label: string; children: React.Re
 }
 
 /**
- * A refund is recorded as an event that leaves the status where it was (or says so in its note); showing it under the
- * status name would read as a second cancellation.
+ * A refund is recorded as an event that leaves the status where it was, with a note that starts with "Refund";
+ * showing it under the status name would read as a second cancellation. Both must hold: a cancellation whose reason
+ * happens to start with "Refund" is still a cancellation.
  */
 function eventLabel(event: BookingEventDto): string {
-  const isRefund = /^refund/i.test(event.note ?? '') || event.fromStatus === event.toStatus
+  const isRefund = event.fromStatus === event.toStatus && (event.note ?? '').startsWith('Refund')
   return isRefund ? 'Refund' : BOOKING_STATUS_LABELS[event.toStatus]
 }
 

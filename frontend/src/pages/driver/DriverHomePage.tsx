@@ -122,7 +122,7 @@ function StatsSection() {
         <Stat label="Bookings" value={String(data.totalBookings)} />
         <Stat label="Completed" value={String(data.completedBookings)} />
         <Stat label="Spent" value={formatINR(data.amountSpent)} />
-        <Stat label="Hours parked" value={String(data.hoursParked)} />
+        <Stat label="Hours parked" value={data.hoursParked.toFixed(1)} />
       </div>
       {data.pendingReviews > 0 && data.reviewBookingId !== null && (
         <ReviewPrompt count={data.pendingReviews} bookingId={data.reviewBookingId} />
