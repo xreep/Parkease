@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { FormError } from '../../components/AuthCard'
 import { Pagination } from '../../components/ui/Pagination'
 import { Spinner } from '../../components/ui/Spinner'
@@ -17,10 +17,24 @@ const primaryLink =
 const smallLink =
   'inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800'
 
-const TABS: { value: BookingView; label: string }[] = [
+type TabView = Exclude<BookingView, 'all'>
+
+const TABS: { value: TabView; label: string }[] = [
   { value: 'upcoming', label: 'Upcoming' },
+  { value: 'active', label: 'Active' },
   { value: 'past', label: 'Past' },
+  { value: 'cancelled', label: 'Cancelled' },
 ]
+
+const EMPTY: Record<TabView, string> = {
+  upcoming: 'No upcoming bookings.',
+  active: 'No active bookings right now.',
+  past: 'No past bookings yet.',
+  cancelled: 'No cancelled bookings.',
+}
+
+const DEFAULT_VIEW: TabView = 'upcoming'
+const asView = (raw: string | null): TabView => TABS.find((t) => t.value === raw)?.value ?? DEFAULT_VIEW
 
 function BookingCard({ booking }: { booking: BookingSummaryDto }) {
   return (
@@ -52,7 +66,9 @@ function BookingCard({ booking }: { booking: BookingSummaryDto }) {
 }
 
 export function MyBookingsPage() {
-  const [view, setView] = useState<BookingView>('upcoming')
+  // The tab lives in the URL (`?view=`), so a refresh or a shared link opens the same list; Upcoming is the bare URL.
+  const [params, setParams] = useSearchParams()
+  const view = asView(params.get('view'))
   const [page, setPage] = useState(0)
   const { data, error, isPending, isPlaceholderData } = useBookings(view, page)
 
@@ -65,7 +81,7 @@ export function MyBookingsPage() {
         items={TABS}
         value={view}
         onChange={(next) => {
-          setView(next)
+          setParams(next === DEFAULT_VIEW ? {} : { view: next })
           setPage(0)
         }}
       />
@@ -79,9 +95,7 @@ export function MyBookingsPage() {
           <FormError message={errorMessage(error)} />
         ) : data.content.length === 0 && page === 0 ? (
           <div className="space-y-4 rounded-2xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
-            <p className="text-slate-600 dark:text-slate-400">
-              {view === 'upcoming' ? 'No upcoming bookings.' : 'No past bookings yet.'}
-            </p>
+            <p className="text-slate-600 dark:text-slate-400">{EMPTY[view]}</p>
             {view === 'upcoming' && <Link to="/search" className={primaryLink}>Find parking</Link>}
           </div>
         ) : (

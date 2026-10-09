@@ -294,7 +294,7 @@ describe('my bookings', () => {
 
     upcoming.focus()
     await user.keyboard('{End}')
-    expect(await screen.findByRole('tab', { name: 'Past' })).toHaveAttribute('aria-selected', 'true')
+    expect(await screen.findByRole('tab', { name: 'Cancelled' })).toHaveAttribute('aria-selected', 'true')
     await user.keyboard('{Home}')
     expect(await screen.findByRole('tab', { name: 'Upcoming' })).toHaveAttribute('aria-selected', 'true')
   })

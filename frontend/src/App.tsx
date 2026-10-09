@@ -17,6 +17,7 @@ import { VerifyEmailPage } from './pages/auth/VerifyEmailPage'
 import { BookingDetailPage } from './pages/driver/BookingDetailPage'
 import { CheckoutPage } from './pages/driver/CheckoutPage'
 import { MyBookingsPage } from './pages/driver/MyBookingsPage'
+import { PaymentsPage } from './pages/driver/PaymentsPage'
 import { DriverHomePage } from './pages/driver/DriverHomePage'
 import { DriverLayout } from './pages/driver/DriverLayout'
 import { VehiclesPage } from './pages/driver/VehiclesPage'
@@ -56,6 +57,7 @@ export default function App() {
           <Route index element={<DriverHomePage />} />
           <Route path="bookings" element={<MyBookingsPage />} />
           <Route path="bookings/:id" element={<BookingDetailPage />} />
+          <Route path="payments" element={<PaymentsPage />} />
           <Route path="vehicles" element={<VehiclesPage />} />
         </Route>
         <Route path="checkout/:bookingId" element={<RequireRole roles={['DRIVER']}><CheckoutPage /></RequireRole>} />
