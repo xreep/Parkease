@@ -14,7 +14,10 @@ import com.smartparking.slot.ParkingSlotRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,14 +45,19 @@ public class OwnerCalendarService {
         Instant start = startOf(from);
         Instant end = startOf(to.plusDays(1));
 
+        List<Booking> rangeBookings = bookings.findForCalendar(listingId, start, end, clock.instant());
+        List<AvailabilityBlock> rangeBlocks = blocks.findOverlapping(List.of(listingId), start, end).stream()
+                .sorted(Comparator.comparing(AvailabilityBlock::getStartTime)).toList();
+        // Active slots, plus retired ones that a booking or block in the range still points at (every bar needs a row).
+        Set<Long> referenced = new HashSet<>();
+        rangeBookings.forEach(b -> referenced.add(b.getSlot().getId()));
+        rangeBlocks.stream().filter(b -> b.getSlot() != null).forEach(b -> referenced.add(b.getSlot().getId()));
         List<OwnerCalendarDto.CalendarSlot> slotDtos = slots.findByListingIdOrderByLabelAsc(listingId).stream()
-                .filter(s -> s.isActive())
+                .filter(s -> s.isActive() || referenced.contains(s.getId()))
                 .map(s -> new OwnerCalendarDto.CalendarSlot(s.getId(), s.getLabel())).toList();
-        List<OwnerCalendarDto.CalendarBooking> bookingDtos = bookings
-                .findForCalendar(listingId, start, end, clock.instant()).stream()
+        List<OwnerCalendarDto.CalendarBooking> bookingDtos = rangeBookings.stream()
                 .map(OwnerCalendarService::toDto).toList();
-        List<OwnerCalendarDto.CalendarBlock> blockDtos = blocks.findOverlapping(List.of(listingId), start, end).stream()
-                .sorted((a, b) -> a.getStartTime().compareTo(b.getStartTime()))
+        List<OwnerCalendarDto.CalendarBlock> blockDtos = rangeBlocks.stream()
                 .map(OwnerCalendarService::toDto).toList();
         return new OwnerCalendarDto(listingId, from, to, slotDtos, bookingDtos, blockDtos);
     }

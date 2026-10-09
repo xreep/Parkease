@@ -160,6 +160,9 @@ class DriverAccountTest {
         mvc.perform(post("/api/v1/bookings/" + cancelled + "/cancel").header(HttpHeaders.AUTHORIZATION, driver.auth())
                 .contentType(MediaType.APPLICATION_JSON).content("{}")).andExpect(status().isOk());
         hold(driver, 18);                                                    // unpaid: not a booking yet
+        long abandoned = hold(driver, 22);                                   // cancelled before paying: neither
+        mvc.perform(post("/api/v1/bookings/" + abandoned + "/cancel").header(HttpHeaders.AUTHORIZATION, driver.auth())
+                .contentType(MediaType.APPLICATION_JSON).content("{}")).andExpect(status().isOk());
         long foreign = completed(other, 20, 2, Duration.ofHours(1));         // somebody else's
 
         getAs(driver, "/api/v1/me/stats")

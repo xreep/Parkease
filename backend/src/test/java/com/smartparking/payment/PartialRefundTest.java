@@ -190,7 +190,6 @@ class PartialRefundTest {
         assertThat(paymentStatus()).isEqualTo("REFUNDED");
         assertThat(earning().getNet()).isEqualByComparingTo("0.00");
         assertThat(earning().getStatus()).isEqualTo(EarningStatus.REVERSED);
-        assertThat(earning().getNet()).isEqualByComparingTo("0.00");
     }
 
     @Test

@@ -27,6 +27,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class OwnerDashboardController {
 
+    /** Set on a CSV export that stopped at the row cap. */
+    public static final String TRUNCATED_HEADER = "X-Truncated";
+
     private static final MediaType CSV = new MediaType("text", "csv", StandardCharsets.UTF_8);
 
     private final OwnerStatsService stats;
@@ -53,11 +56,16 @@ public class OwnerDashboardController {
         if ("csv".equalsIgnoreCase(format)) {
             String name = "parkease-earnings-" + clock.instant().atZone(AvailabilityEvaluator.ZONE).toLocalDate()
                     + ".csv";
-            return ResponseEntity.ok()
+            OwnerEarningsService.CsvExport export = earnings.csv(principal.id(), status, from, to);
+            ResponseEntity.BodyBuilder response = ResponseEntity.ok()
                     .contentType(CSV)
-                    .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(name).build().toString())
-                    .cacheControl(CacheControl.noStore())
-                    .body(earnings.csv(principal.id(), status, from, to));
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                            ContentDisposition.attachment().filename(name).build().toString())
+                    .cacheControl(CacheControl.noStore());
+            if (export.truncated()) {
+                response.header(TRUNCATED_HEADER, "true");
+            }
+            return response.body(export.text());
         }
         if (!"json".equalsIgnoreCase(format)) {
             throw ApiException.badRequest("INVALID_PARAMETER", "format must be json or csv");

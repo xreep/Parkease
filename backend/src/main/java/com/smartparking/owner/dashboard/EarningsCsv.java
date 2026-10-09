@@ -12,6 +12,9 @@ import java.util.List;
  */
 final class EarningsCsv {
 
+    /** Byte order mark, so spreadsheets open the file as UTF-8. */
+    static final String BOM = "\uFEFF";
+
     static final String HEADER = "Booking,Listing,Start (IST),End (IST),Gross,Commission,Net,Status,Paid at,"
             + "Payout reference";
 
@@ -22,7 +25,7 @@ final class EarningsCsv {
     }
 
     static String write(List<OwnerEarning> rows) {
-        StringBuilder out = new StringBuilder(HEADER).append("\r\n");
+        StringBuilder out = new StringBuilder(BOM).append(HEADER).append("\r\n");
         for (OwnerEarning e : rows) {
             List<String> cells = new ArrayList<>();
             cells.add(e.getBooking().getBookingCode());
