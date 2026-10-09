@@ -40,7 +40,6 @@ public class WebhookService {
     private final PaymentProvider provider;
     private final WebhookEventRepository webhookEvents;
     private final PaymentRepository payments;
-    private final RefundRepository refunds;
     private final PaymentService paymentService;
     private final RefundService refundService;
     private final Clock clock;
@@ -48,12 +47,11 @@ public class WebhookService {
     private final TransactionTemplate newTx;
 
     public WebhookService(PaymentProvider provider, WebhookEventRepository webhookEvents, PaymentRepository payments,
-                          RefundRepository refunds, PaymentService paymentService, RefundService refundService, Clock clock,
+                          PaymentService paymentService, RefundService refundService, Clock clock,
                           PlatformTransactionManager txManager) {
         this.provider = provider;
         this.webhookEvents = webhookEvents;
         this.payments = payments;
-        this.refunds = refunds;
         this.paymentService = paymentService;
         this.refundService = refundService;
         this.clock = clock;
@@ -176,19 +174,18 @@ public class WebhookService {
 
     private String refundUpdated(JSONObject refund, RefundStatus status) {
         String refundId = refund.optString("id", null);
-        Long id = StringUtils.hasText(refundId) ? refunds.findByProviderRefundId(refundId).map(Refund::getId).orElse(null)
-                : null;
-        if (id == null) {
-            log.warn("Ignoring refund event for unknown refund {}", refundId);
+        String reason = status == RefundStatus.FAILED ? refundFailureReason(refund) : null;
+        // The stale-event check, the locks and the recomputation of the books all happen inside the service.
+        if (!refundService.applyProviderStatus(refundId, status, reason)) {
             return IGNORED;
         }
-        if (status == RefundStatus.FAILED) {
-            // The books must show the money as owed again (payment CAPTURED) so the refund job re-drives it.
-            refundService.providerReportedFailure(id);
-        } else {
-            tx.executeWithoutResult(s -> refunds.findById(id).orElseThrow().setStatus(status));
-        }
         return OK;
+    }
+
+    private static String refundFailureReason(JSONObject refund) {
+        JSONObject error = refund.optJSONObject("error");
+        String description = error != null ? error.optString("description", null) : null;
+        return StringUtils.hasText(description) ? description : "The provider reported the refund as failed";
     }
 
     /** Header value, or the body hash when absent; ids that do not fit the column are replaced by their hash. */

@@ -66,6 +66,11 @@ public class MockPaymentProvider implements PaymentProvider {
     }
 
     @Override
+    public List<ProviderRefund> fetchRefunds(String paymentId) {
+        return List.of();
+    }
+
+    @Override
     public boolean verifyWebhook(String rawBody, String signature) {
         return false;
     }

@@ -30,6 +30,7 @@ public class RefundService {
     public static final int MAX_ATTEMPTS = 5;
 
     private static final int MAX_REASON = 255;
+    private static final int MAX_FAILURE = 300;
 
     static final String PROVIDER_FAILED_NOTE = "Refund failed at the provider — retrying";
     static final String EXHAUSTED_NOTE = "Refund failed after " + MAX_ATTEMPTS + " attempts — manual action needed";
@@ -66,23 +67,43 @@ public class RefundService {
         refund.setAmount(payment.getAmount());
         String shortReason = abbreviate(reason);
         refund.setReason(shortReason);
-        try {
-            ProviderRefund result = provider.refund(payment.getPaymentId(), toPaise(payment.getAmount()), shortReason);
-            refund.setProviderRefundId(result.refundId());
-            refund.setStatus(result.status());
-        } catch (ApiException e) {
-            // Only ApiException (what the providers raise for a refused or unreachable gateway) means "the refund did
-            // not happen". Anything else is a bug whose effect on the money is unknown, so it is left to propagate and
-            // roll the caller's transaction back instead of being recorded as a clean FAILED refund.
-            log.error("Provider refund failed for payment {}: {}", payment.getId(), e.getMessage());
-            refund.setStatus(RefundStatus.FAILED);
-        }
-        refunds.save(refund);
+        refund.setStatus(RefundStatus.PENDING);
+        refunds.saveAndFlush(refund); // the row id is the provider idempotency key, so it must exist before the call
+        issue(refund, payment.getPaymentId(), shortReason);
         if (refund.getStatus() != RefundStatus.FAILED) {
             payment.setStatus(PaymentStatus.REFUNDED);
             payment.getBooking().setRefundAmount(payment.getAmount());
         }
         return refund;
+    }
+
+    /**
+     * Asks the provider for the refund of {@code refund} (a saved row, attempt 1). A refused or unreachable gateway
+     * (an {@link ApiException}) is recorded as a {@link RefundStatus#FAILED} refund so the money is not lost track of.
+     * Anything else is a bug whose effect on the money is unknown, so it propagates and rolls the caller's
+     * transaction back instead of being recorded as a clean FAILED refund.
+     */
+    private void issue(Refund refund, String providerPaymentId, String reason) {
+        try {
+            ProviderRefund result = provider.refund(providerPaymentId, toPaise(refund.getAmount()), reason,
+                    idempotencyKey(refund));
+            refund.setProviderRefundId(result.refundId());
+            refund.setStatus(result.status());
+        } catch (ApiException e) {
+            log.error("Provider refund {} of payment {} failed", refund.getId(), providerPaymentId, e);
+            refund.setStatus(RefundStatus.FAILED);
+            refund.setFailureReason(abbreviate(e.getMessage(), MAX_FAILURE));
+        }
+    }
+
+    /**
+     * Retrying a request with the same key never refunds twice at Razorpay. The first attempt uses
+     * {@code parkease-refund-<row id>}; later attempts add the attempt number, because a refund that failed at the
+     * provider would otherwise be answered with the same failed refund again.
+     */
+    static String idempotencyKey(Refund refund) {
+        String key = "parkease-refund-" + refund.getId();
+        return refund.getAttempts() > 1 ? key + "-" + refund.getAttempts() : key;
     }
 
     /**
@@ -139,7 +160,9 @@ public class RefundService {
     /**
      * Makes one more provider attempt for a FAILED refund. Opens its own transaction (call it outside one), locking
      * the payment row and then the booking row. Skips refunds whose payment is no longer captured or whose booking
-     * already got its money back. Returns true when the provider accepted the refund this time.
+     * already got its money back. Before asking the provider for a new refund it looks at the refunds it already has
+     * for the payment: a failed attempt may have reached it anyway (timeout), and such a refund is adopted instead of
+     * issuing a second one. Returns true when the provider has the refund now.
      */
     public boolean retry(Long refundId) {
         Boolean done = tx.execute(status -> {
@@ -150,22 +173,27 @@ public class RefundService {
             Booking booking = locks.lock(bookingId); // payment row, then booking row
             Payment payment = payments.findByBookingId(bookingId).orElseThrow();
             Refund refund = refunds.findById(refundId).orElseThrow();
+            boolean extraPayment = refund.getProviderPaymentId() != null;
             if (refund.getStatus() != RefundStatus.FAILED || refund.getAttempts() >= MAX_ATTEMPTS
-                    || payment.getStatus() != PaymentStatus.CAPTURED
-                    || booking.getRefundAmount().compareTo(payment.getAmount()) >= 0) {
+                    || (!extraPayment && (payment.getStatus() != PaymentStatus.CAPTURED
+                    || booking.getRefundAmount().compareTo(payment.getAmount()) >= 0))) {
                 return false;
             }
+            String providerPaymentId = extraPayment ? refund.getProviderPaymentId() : payment.getPaymentId();
             refund.setAttempts(refund.getAttempts() + 1);
             try {
-                ProviderRefund result = provider.refund(payment.getPaymentId(), toPaise(refund.getAmount()),
-                        refund.getReason());
+                ProviderRefund existing = existingRefund(providerPaymentId, refundId);
+                ProviderRefund result = existing != null ? existing
+                        : provider.refund(providerPaymentId, toPaise(refund.getAmount()), refund.getReason(),
+                                idempotencyKey(refund));
                 refund.setProviderRefundId(result.refundId());
                 refund.setStatus(result.status());
+                refund.setFailureReason(null);
             } catch (RuntimeException e) {
                 // Unlike the first attempt, any provider-side failure must count here: the attempts counter is what
                 // stops the job from retrying forever, and nothing else in this transaction needs to roll back.
-                log.error("Retry {} of refund {} for payment {} failed: {}", refund.getAttempts(), refundId,
-                        payment.getId(), e.getMessage());
+                log.error("Retry {} of refund {} for payment {} failed", refund.getAttempts(), refundId,
+                        payment.getId(), e);
                 if (refund.getAttempts() >= MAX_ATTEMPTS) {
                     log.error("Giving up on refund {}: {} attempts used; it needs manual attention", refundId,
                             MAX_ATTEMPTS);
@@ -174,52 +202,138 @@ public class RefundService {
                 }
                 return false;
             }
-            payment.setStatus(PaymentStatus.REFUNDED);
-            booking.setRefundAmount(payment.getAmount());
+            if (!extraPayment) {
+                recompute(payment, booking);
+            }
             events.record(booking, booking.getStatus(), booking.getStatus(), BookingActor.SYSTEM,
-                    "Refund of ₹" + refund.getAmount().toPlainString() + " issued");
+                    "Refund of ₹" + refund.getAmount().toPlainString() + " issued"
+                            + (extraPayment ? " for an extra payment" : ""));
             return true;
         });
         return Boolean.TRUE.equals(done);
     }
 
+    /** A refund the provider already has for the payment that is not failed and not another row's. */
+    private ProviderRefund existingRefund(String providerPaymentId, Long refundId) {
+        for (ProviderRefund candidate : provider.fetchRefunds(providerPaymentId)) {
+            if (candidate.status() == RefundStatus.FAILED) {
+                continue;
+            }
+            boolean claimedElsewhere = refunds.findByProviderRefundId(candidate.refundId())
+                    .map(other -> !other.getId().equals(refundId)).orElse(false);
+            if (!claimedElsewhere) {
+                log.warn("Refund {} already exists at the provider as {} ({}); adopting it instead of refunding again",
+                        refundId, candidate.refundId(), candidate.status());
+                return candidate;
+            }
+        }
+        return null;
+    }
+
     /**
-     * The provider reported (webhook {@code refund.failed}) that a refund it had accepted did not go through. Puts the
-     * books back to "money still owed" so {@link #retry} picks it up: the refund becomes FAILED, a REFUNDED payment
-     * returns to CAPTURED unless other live refunds still cover it in full, and the booking's refund amount drops by
-     * this refund. Own transaction (call it outside one); payment row first, then booking row. Idempotent.
+     * Applies what the provider reports about one of its refunds (webhook {@code refund.processed} /
+     * {@code refund.failed}). Opens its own transaction (call it outside one) and takes the payment row lock and then
+     * the booking row lock, like every other money path. The refund is looked up again under those locks by its
+     * provider id; if no refund carries that id any more (a retry replaced it, or it was never ours) the event is
+     * stale and ignored. Afterwards the payment status and the booking's refunded amount are recomputed from the
+     * refunds that still count, so events arriving late or out of order cannot leave the books wrong. Idempotent.
+     *
+     * @return false when the event was ignored (unknown or stale refund id, or a status that is not applied)
      */
-    public void providerReportedFailure(Long refundId) {
-        tx.executeWithoutResult(status -> {
-            Long bookingId = refunds.findBookingIdById(refundId).orElse(null);
+    public boolean applyProviderStatus(String providerRefundId, RefundStatus newStatus, String failureReason) {
+        if (providerRefundId == null || providerRefundId.isBlank()
+                || (newStatus != RefundStatus.PROCESSED && newStatus != RefundStatus.FAILED)) {
+            return false;
+        }
+        Boolean applied = tx.execute(status -> {
+            Long bookingId = refunds.findBookingIdByProviderRefundId(providerRefundId).orElse(null);
             if (bookingId == null) {
-                return;
+                log.warn("Ignoring {} for unknown refund {}", newStatus, providerRefundId);
+                return false;
             }
-            Booking booking = locks.lock(bookingId);
+            Booking booking = locks.lock(bookingId); // payment row, then booking row
             Payment payment = payments.findByBookingId(bookingId).orElseThrow();
-            Refund refund = refunds.findById(refundId).orElseThrow();
-            if (refund.getStatus() == RefundStatus.FAILED) {
-                return;
+            Refund refund = refunds.findByProviderRefundId(providerRefundId).orElse(null); // re-read under the lock
+            if (refund == null) {
+                log.warn("Ignoring {} for refund {}: it was replaced while the event was waiting", newStatus,
+                        providerRefundId);
+                return false;
             }
-            refund.setStatus(RefundStatus.FAILED);
-            BigDecimal covered = refunds.findByPaymentId(payment.getId()).stream()
-                    .filter(r -> !r.getId().equals(refundId))
-                    .filter(r -> r.getStatus() != RefundStatus.FAILED)
-                    .map(Refund::getAmount)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-            if (payment.getStatus() == PaymentStatus.REFUNDED && covered.compareTo(payment.getAmount()) < 0) {
-                payment.setStatus(PaymentStatus.CAPTURED);
+            if (refund.getStatus() == newStatus) {
+                return true; // redelivery
             }
-            booking.setRefundAmount(booking.getRefundAmount().subtract(refund.getAmount()).max(BigDecimal.ZERO));
-            events.record(booking, booking.getStatus(), booking.getStatus(), BookingActor.SYSTEM,
-                    refund.getAttempts() >= MAX_ATTEMPTS ? EXHAUSTED_NOTE : PROVIDER_FAILED_NOTE);
-            log.warn("Provider reported refund {} of payment {} as failed", refundId, payment.getId());
+            refund.setStatus(newStatus);
+            if (newStatus == RefundStatus.FAILED) {
+                refund.setFailureReason(abbreviate(failureReason, MAX_FAILURE));
+            }
+            if (refund.getProviderPaymentId() == null) {
+                recompute(payment, booking);
+            }
+            if (newStatus == RefundStatus.FAILED) {
+                events.record(booking, booking.getStatus(), booking.getStatus(), BookingActor.SYSTEM,
+                        refund.getAttempts() >= MAX_ATTEMPTS ? EXHAUSTED_NOTE : PROVIDER_FAILED_NOTE);
+                log.warn("Provider reported refund {} of payment {} as failed: {}", refund.getId(), payment.getId(),
+                        failureReason);
+            }
+            return true;
         });
+        return Boolean.TRUE.equals(applied);
+    }
+
+    /**
+     * Brings the payment status and the booking's refunded amount in line with the refunds that count: those of the
+     * payment's own money that are not FAILED. REFUNDED when they cover the payment, CAPTURED when there are none,
+     * PARTIALLY_REFUNDED in between. Refunds of extra payments (see {@link #refundExtraPayment}) never count.
+     */
+    private void recompute(Payment payment, Booking booking) {
+        BigDecimal covered = refunds.findByPaymentId(payment.getId()).stream()
+                .filter(r -> r.getProviderPaymentId() == null && r.getStatus() != RefundStatus.FAILED)
+                .map(Refund::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (payment.getStatus() == PaymentStatus.CAPTURED || payment.getStatus() == PaymentStatus.PARTIALLY_REFUNDED
+                || payment.getStatus() == PaymentStatus.REFUNDED) {
+            payment.setStatus(covered.compareTo(payment.getAmount()) >= 0 ? PaymentStatus.REFUNDED
+                    : covered.signum() > 0 ? PaymentStatus.PARTIALLY_REFUNDED : PaymentStatus.CAPTURED);
+        }
+        booking.setRefundAmount(covered.min(payment.getAmount()));
+    }
+
+    /**
+     * A second provider payment was captured for an order that is already paid (the customer paid twice): gives that
+     * payment back in full. It is recorded as a refund of the payment row that carries the extra provider payment id,
+     * and does not touch the payment's or the booking's own state. Idempotent per extra payment id; a failed attempt
+     * is left for {@link #retry}. Joins the caller's transaction (payment row lock, then booking row lock).
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Refund refundExtraPayment(Booking booking, Payment payment, String extraProviderPaymentId) {
+        Optional<Refund> earlier = refunds.findByProviderPaymentId(extraProviderPaymentId);
+        if (earlier.isPresent()) {
+            return earlier.get();
+        }
+        String reason = "Extra payment for the same order";
+        Refund refund = new Refund();
+        refund.setPayment(payment);
+        refund.setProviderPaymentId(extraProviderPaymentId);
+        refund.setAmount(payment.getAmount());
+        refund.setReason(reason);
+        refund.setStatus(RefundStatus.PENDING);
+        refunds.saveAndFlush(refund);
+        issue(refund, extraProviderPaymentId, reason);
+        String note = "Extra payment " + extraProviderPaymentId + " for the same order: refund of ₹"
+                + payment.getAmount().toPlainString()
+                + (refund.getStatus() == RefundStatus.FAILED ? " could not be issued yet; it will be retried"
+                : " issued");
+        events.record(booking, booking.getStatus(), booking.getStatus(), BookingActor.SYSTEM, note);
+        return refund;
     }
 
     /** Keeps free text within what the refund row and the provider's notes accept. */
     private static String abbreviate(String reason) {
-        return reason != null && reason.length() > MAX_REASON ? reason.substring(0, MAX_REASON) : reason;
+        return abbreviate(reason, MAX_REASON);
+    }
+
+    private static String abbreviate(String text, int max) {
+        return text != null && text.length() > max ? text.substring(0, max) : text;
     }
 
     public static long toPaise(BigDecimal amount) {

@@ -11,7 +11,13 @@ public interface RefundRepository extends JpaRepository<Refund, Long> {
 
     Optional<Refund> findByProviderRefundId(String providerRefundId);
 
+    Optional<Refund> findByProviderPaymentId(String providerPaymentId);
+
     List<Refund> findByPaymentId(Long paymentId);
+
+    /** Booking behind the refund with this provider refund id, without loading (or locking) any entity. */
+    @Query("select r.payment.booking.id from Refund r where r.providerRefundId = :providerRefundId")
+    Optional<Long> findBookingIdByProviderRefundId(@Param("providerRefundId") String providerRefundId);
 
     /** Booking behind a refund, without loading (or locking) any entity. */
     @Query("select r.payment.booking.id from Refund r where r.id = :id")

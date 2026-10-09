@@ -28,6 +28,13 @@ public class Refund extends BaseEntity {
     @Column(name = "provider_refund_id")
     private String providerRefundId;
 
+    /**
+     * The provider payment this refund returns, only when it is not the payment's own (an extra payment captured for
+     * the same order). Null for ordinary refunds, which count towards the payment's refunded total.
+     */
+    @Column(name = "provider_payment_id")
+    private String providerPaymentId;
+
     @Column(nullable = false)
     private BigDecimal amount;
 
@@ -36,6 +43,8 @@ public class Refund extends BaseEntity {
     private RefundStatus status;
 
     private String reason;
+
+    private String failureReason;
 
     /** Provider attempts so far; the first try counts. */
     @Column(nullable = false)
