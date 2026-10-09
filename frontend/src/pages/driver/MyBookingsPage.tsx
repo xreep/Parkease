@@ -1,6 +1,5 @@
 import clsx from 'clsx'
-import { useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { FormError } from '../../components/AuthCard'
 import { Pagination } from '../../components/ui/Pagination'
 import { Spinner } from '../../components/ui/Spinner'
@@ -35,6 +34,13 @@ const EMPTY: Record<TabView, string> = {
 
 const DEFAULT_VIEW: TabView = 'upcoming'
 const asView = (raw: string | null): TabView => TABS.find((t) => t.value === raw)?.value ?? DEFAULT_VIEW
+/** A zero-based page number from the URL; anything that isn't a whole number from 0 up is the first page. */
+const asPage = (raw: string | null): number => (raw !== null && /^\d+$/.test(raw) ? Number(raw) : 0)
+
+/** The query string for a tab and page: the defaults (Upcoming, first page) are left out. */
+function search(view: TabView, page: number): Record<string, string> {
+  return { ...(view !== DEFAULT_VIEW && { view }), ...(page > 0 && { page: String(page) }) }
+}
 
 function BookingCard({ booking }: { booking: BookingSummaryDto }) {
   return (
@@ -66,11 +72,13 @@ function BookingCard({ booking }: { booking: BookingSummaryDto }) {
 }
 
 export function MyBookingsPage() {
-  // The tab lives in the URL (`?view=`), so a refresh or a shared link opens the same list; Upcoming is the bare URL.
+  // The tab and the page live in the URL (`?view=past&page=2`), so a refresh, a shared link and the browser's Back and
+  // Forward buttons all restore the same list.
   const [params, setParams] = useSearchParams()
   const view = asView(params.get('view'))
-  const [page, setPage] = useState(0)
+  const page = asPage(params.get('page'))
   const { data, error, isPending, isPlaceholderData } = useBookings(view, page)
+  const lastPage = data ? Math.max(data.totalPages - 1, 0) : 0
 
   return (
     <div className="space-y-6">
@@ -80,10 +88,8 @@ export function MyBookingsPage() {
         label="Booking views"
         items={TABS}
         value={view}
-        onChange={(next) => {
-          setParams(next === DEFAULT_VIEW ? {} : { view: next })
-          setPage(0)
-        }}
+        // Clicks add a history entry; the arrow keys, which move a tab at a time, replace it.
+        onChange={(next, via) => setParams(search(next, 0), { replace: via === 'keyboard' })}
       />
 
       <div role="tabpanel" id={panelId('my-bookings', view)} aria-labelledby={tabId('my-bookings', view)} className="space-y-4">
@@ -93,7 +99,10 @@ export function MyBookingsPage() {
           </div>
         ) : error ? (
           <FormError message={errorMessage(error)} />
-        ) : data.content.length === 0 && page === 0 ? (
+        ) : data.content.length === 0 && page > 0 && !isPlaceholderData ? (
+          // Past the last page (a stale link, bookings that have since moved): go to the last page that exists.
+          <Navigate to={{ search: new URLSearchParams(search(view, Math.min(page - 1, lastPage))).toString() }} replace />
+        ) : data.content.length === 0 ? (
           <div className="space-y-4 rounded-2xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
             <p className="text-slate-600 dark:text-slate-400">{EMPTY[view]}</p>
             {view === 'upcoming' && <Link to="/search" className={primaryLink}>Find parking</Link>}
@@ -105,7 +114,7 @@ export function MyBookingsPage() {
                 <BookingCard key={b.id} booking={b} />
               ))}
             </div>
-            <Pagination page={page} totalPages={data.totalPages} onChange={setPage} />
+            <Pagination page={page} totalPages={data.totalPages} onChange={(next) => setParams(search(view, next))} />
           </>
         )}
       </div>

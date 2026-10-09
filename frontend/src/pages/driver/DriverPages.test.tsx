@@ -1,8 +1,9 @@
 import '@testing-library/jest-dom/vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { AxiosRequestConfig } from 'axios'
 import MockAdapter from 'axios-mock-adapter'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { api } from '../../lib/api'
 import type { BookingDetailDto, BookingSummaryDto } from '../../lib/bookings'
@@ -28,6 +29,21 @@ const page = <T,>(content: T[], totalPages = 1, pageNo = 0) => ({
 function LocationProbe() {
   const l = useLocation()
   return <output data-testid="loc">{l.pathname + l.search}</output>
+}
+
+/** Stands in for the browser's Back button. */
+function BackButton() {
+  const navigate = useNavigate()
+  return <button type="button" onClick={() => void navigate(-1)}>history back</button>
+}
+
+function Probes() {
+  return (
+    <>
+      <LocationProbe />
+      <BackButton />
+    </>
+  )
 }
 
 describe('driver booking tabs', () => {
@@ -100,6 +116,90 @@ describe('driver booking tabs', () => {
     expect(await screen.findByText('No past bookings yet.')).toBeInTheDocument()
     await user.click(screen.getByRole('tab', { name: 'Cancelled' }))
     expect(await screen.findByText('No cancelled bookings.')).toBeInTheDocument()
+  })
+
+  /** A list of `totalPages` pages whose single booking is named PE-<view><page>. */
+  const paged = (totalPages: number) => (config: AxiosRequestConfig): [number, unknown] => {
+    const { view, page: pageNo } = config.params as { view: string; page: number }
+    return [200, page([summary({ id: 100 + pageNo, bookingCode: `PE-${view.toUpperCase()}${pageNo}` })], totalPages, pageNo)]
+  }
+
+  it('keeps the page in the URL, leaving it out for the first page', async () => {
+    mock.onGet('/bookings').reply(paged(3))
+    const user = userEvent.setup()
+    renderApp('/driver/bookings?view=past&page=2', undefined, <LocationProbe />)
+
+    expect(await screen.findByRole('article', { name: 'PE-PAST2' })).toBeInTheDocument()
+    expect(mock.history.get.find((r) => r.url === '/bookings')!.params).toEqual({ view: 'past', page: 2, size: 20 })
+
+    await user.click(screen.getByRole('button', { name: 'Previous' }))
+    expect(await screen.findByRole('article', { name: 'PE-PAST1' })).toBeInTheDocument()
+    expect(screen.getByTestId('loc')).toHaveTextContent('/driver/bookings?view=past&page=1')
+    await user.click(screen.getByRole('button', { name: 'Previous' }))
+    await screen.findByRole('article', { name: 'PE-PAST0' })
+    expect(screen.getByTestId('loc')).toHaveTextContent(/^\/driver\/bookings\?view=past$/)
+  })
+
+  it.each(['abc', '-1', '1.5', ''])('treats page=%j as the first page', async (raw) => {
+    mock.onGet('/bookings').reply(paged(3))
+    renderApp(`/driver/bookings?page=${raw}`)
+
+    expect(await screen.findByRole('article', { name: 'PE-UPCOMING0' })).toBeInTheDocument()
+  })
+
+  it('restores both the tab and the page with the browser Back button', async () => {
+    mock.onGet('/bookings').reply(paged(3))
+    const user = userEvent.setup()
+    renderApp('/driver/bookings', undefined, <Probes />)
+    await screen.findByRole('article', { name: 'PE-UPCOMING0' })
+
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await screen.findByRole('article', { name: 'PE-UPCOMING1' })
+    await user.click(screen.getByRole('tab', { name: 'Past' }))
+    await screen.findByRole('article', { name: 'PE-PAST0' })
+
+    await user.click(screen.getByRole('button', { name: 'history back' }))
+    expect(await screen.findByRole('article', { name: 'PE-UPCOMING1' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Upcoming' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByTestId('loc')).toHaveTextContent('/driver/bookings?page=1')
+
+    await user.click(screen.getByRole('button', { name: 'history back' }))
+    expect(await screen.findByRole('article', { name: 'PE-UPCOMING0' })).toBeInTheDocument()
+    expect(screen.getByTestId('loc')).toHaveTextContent(/^\/driver\/bookings$/)
+  })
+
+  it('moves to the last page when the page asked for is past the end', async () => {
+    mock.onGet('/bookings').reply((config) =>
+      config.params.page > 1 ? [200, page([], 2, config.params.page)] : paged(2)(config),
+    )
+    renderApp('/driver/bookings?page=5', undefined, <LocationProbe />)
+
+    expect(await screen.findByRole('article', { name: 'PE-UPCOMING1' })).toBeInTheDocument()
+    expect(screen.getByTestId('loc')).toHaveTextContent('/driver/bookings?page=1')
+  })
+
+  it('shows the empty state, not a blank panel, when a later page is empty and nothing exists', async () => {
+    mock.onGet('/bookings').reply((config) => [200, page([], 0, config.params.page)])
+    renderApp('/driver/bookings?view=past&page=3', undefined, <LocationProbe />)
+
+    expect(await screen.findByText('No past bookings yet.')).toBeInTheDocument()
+    expect(screen.getByTestId('loc')).toHaveTextContent(/^\/driver\/bookings\?view=past$/)
+  })
+
+  it('switches tabs with the arrow keys without adding history entries', async () => {
+    mock.onGet('/bookings').reply(200, page([]))
+    const user = userEvent.setup()
+    renderApp('/driver/bookings', undefined, <Probes />)
+    const upcoming = await screen.findByRole('tab', { name: 'Upcoming' })
+    upcoming.focus()
+
+    await user.keyboard('{ArrowRight}{ArrowRight}')
+    expect(await screen.findByRole('tab', { name: 'Past' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByTestId('loc')).toHaveTextContent('?view=past')
+
+    // Replaced, not pushed: Back has no earlier entry to go to.
+    await user.click(screen.getByRole('button', { name: 'history back' }))
+    expect(screen.getByRole('tab', { name: 'Past' })).toHaveAttribute('aria-selected', 'true')
   })
 
   it('goes back to the first page when the tab changes', async () => {
@@ -263,6 +363,13 @@ describe('driver home stats', () => {
     expect(within(screen.getByRole('group', { name: 'Hours parked' })).getByText('38.5')).toBeInTheDocument()
   })
 
+  it('shows hours parked with one decimal', async () => {
+    mock.onGet('/me/stats').reply(200, { ...stats, hoursParked: 38 })
+    renderApp('/driver')
+
+    expect(within(await screen.findByRole('group', { name: 'Hours parked' })).getByText('38.0')).toBeInTheDocument()
+  })
+
   it('still shows the next booking', async () => {
     renderApp('/driver')
 
@@ -337,19 +444,24 @@ describe('booking timeline refunds', () => {
     expect(within(items[1]).queryByText(/^Cancelled/)).not.toBeInTheDocument()
   })
 
-  it('treats a repeated status as a refund even when the note does not say so', async () => {
+  it('keeps the status name for a repeated status without a refund note, and for a cancellation reason that starts with "Refund"', async () => {
     const detail = {
-      ...summary({ status: 'COMPLETED' }), address: 'FC Road', lat: 18.5, lng: 73.8, slotLabel: 'A-3', pricingMode: 'HOURLY',
-      pricingBreakdown: '2 hours', baseAmount: 80, platformFee: 8, gstAmount: 1.44, refundAmount: 20, holdExpiresAt: null,
-      approvalDeadline: null, confirmedAt: null, cancelReason: null, cancelledBy: null, paymentStatus: 'PARTIALLY_REFUNDED',
+      ...summary({ status: 'CANCELLED' }), address: 'FC Road', lat: 18.5, lng: 73.8, slotLabel: 'A-3', pricingMode: 'HOURLY',
+      pricingBreakdown: '2 hours', baseAmount: 80, platformFee: 8, gstAmount: 1.44, refundAmount: 0, holdExpiresAt: null,
+      approvalDeadline: null, confirmedAt: null, cancelReason: 'Refund me please', cancelledBy: 'DRIVER', paymentStatus: 'CAPTURED',
       invoiceNumber: 'PE-INV-0042', autoApprove: true, ownerFirstName: 'Priya', reviewable: false, review: null,
-      events: [{ fromStatus: 'COMPLETED', toStatus: 'COMPLETED', actor: 'ADMIN', note: 'Goodwill', at: '2026-10-09T09:00:00Z' }],
+      events: [
+        { fromStatus: 'CONFIRMED', toStatus: 'CANCELLED', actor: 'DRIVER', note: 'Refund me please', at: '2026-10-09T09:00:00Z' },
+        { fromStatus: 'CANCELLED', toStatus: 'CANCELLED', actor: 'ADMIN', note: 'Goodwill', at: '2026-10-09T09:05:00Z' },
+      ],
     } as BookingDetailDto
     mock.onGet('/bookings/91').reply(200, detail)
     renderApp('/driver/bookings/91')
 
-    const [item] = within(await screen.findByRole('list', { name: 'Booking timeline' })).getAllByRole('listitem')
-    expect(item).toHaveTextContent('Refund')
-    expect(item).toHaveTextContent('Goodwill')
+    const items = within(await screen.findByRole('list', { name: 'Booking timeline' })).getAllByRole('listitem')
+    expect(items[0]).toHaveTextContent(`Cancelled · ${formatDateTime('2026-10-09T09:00:00Z')}`)
+    expect(items[0]).toHaveTextContent('Refund me please')
+    expect(items[1]).toHaveTextContent(`Cancelled · ${formatDateTime('2026-10-09T09:05:00Z')}`)
+    expect(items[1]).not.toHaveTextContent(/^Refund/)
   })
 })

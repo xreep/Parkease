@@ -22,5 +22,6 @@ MockAdapter.prototype.adapter = function adapter(this: MockAdapter) {
 }
 
 // findBy*/waitFor give up after one second by default, which a loaded machine (a parallel run, a busy laptop) can
-// exceed for pages that fetch several things; a longer limit only affects tests that would otherwise fail.
+// exceed for pages that fetch several things. Four seconds only changes tests that would otherwise fail; the
+// per-test limit (testTimeout) is set in vite.config.ts and stays well above this.
 configure({ asyncUtilTimeout: 4000 })
