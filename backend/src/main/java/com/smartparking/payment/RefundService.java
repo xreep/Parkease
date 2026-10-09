@@ -66,30 +66,110 @@ public class RefundService {
     }
 
     /**
-     * Refunds the whole payment and records it. Joins the caller's transaction. A provider failure is recorded as a
-     * {@link RefundStatus#FAILED} refund (never thrown) so the money is not lost track of; callers can inspect the
-     * returned status. On success the payment becomes REFUNDED and the booking's refund amount is set.
+     * Refunds the whole payment and records it (see {@link #refund}). Joins the caller's transaction, which must hold
+     * the payment row lock and then the booking row lock.
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public Refund refundFull(Payment payment, String reason) {
-        return refundFull(payment, reason, null);
+        return refund(payment.getBooking(), payment, payment.getAmount(), BookingActor.SYSTEM, reason, null);
     }
 
-    private Refund refundFull(Payment payment, String reason, RefundNotice notice) {
+    /**
+     * Refunds {@code amount} of a captured payment through the provider and records it: the single place that creates
+     * refund rows. Joins the caller's transaction, which must already hold the payment row lock and then the booking
+     * row lock (payment first, always).
+     *
+     * <p>{@code 0 < amount <= remaining}, where remaining is the payment's amount less its refunds that did not fail
+     * (anything else is an {@link IllegalArgumentException}). A provider failure is recorded as a
+     * {@link RefundStatus#FAILED} refund (never thrown) so the money is not lost track of; callers can inspect the
+     * returned status. Unless it failed, the payment becomes REFUNDED (all of it is covered) or PARTIALLY_REFUNDED and
+     * the booking's refund amount is brought in line (see {@link #recompute}). The owner's earning follows
+     * the refunds that are owed, failed attempts included: fully refunded payments reverse it, partial ones lower its
+     * net by the refunded base (platform fee and GST are never part of a partial refund) and reverse it once nothing
+     * is left. The outcome is noted in the booking's history and, when a {@code notice} is given, announced to the
+     * driver (callers that announce the outcome themselves pass none).
+     *
+     * <p>The provider call is made inside the caller's transaction. Everything that can fail on the database side is
+     * flushed before the provider is called, and only the refund row update follows it, so a rollback after money has
+     * moved is as unlikely as it can be; if it ever happens the booking is still unrefunded in our books and a second
+     * provider refund of the same payment is refused by the provider.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Refund refund(Booking booking, Payment payment, BigDecimal amount, BookingActor actor, String reason,
+                         RefundNotice notice) {
+        payments.flush();
+        BigDecimal remaining = remaining(payment);
+        if (amount == null || amount.signum() <= 0 || amount.compareTo(remaining) > 0) {
+            throw new IllegalArgumentException("Refund of " + amount + " is not within the " + remaining
+                    + " still refundable on payment " + payment.getId());
+        }
+        if (payment.getStatus() != PaymentStatus.CAPTURED && payment.getStatus() != PaymentStatus.PARTIALLY_REFUNDED) {
+            throw new IllegalStateException("Payment " + payment.getId() + " is " + payment.getStatus()
+                    + " and cannot be refunded");
+        }
         Refund refund = new Refund();
         refund.setNotice(notice);
         refund.setPayment(payment);
-        refund.setAmount(payment.getAmount());
+        refund.setAmount(amount);
         String shortReason = abbreviate(reason);
         refund.setReason(shortReason);
         refund.setStatus(RefundStatus.PENDING);
         refunds.saveAndFlush(refund); // the row id is the provider idempotency key, so it must exist before the call
         issue(refund, payment.getPaymentId(), shortReason);
         if (refund.getStatus() != RefundStatus.FAILED) {
-            payment.setStatus(PaymentStatus.REFUNDED);
-            payment.getBooking().setRefundAmount(payment.getAmount());
+            recompute(payment, booking);
         }
+        adjustEarning(booking, payment);
+        String money = "₹" + amount.toPlainString();
+        String note = switch (refund.getStatus()) {
+            case PROCESSED -> "Refund of " + money + " issued";
+            case PENDING -> "Refund of " + money + " initiated";
+            case FAILED -> "Refund of " + money + " could not be issued yet; it will be retried";
+        };
+        events.record(booking, booking.getStatus(), booking.getStatus(), actor, note);
+        notifyDriver(booking, refund);
         return refund;
+    }
+
+    /** What can still be refunded on the payment's own money: its amount less the refunds that did not fail. */
+    private BigDecimal remaining(Payment payment) {
+        return payment.getAmount().subtract(coveredBy(payment, null));
+    }
+
+    /** Sum of the payment's own refunds (extra payments never count) that did not fail, leaving out {@code skip}. */
+    private BigDecimal coveredBy(Payment payment, Refund skip) {
+        return refunds.findByPaymentId(payment.getId()).stream()
+                .filter(r -> r.getProviderPaymentId() == null && r.getStatus() != RefundStatus.FAILED
+                        && (skip == null || !skip.getId().equals(r.getId())))
+                .map(Refund::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /**
+     * Follows the refunds owed on the payment (failed attempts count: the money is still owed and will be retried) in
+     * the owner's earning. Everything refunded reverses it. Otherwise the refund comes out of the base amount (fees
+     * are never refunded in part), so {@code net = gross - refundedBase}; the commission stays, and the earning is
+     * reversed once nothing is left of the net. Paid-out earnings are left alone.
+     */
+    private void adjustEarning(Booking booking, Payment payment) {
+        earnings.findByBookingId(booking.getId()).ifPresent(earning -> {
+            if (earning.getStatus() == EarningStatus.PAID || earning.getStatus() == EarningStatus.REVERSED) {
+                return;
+            }
+            BigDecimal owed = refunds.findByPaymentId(payment.getId()).stream()
+                    .filter(r -> r.getProviderPaymentId() == null)
+                    .map(Refund::getAmount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (owed.compareTo(payment.getAmount()) >= 0) {
+                earning.setStatus(EarningStatus.REVERSED);
+                return;
+            }
+            BigDecimal net = earning.getGross().subtract(owed.min(earning.getGross()));
+            earning.setNet(net);
+            if (net.signum() == 0) {
+                earning.setStatus(EarningStatus.REVERSED);
+            }
+        });
     }
 
     /**
@@ -128,14 +208,9 @@ public class RefundService {
 
     /**
      * Gives a booking's money back in full because the booking is being unwound (rejected by the owner or the
-     * system): reverses the owner's earning, refunds the captured payment and notes the outcome in the booking's
-     * history. Does nothing (empty result) when no payment was captured. Joins the caller's transaction, which must
-     * already hold the payment row lock and then the booking row lock (payment first, always).
-     *
-     * <p>The provider call is made inside that transaction. Everything that can fail on the database side is flushed
-     * before the provider is called, and only the refund row insert follows it, so a rollback after money has moved
-     * is as unlikely as it can be; if it ever happens the booking is still unrefunded in our books and a second
-     * provider refund of the same payment is refused by the provider.
+     * system): refunds the captured payment (which reverses the owner's earning) and notes the outcome in the
+     * booking's history. Does nothing (empty result) when no payment was captured. Joins the caller's transaction,
+     * which must already hold the payment row lock and then the booking row lock (payment first, always).
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public Optional<Refund> refundFull(Booking booking, BookingActor actor, String reason) {
@@ -143,12 +218,7 @@ public class RefundService {
         if (payment == null || payment.getStatus() != PaymentStatus.CAPTURED) {
             return Optional.empty();
         }
-        earnings.findByBookingId(booking.getId()).ifPresent(earning -> {
-            if (earning.getStatus() != EarningStatus.PAID) {
-                earning.setStatus(EarningStatus.REVERSED);
-            }
-        });
-        return Optional.of(refundAndNote(booking, payment, actor, reason, null));
+        return Optional.of(refund(booking, payment, payment.getAmount(), actor, reason, null));
     }
 
     /**
@@ -160,17 +230,7 @@ public class RefundService {
     @Transactional(propagation = Propagation.MANDATORY)
     public Refund refundAndNote(Booking booking, Payment payment, BookingActor actor, String reason,
                                 RefundNotice notice) {
-        payments.flush();
-        Refund refund = refundFull(payment, reason, notice);
-        String amount = "₹" + payment.getAmount().toPlainString();
-        String note = switch (refund.getStatus()) {
-            case PROCESSED -> "Refund of " + amount + " issued";
-            case PENDING -> "Refund of " + amount + " initiated";
-            case FAILED -> "Refund of " + amount + " could not be issued yet; it will be retried";
-        };
-        events.record(booking, booking.getStatus(), booking.getStatus(), actor, note);
-        notifyDriver(booking, refund);
-        return refund;
+        return refund(booking, payment, payment.getAmount(), actor, reason, notice);
     }
 
     /**
@@ -219,7 +279,9 @@ public class RefundService {
                     || payment.getStatus() == PaymentStatus.PARTIALLY_REFUNDED;
             if (refund.getStatus() != RefundStatus.FAILED || refund.getAttempts() >= MAX_ATTEMPTS
                     || (!extraPayment && (!refundable
-                    || booking.getRefundAmount().compareTo(payment.getAmount()) >= 0))) {
+                    || booking.getRefundAmount().compareTo(payment.getAmount()) >= 0
+                    // the payment's other refunds (partial ones included) leave no room for this one any more
+                    || coveredBy(payment, refund).add(refund.getAmount()).compareTo(payment.getAmount()) > 0))) {
                 return false;
             }
             String providerPaymentId = extraPayment ? refund.getProviderPaymentId() : payment.getPaymentId();
@@ -284,13 +346,18 @@ public class RefundService {
     private Existing lookUp(String providerPaymentId, Refund refund) {
         ProviderRefund adopted = null;
         boolean unmatched = false;
+        // A payment may carry several refunds (partial ones); a refund that is demonstrably another row's own, whose
+        // attempt reached the provider although it was recorded as failed, is that row's to adopt, not a stranger.
+        List<Refund> siblings = refunds.findByPaymentId(refund.getPayment().getId()).stream()
+                .filter(other -> !other.getId().equals(refund.getId()))
+                .toList();
         for (ProviderRefund candidate : provider.fetchRefunds(providerPaymentId)) {
             if (candidate.status() == RefundStatus.FAILED) {
                 continue;
             }
             boolean claimedElsewhere = refunds.findByProviderRefundId(candidate.refundId())
                     .map(other -> !other.getId().equals(refund.getId())).orElse(false);
-            if (claimedElsewhere) {
+            if (claimedElsewhere || isOfSibling(candidate, refund, siblings)) {
                 continue;
             }
             if (adopted == null && isOurs(candidate, refund)) {
@@ -302,6 +369,11 @@ public class RefundService {
             }
         }
         return new Existing(adopted, unmatched);
+    }
+
+    private static boolean isOfSibling(ProviderRefund candidate, Refund refund, List<Refund> siblings) {
+        return siblings.stream().anyMatch(other -> other.getProviderPaymentId() == null
+                && other.getProviderRefundId() == null && isOurs(candidate, other));
     }
 
     private static boolean isOurs(ProviderRefund candidate, Refund refund) {

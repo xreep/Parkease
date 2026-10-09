@@ -1,6 +1,7 @@
 package com.smartparking.booking;
 
 import com.smartparking.booking.dto.OwnerBookingDto;
+import com.smartparking.booking.dto.OwnerCancelRequest;
 import com.smartparking.booking.dto.RejectBookingRequest;
 import com.smartparking.common.security.AuthUser;
 import com.smartparking.common.web.PageResponse;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class OwnerBookingController {
 
     private final OwnerBookingService service;
+    private final CancellationService cancellations;
 
     @GetMapping
     public PageResponse<OwnerBookingDto> list(@AuthenticationPrincipal AuthUser principal,
@@ -41,5 +43,12 @@ public class OwnerBookingController {
     public OwnerBookingDto reject(@AuthenticationPrincipal AuthUser principal, @PathVariable Long id,
                                   @Valid @RequestBody RejectBookingRequest request) {
         return service.reject(principal.id(), id, request.reason().trim());
+    }
+
+    /** Cancels a confirmed booking that has not started; the driver is refunded in full. */
+    @PostMapping("/{id}/cancel")
+    public OwnerBookingDto cancel(@AuthenticationPrincipal AuthUser principal, @PathVariable Long id,
+                                  @Valid @RequestBody OwnerCancelRequest request) {
+        return cancellations.cancelByOwner(principal.id(), id, request.reason().trim());
     }
 }

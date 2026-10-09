@@ -101,6 +101,28 @@ public final class EmailTemplates {
                 "View booking", link);
     }
 
+    /** The driver cancelled; {@code refundLine} says what happens to the money (see the cancellation service). */
+    public static EmailMessage bookingCancelled(User driver, Booking booking, String refundLine, String link) {
+        return build(driver, "Booking cancelled – ParkEase",
+                "Your booking was cancelled.\n\n" + refundLine + "\n\n" + details(booking), "View booking", link);
+    }
+
+    /** Tells the owner that a driver cancelled a paid booking; the slot is free again. */
+    public static EmailMessage bookingCancelledByDriver(User owner, Booking booking, String reason, String link) {
+        return build(owner, "Booking cancelled by driver – ParkEase",
+                "The driver cancelled this booking, so the slot is free again."
+                        + (reason == null ? "" : "\nReason: " + reason) + "\n\n" + ownerDetails(booking),
+                "View bookings", link);
+    }
+
+    public static EmailMessage bookingCancelledByOwner(User driver, Booking booking, String reason,
+                                                       String refundLine, String link) {
+        return build(driver, "Your booking was cancelled by the owner – ParkEase",
+                "The owner had to cancel your booking. Reason: " + reason + "\n\n" + refundLine + "\n\n"
+                        + details(booking),
+                "View booking", link);
+    }
+
     /**
      * Sent when a payment could not be turned into a booking. {@code pending}: the refund is accepted but still
      * settling. For {@link RefundNotice#BOOKING_CLOSED} the wording follows the booking's status.
