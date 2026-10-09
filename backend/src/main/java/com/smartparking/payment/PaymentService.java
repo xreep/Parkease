@@ -348,7 +348,7 @@ public class PaymentService {
                     note = LATE_PAYMENT_NOTE;
                 }
             }
-            default -> {
+            default -> { // CANCELLED included: a hold the driver gave up, then paid at the provider after all
                 refundUnpayable(booking, payment, from);
                 return bookingId;
             }

@@ -54,6 +54,8 @@ public class BookingJobs {
     private static final int LIFECYCLE_BATCH = 500;
     private static final Duration REMINDER_LEAD = Duration.ofMinutes(60);
     private static final Duration NUDGE_LEAD = Duration.ofMinutes(30);
+    /** Bookings that ended longer ago than this are completed without a notification. */
+    private static final Duration STALE_COMPLETION = Duration.ofHours(24);
 
     private static final String OWNER_PATH = "/owner/bookings";
 
@@ -235,6 +237,9 @@ public class BookingJobs {
                 earning.setStatus(earning.getNet().signum() > 0 ? EarningStatus.PENDING_PAYOUT : EarningStatus.REVERSED);
             }
         });
+        if (booking.getEndTime().isBefore(now.minus(STALE_COMPLETION))) {
+            return true; // history swept up long after the fact (a first deploy): complete it, but don't announce it
+        }
         String path = BookingPaths.driver(booking);
         notifier.notify(booking.getDriver(), NotificationType.BOOKING_COMPLETED, "Booking completed",
                 "Thanks for parking with ParkEase. Your booking " + booking.getBookingCode() + " at "
@@ -330,13 +335,15 @@ public class BookingJobs {
 
     /**
      * Asks the provider about up to {@code cap} unconfirmed Razorpay orders created in [newerThan, olderThan),
-     * newest first, and confirms what was captured. Orders whose booking is still waiting (or only just lapsed) count.
+     * newest first, and confirms what was captured. Orders whose booking is still waiting (or only just lapsed) count,
+     * and so do holds the driver cancelled before paying: money captured for those is refunded in full.
      * Errors per order are logged and skipped.
      */
     public void reconcileBand(Instant newerThan, Instant olderThan, int cap) {
         List<String> orderIds = tx.execute(s -> payments.findOrderIdsToReconcile(PaymentProviderType.RAZORPAY,
                 List.of(PaymentStatus.CREATED, PaymentStatus.FAILED),
-                List.of(BookingStatus.PENDING_PAYMENT, BookingStatus.EXPIRED), newerThan, olderThan, Limit.of(cap)));
+                List.of(BookingStatus.PENDING_PAYMENT, BookingStatus.EXPIRED), PaymentStatus.FAILED,
+                BookingStatus.CANCELLED, newerThan, olderThan, Limit.of(cap)));
         int recovered = 0;
         for (String orderId : orderIds) {
             try {

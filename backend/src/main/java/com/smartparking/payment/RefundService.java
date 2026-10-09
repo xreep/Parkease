@@ -15,6 +15,7 @@ import com.smartparking.notification.Notifier;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,6 +40,11 @@ public class RefundService {
 
     static final String PROVIDER_FAILED_NOTE = "Refund failed at the provider — retrying";
     static final String NO_MATCH_REASON = "Existing provider refund doesn't match — manual review";
+    /** Error code of a refund held back because the provider holds refunds of the payment that we have no row for. */
+    public static final String RECONCILIATION_REQUIRED = "REFUND_RECONCILIATION_REQUIRED";
+    static final String RECONCILIATION_MESSAGE =
+            "We're confirming an earlier refund for this booking. Please try again in a few minutes.";
+    static final String UNVERIFIED_NOTE = "Could not check the provider's existing refunds — retrying";
     static final String EXHAUSTED_NOTE = "Refund failed after " + MAX_ATTEMPTS + " attempts — manual action needed";
 
     private final PaymentProvider provider;
@@ -82,8 +88,12 @@ public class RefundService {
      *
      * <p>The provider call is made inside the caller's transaction. Everything that can fail on the database side is
      * flushed before the provider is called, and only the refund row update follows it, so a rollback after money has
-     * moved is as unlikely as it can be; if it ever happens the booking is still unrefunded in our books and a second
-     * provider refund of the same payment is refused by the provider.
+     * moved is as unlikely as it can be. It can still happen, and then the refund exists at the provider (a payment
+     * may be refunded in parts, so the provider does not refuse the next one) while its row, and with it the
+     * idempotency key, is gone. That is why the provider's own refunds of the payment are looked at first: one that no
+     * row of ours accounts for is adopted when it is for the amount being refunded, and otherwise blocks the refund
+     * ({@value #RECONCILIATION_REQUIRED}) rather than risk paying out twice. If the provider cannot be asked, the
+     * refund is recorded as FAILED without being requested, and {@link #retry} looks again later.
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public Refund refund(Booking booking, Payment payment, BigDecimal amount, BookingActor actor, String reason,
@@ -98,6 +108,17 @@ public class RefundService {
             throw new IllegalStateException("Payment " + payment.getId() + " is " + payment.getStatus()
                     + " and cannot be refunded");
         }
+        ProviderRefund adoptable = null;
+        boolean unverified = false;
+        try {
+            adoptable = adoptableOrphan(payment, amount);
+        } catch (ApiException e) {
+            if (RECONCILIATION_REQUIRED.equals(e.getCode())) {
+                throw e;
+            }
+            log.error("Could not list the provider's refunds of payment {}", payment.getId(), e);
+            unverified = true;
+        }
         Refund refund = new Refund();
         refund.setNotice(notice);
         refund.setPayment(payment);
@@ -106,7 +127,15 @@ public class RefundService {
         refund.setReason(shortReason);
         refund.setStatus(RefundStatus.PENDING);
         refunds.saveAndFlush(refund); // the row id is the provider idempotency key, so it must exist before the call
-        issue(refund, payment.getPaymentId(), shortReason);
+        if (adoptable != null) {
+            refund.setProviderRefundId(adoptable.refundId());
+            refund.setStatus(adoptable.status());
+        } else if (unverified) {
+            refund.setStatus(RefundStatus.FAILED);
+            refund.setFailureReason(UNVERIFIED_NOTE);
+        } else {
+            issue(refund, payment.getPaymentId(), shortReason);
+        }
         if (refund.getStatus() != RefundStatus.FAILED) {
             recompute(payment, booking);
         }
@@ -118,8 +147,48 @@ public class RefundService {
             case FAILED -> "Refund of " + money + " could not be issued yet; it will be retried";
         };
         events.record(booking, booking.getStatus(), booking.getStatus(), actor, note);
-        notifyDriver(booking, refund);
+        if (notice != RefundNotice.CANCELLATION) { // a cancellation's own message tells the driver
+            notifyDriver(booking, refund);
+        }
         return refund;
+    }
+
+    /**
+     * Looks at the provider's live refunds of the payment for ones none of our rows accounts for (orphans: the refund
+     * call went through but the transaction recording it rolled back, or someone refunded in the provider's
+     * dashboard). Returns the orphan to adopt as the refund being made (same amount; one carrying our receipt
+     * prefix first), nothing when there are none, and throws a 409 {@value #RECONCILIATION_REQUIRED} when there are
+     * orphans but none is for {@code amount}. Provider errors propagate as {@link ApiException}s.
+     */
+    private ProviderRefund adoptableOrphan(Payment payment, BigDecimal amount) {
+        List<Refund> ours = refunds.findByPaymentId(payment.getId()).stream()
+                .filter(r -> r.getProviderPaymentId() == null)
+                .toList();
+        List<ProviderRefund> orphans = provider.fetchRefunds(payment.getPaymentId()).stream()
+                .filter(candidate -> candidate.status() != RefundStatus.FAILED)
+                .filter(candidate -> ours.stream().noneMatch(row -> candidate.refundId().equals(row.getProviderRefundId())
+                        || (row.getProviderRefundId() == null && isOurs(candidate, row))))
+                .toList();
+        if (orphans.isEmpty()) {
+            return null;
+        }
+        long paise = toPaise(amount);
+        ProviderRefund match = orphans.stream()
+                .filter(candidate -> candidate.amountPaise() != null && candidate.amountPaise() == paise)
+                .min(java.util.Comparator.comparing(candidate -> !isParkeaseReceipt(candidate)))
+                .orElse(null);
+        if (match == null) {
+            log.error("Payment {} has {} provider refund(s) with no record here, none for {} paise; holding back "
+                    + "the refund for manual reconciliation", payment.getId(), orphans.size(), paise);
+            throw ApiException.conflict(RECONCILIATION_REQUIRED, RECONCILIATION_MESSAGE);
+        }
+        log.warn("Payment {} already has refund {} ({}) at the provider with no record here; adopting it instead "
+                + "of refunding again", payment.getId(), match.refundId(), match.status());
+        return match;
+    }
+
+    private static boolean isParkeaseReceipt(ProviderRefund candidate) {
+        return candidate.receipt() != null && candidate.receipt().startsWith("parkease-refund-");
     }
 
     /** What can still be refunded on the payment's own money: its amount less the refunds that did not fail. */
@@ -172,7 +241,7 @@ public class RefundService {
     private void issue(Refund refund, String providerPaymentId, String reason) {
         try {
             ProviderRefund result = provider.refund(providerPaymentId, toPaise(refund.getAmount()), reason,
-                    idempotencyKey(refund), receipt(refund));
+                    idempotencyKey(refund), receipt(refund), notes(refund));
             refund.setProviderRefundId(result.refundId());
             refund.setStatus(result.status());
         } catch (ApiException e) {
@@ -180,6 +249,11 @@ public class RefundService {
             refund.setStatus(RefundStatus.FAILED);
             refund.setFailureReason(abbreviate(PaymentProviderException.describe(e), MAX_FAILURE));
         }
+    }
+
+    /** What the provider is told about a refund besides its reason: the booking, to recognise orphans by. */
+    private static Map<String, String> notes(Refund refund) {
+        return Map.of("bookingId", String.valueOf(refund.getPayment().getBooking().getId()));
     }
 
     /** Tags the provider refund with its row, so a refund found later at the provider can be recognised as ours. */
@@ -235,7 +309,7 @@ public class RefundService {
         boolean pending = refund.getStatus() == RefundStatus.PENDING;
         String path = "/driver/bookings/" + booking.getId();
         EmailMessage message = EmailTemplates.paymentRefunded(booking.getDriver(), booking,
-                app.frontendUrl() + path, refund.getNotice(), pending);
+                app.frontendUrl() + path, refund.getNotice(), pending, refund.getAmount());
         notifier.notify(booking.getDriver(), NotificationType.BOOKING_REFUNDED,
                 pending ? "Refund initiated" : "Refund issued",
                 "Your refund of ₹" + refund.getAmount().toPlainString() + " for booking " + booking.getBookingCode()
@@ -293,7 +367,7 @@ public class RefundService {
                 }
                 ProviderRefund result = found.adopted() != null ? found.adopted()
                         : provider.refund(providerPaymentId, toPaise(refund.getAmount()), refund.getReason(),
-                                idempotencyKey(refund), receipt(refund));
+                                idempotencyKey(refund), receipt(refund), notes(refund));
                 refund.setProviderRefundId(result.refundId());
                 refund.setStatus(result.status());
                 refund.setFailureReason(null);
@@ -410,12 +484,16 @@ public class RefundService {
             if (refund.getStatus() == newStatus) {
                 return true; // redelivery
             }
+            RefundStatus before = refund.getStatus();
             refund.setStatus(newStatus);
             if (newStatus == RefundStatus.FAILED) {
                 refund.setFailureReason(abbreviate(failureReason, MAX_FAILURE));
             }
             if (refund.getProviderPaymentId() == null) {
                 recompute(payment, booking);
+            }
+            if (before == RefundStatus.FAILED && newStatus == RefundStatus.PROCESSED) {
+                notifyDriver(booking, refund); // a refund that failed has got through after all: announced once
             }
             if (newStatus == RefundStatus.FAILED) {
                 events.record(booking, booking.getStatus(), booking.getStatus(), BookingActor.SYSTEM,

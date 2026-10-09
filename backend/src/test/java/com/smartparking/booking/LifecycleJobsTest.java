@@ -204,6 +204,25 @@ class LifecycleJobsTest {
     }
 
     @Test
+    void bookingsThatEndedMoreThanADayAgoCompleteQuietlyWithoutTellingTheDriver() throws Exception {
+        long old = confirmed(10);
+        long recent = confirmed(14); // ends at 16:00
+        // Both are over; the first ended 25+ hours ago (a first deploy sweeping up history), the second just now.
+        clock.set(tomorrowAt(12).plus(Duration.ofHours(25)).plusSeconds(1));
+        jdbc.update("update bookings set start_time = ?, end_time = ? where id = ?",
+                Timestamp.from(clock.instant().minus(Duration.ofHours(2))),
+                Timestamp.from(clock.instant().minus(Duration.ofMinutes(5))), recent);
+
+        jobs.advanceLifecycle();
+
+        assertThat(booking(old)).containsEntry("status", "COMPLETED");
+        assertThat(booking(recent)).containsEntry("status", "COMPLETED");
+        assertThat(earnings.findByBookingId(old).orElseThrow().getStatus()).isEqualTo(EarningStatus.PENDING_PAYOUT);
+        assertThat(jdbc.queryForList("select n.link from notifications n where n.type = 'BOOKING_COMPLETED'",
+                String.class)).containsExactly("/driver/bookings/" + recent);
+    }
+
+    @Test
     void confirmedBookingWhoseWholeWindowPassedWhileTheJobWasDownCompletesDirectly() throws Exception {
         long id = confirmed(10);
         clock.set(tomorrowAt(15));

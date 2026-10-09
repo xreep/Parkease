@@ -108,6 +108,23 @@ class RazorpayPaymentProviderTest {
     }
 
     @Test
+    void extraNotesTravelWithTheRefundNextToTheReason() throws Exception {
+        AtomicReference<Seen> seen = new AtomicReference<>();
+        HttpServer server = razorpayAnswering(200, "{\"id\":\"rfnd_3\",\"status\":\"processed\"}", seen);
+        try {
+            providerAgainst(server).refund("pay_9", 3000L, "Booking cancelled by driver", "k", "parkease-refund-7",
+                    java.util.Map.of("bookingId", "55"));
+
+            org.json.JSONObject notes = new org.json.JSONObject(seen.get().body()).getJSONObject("notes");
+            assertThat(notes.getString("bookingId")).isEqualTo("55");
+            assertThat(notes.getString("reason")).isEqualTo("Booking cancelled by driver");
+            assertThat(notes.getString("parkeaseRefund")).isEqualTo("parkease-refund-7");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     void aRefundWithoutAKeySendsNoIdempotencyHeaderAndPendingStatusesAreKept() throws Exception {
         AtomicReference<Seen> seen = new AtomicReference<>();
         HttpServer server = razorpayAnswering(200, "{\"id\":\"rfnd_2\",\"status\":\"pending\"}", seen);

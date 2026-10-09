@@ -134,6 +134,35 @@ class OwnerBookingControllerTest {
     }
 
     @Test
+    void ownerNetIsWhatTheOwnerStillEarnsFromTheBooking() throws Exception {
+        long active = awaitingApproval(10);
+        long refunded = awaitingApproval(14);
+        long partly = awaitingApproval(18);
+        listAs(ownerAuth, "?view=requests")
+                .andExpect(jsonPath("$.content[?(@.id==%d)].ownerNet".formatted(active)).value(60.0));
+
+        act(ownerAuth, refunded, "reject", "{\"reason\":\"Closed\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ownerNet").value(0.0)); // refunded in full: nothing is earned
+        jdbc.update("update bookings set status = 'CANCELLED' where id = ?", partly);
+        jdbc.update("update owner_earnings set net = 30.00, status = 'PENDING_PAYOUT' where booking_id = ?", partly);
+
+        listAs(ownerAuth, "?status=REJECTED").andExpect(jsonPath("$.content[0].ownerNet").value(0.0))
+                .andExpect(jsonPath("$.content[0].baseAmount").value(60.0));
+        listAs(ownerAuth, "?status=CANCELLED").andExpect(jsonPath("$.content[0].ownerNet").value(30.0));
+        act(ownerAuth, active, "approve", null).andExpect(jsonPath("$.ownerNet").value(60.0));
+    }
+
+    @Test
+    void ownerNetIsAbsentWhenThereIsNoEarning() throws Exception {
+        long id = awaitingApproval(10);
+        jdbc.update("delete from owner_earnings where booking_id = ?", id);
+
+        listAs(ownerAuth, "").andExpect(jsonPath("$.content[0].id").value(id))
+                .andExpect(jsonPath("$.content[0].ownerNet").doesNotExist());
+    }
+
+    @Test
     void requestsAreOrderedByDeadlineAndUnpaidHoldsAreNeverShown() throws Exception {
         long later = awaitingApproval(14);
         long earlier = awaitingApproval(10);

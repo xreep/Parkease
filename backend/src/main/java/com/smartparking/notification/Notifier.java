@@ -35,7 +35,8 @@ public class Notifier {
         notification.setType(type);
         notification.setTitle(truncate(title, TITLE_MAX));
         notification.setBody(truncate(body, BODY_MAX));
-        notification.setLink(linkPath == null ? null : truncate(linkPath, LINK_MAX));
+        // A cut-off link would open the wrong page (or none), so a link that doesn't fit is left out altogether.
+        notification.setLink(linkPath == null || linkPath.length() > LINK_MAX ? null : linkPath);
         notifications.save(notification);
         if (email != null) {
             AfterCommit.run(() -> emailSender.send(email));

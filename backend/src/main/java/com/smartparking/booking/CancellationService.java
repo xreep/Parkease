@@ -16,6 +16,7 @@ import com.smartparking.notification.Notifier;
 import com.smartparking.payment.Payment;
 import com.smartparking.payment.PaymentRepository;
 import com.smartparking.payment.PaymentStatus;
+import com.smartparking.payment.RefundNotice;
 import com.smartparking.payment.RefundService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -85,7 +86,7 @@ public class CancellationService {
             }
         } else if (outcome.refundAmount().signum() > 0) {
             refunds.refund(booking, payment, outcome.refundAmount(), BookingActor.DRIVER, "Booking cancelled by driver",
-                    null);
+                    RefundNotice.CANCELLATION);
         }
 
         releaseRetainedEarning(booking);
@@ -167,7 +168,8 @@ public class CancellationService {
         if (outcome.refundAmount().signum() == 0) {
             return "No refund applies under the " + policy + " policy.";
         }
-        String line = "A refund of ₹" + outcome.refundAmount().toPlainString() + " is on its way.";
+        String line = "Your refund of ₹" + outcome.refundAmount().toPlainString()
+                + " will be processed to your original payment method.";
         if (outcome.nonRefundableAmount().signum() > 0) {
             line += " The remaining ₹" + outcome.nonRefundableAmount().toPlainString()
                     + " is not refundable under the " + policy + " policy.";
@@ -192,16 +194,19 @@ public class CancellationService {
         }
         cancel(booking, BookingActor.OWNER, reason, reason);
         Payment payment = payments.findByBookingId(bookingId).orElseThrow();
-        refunds.refund(booking, payment, payment.getAmount(), BookingActor.OWNER, "Booking cancelled by owner", null);
+        refunds.refund(booking, payment, payment.getAmount(), BookingActor.OWNER, "Booking cancelled by owner",
+                RefundNotice.CANCELLATION);
 
-        String refundLine = "A full refund of ₹" + payment.getAmount().toPlainString() + " is on its way.";
+        String refundLine = "Your full refund of ₹" + payment.getAmount().toPlainString()
+                + " will be processed to your original payment method.";
         String driverPath = BookingPaths.driver(booking);
         notifier.notify(booking.getDriver(), NotificationType.BOOKING_CANCELLED, "Booking cancelled by the owner",
                 "Your booking " + booking.getBookingCode() + " at " + booking.getListing().getTitle()
                         + " was cancelled by the owner. " + refundLine, driverPath,
                 EmailTemplates.bookingCancelledByOwner(booking.getDriver(), booking, reason, refundLine,
                         link(driverPath)));
-        return OwnerBookingService.toDto(booking);
+        return OwnerBookingService.toDto(booking,
+                earnings.findByBookingId(bookingId).map(OwnerBookingService::net).orElse(null));
     }
 
     // ---- shared ---------------------------------------------------------------------------------------------
