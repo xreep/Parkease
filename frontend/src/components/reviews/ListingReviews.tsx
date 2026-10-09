@@ -1,8 +1,13 @@
-import { useListingReviews } from '../../lib/reviews'
+import { useListingReviews, type ReviewDto } from '../../lib/reviews'
 import { Button } from '../ui/Button'
 import { Spinner } from '../ui/Spinner'
 import { ReviewCard } from './ReviewCard'
 import { ReviewSummary } from './ReviewSummary'
+
+/** Every review of the loaded pages, once each: a review posted in the meantime shifts the pages, so one can arrive twice. */
+function uniqueReviews(pages: { reviews: { content: ReviewDto[] } }[]): ReviewDto[] {
+  return [...new Map(pages.flatMap((p) => p.reviews.content).map((r) => [r.id, r])).values()]
+}
 
 /** The listing page's reviews: rating summary, then the reviews a page at a time. */
 export function ListingReviews({ listingId }: { listingId: number | string }) {
@@ -21,11 +26,9 @@ export function ListingReviews({ listingId }: { listingId: number | string }) {
         <>
           <ReviewSummary summary={data.pages[0].summary} />
           <div className="space-y-3">
-            {data.pages
-              .flatMap((p) => p.reviews.content)
-              .map((review) => (
-                <ReviewCard key={review.id} review={review} label={`Review by ${review.authorName}`} />
-              ))}
+            {uniqueReviews(data.pages).map((review) => (
+              <ReviewCard key={review.id} review={review} label={`Review by ${review.authorName}`} />
+            ))}
           </div>
           {error && <p className="text-sm text-red-600 dark:text-red-400">Could not load more reviews.</p>}
           {hasNextPage && (

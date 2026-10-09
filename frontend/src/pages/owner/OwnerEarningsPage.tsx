@@ -1,6 +1,7 @@
 import clsx from 'clsx'
 import { Download } from 'lucide-react'
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { FormError } from '../../components/AuthCard'
 import { Button } from '../../components/ui/Button'
 import { Pagination } from '../../components/ui/Pagination'
@@ -110,7 +111,8 @@ export function OwnerEarningsPage() {
     setExporting(true)
     setExportError(null)
     try {
-      await downloadEarningsCsv(filters)
+      const { truncated } = await downloadEarningsCsv(filters)
+      if (truncated) toast.warning('Only the newest 10,000 rows were exported — narrow the dates.')
     } catch (e) {
       setExportError(errorMessage(e))
     } finally {

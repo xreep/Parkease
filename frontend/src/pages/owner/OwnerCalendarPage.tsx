@@ -22,6 +22,7 @@ const STATUS_STYLE: Partial<Record<BookingStatus, string>> = {
   AWAITING_APPROVAL: 'bg-amber-500 text-slate-900',
   COMPLETED: 'bg-slate-500 text-white',
 }
+/** The calendar only receives live bookings (confirmed, waiting, active, completed); anything else gets a neutral bar. */
 const FALLBACK_STYLE = 'bg-slate-400 text-slate-900'
 const LEGEND: BookingStatus[] = ['CONFIRMED', 'ACTIVE', 'AWAITING_APPROVAL', 'COMPLETED']
 
@@ -183,11 +184,11 @@ export function OwnerCalendarPage() {
                 <option key={l.id} value={l.id}>{l.title}</option>
               ))}
             </Select>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button type="button" variant="secondary" className="px-2.5" aria-label="Previous week" onClick={() => setWeekStart(addDays(weekStart, -WEEK_DAYS))}>
                 <ChevronLeft aria-hidden className="h-4 w-4" />
               </Button>
-              <p aria-live="polite" className="min-w-40 text-center text-sm font-medium">
+              <p aria-live="polite" className="text-center text-sm font-medium sm:min-w-40">
                 {`${formatShortDate(weekStart)} – ${formatShortDate(weekEnd)} ${weekEnd.slice(0, 4)}`}
               </p>
               <Button type="button" variant="secondary" className="px-2.5" aria-label="Next week" onClick={() => setWeekStart(addDays(weekStart, WEEK_DAYS))}>

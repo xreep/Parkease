@@ -348,6 +348,7 @@ describe('driver home stats', () => {
     mock.onGet('/me').reply(200, driver)
     mock.onGet('/me/vehicles').reply(200, [])
     mock.onGet('/me/stats').reply(200, stats)
+    mock.onGet('/bookings', { params: { view: 'active', page: 0, size: 1 } }).reply(200, page([]))
     mock.onGet('/bookings', { params: { view: 'upcoming', page: 0, size: 1 } }).reply(200, page([summary()]))
   })
 
@@ -361,6 +362,34 @@ describe('driver home stats', () => {
     expect(within(screen.getByRole('group', { name: 'Completed' })).getByText('11')).toBeInTheDocument()
     expect(within(screen.getByRole('group', { name: 'Spent' })).getByText('₹2,450')).toBeInTheDocument()
     expect(within(screen.getByRole('group', { name: 'Hours parked' })).getByText('38.5')).toBeInTheDocument()
+  })
+
+  it('shows the active booking first, since Upcoming no longer includes it', async () => {
+    mock.onGet('/bookings', { params: { view: 'active', page: 0, size: 1 } }).reply(200, page([
+      summary({ id: 33, bookingCode: 'PE-NOW001', status: 'ACTIVE' }),
+    ]))
+    renderApp('/driver')
+
+    expect(await screen.findByText('PE-NOW001')).toBeInTheDocument()
+    expect(screen.getByText('Your parking time is active.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'View booking' })).toHaveAttribute('href', '/driver/bookings/33')
+    expect(screen.queryByText('PE-8KQ2M4')).not.toBeInTheDocument()
+  })
+
+  it('falls back to the next upcoming booking when nothing is active', async () => {
+    mock.onGet('/bookings', { params: { view: 'active', page: 0, size: 1 } }).reply(200, page([]))
+    renderApp('/driver')
+
+    expect(await screen.findByText('PE-8KQ2M4')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'View booking' })).toHaveAttribute('href', '/driver/bookings/91')
+    expect(screen.queryByText('Your parking time is active.')).not.toBeInTheDocument()
+  })
+
+  it('offers to find parking when there is neither an active nor an upcoming booking', async () => {
+    mock.onGet('/bookings', { params: { view: 'upcoming', page: 0, size: 1 } }).reply(200, page([]))
+    renderApp('/driver')
+
+    expect(await screen.findByText('No upcoming bookings.')).toBeInTheDocument()
   })
 
   it('shows hours parked with one decimal', async () => {
@@ -384,7 +413,7 @@ describe('driver home stats', () => {
     expect(within(prompt).getByText('2 bookings are waiting for your review.')).toBeInTheDocument()
     expect(within(prompt).getByRole('link', { name: 'Rate your parking' })).toHaveAttribute('href', '/driver/bookings/70#review')
     // The id comes from the stats; no booking list is fetched to guess it.
-    expect(mock.history.get.filter((r) => r.url === '/bookings').map((r) => r.params.view)).toEqual(['upcoming'])
+    expect(mock.history.get.filter((r) => r.url === '/bookings')  .map((r) => r.params.view)).toEqual(['active', 'upcoming'])
   })
 
   it('says nothing without a booking to review, or without pending reviews', async () => {

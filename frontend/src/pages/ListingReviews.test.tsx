@@ -119,6 +119,19 @@ describe('listing reviews', () => {
     expect(screen.queryByRole('button', { name: 'Show more reviews' })).not.toBeInTheDocument()
   })
 
+  it('shows a review once even when a newer review shifted it onto the next page', async () => {
+    mock.onGet('/listings/7/reviews', { params: { page: 0, size: 10 } }).reply(200, reviewsBody([review(1), review(2)], 0, 2))
+    mock.onGet('/listings/7/reviews', { params: { page: 1, size: 10 } }).reply(200, reviewsBody([review(2), review(3)], 1, 2))
+    const user = userEvent.setup()
+    renderApp('/listings/7')
+
+    await screen.findByRole('article', { name: 'Review by Driver 1 S.' })
+    await user.click(screen.getByRole('button', { name: 'Show more reviews' }))
+
+    await screen.findByRole('article', { name: 'Review by Driver 3 S.' })
+    expect(screen.getAllByRole('article', { name: 'Review by Driver 2 S.' })).toHaveLength(1)
+  })
+
   it('shows an empty state when the listing has no reviews', async () => {
     mock.onGet('/listings/7/reviews').reply(200, {
       summary: { avgRating: 0, reviewCount: 0, distribution: { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 } },

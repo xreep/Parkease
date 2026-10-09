@@ -44,6 +44,14 @@ describe('BarChart', () => {
     expect(screen.getByText('3 Oct', { selector: '[data-axis="last"]' })).toBeInTheDocument()
   })
 
+  it('can label the axis differently from the bars', () => {
+    render(<BarChart title="Earnings per day" points={[{ label: '1 Oct', value: 100000 }]} formatValue={money} formatAxis={(n) => `${n / 1000}k`} />)
+
+    expect(screen.getByText('100k', { selector: '[data-axis="max"]' })).toBeInTheDocument()
+    // The bar's own tooltip and the table keep the full value.
+    expect(screen.getByRole('img', { name: 'Earnings per day' }).querySelector('rect[data-bar] title')).toHaveTextContent('1 Oct: ₹100000')
+  })
+
   it('copes with nothing but zeros and with no points', () => {
     const { rerender } = render(<BarChart title="Earnings per day" points={points.map((p) => ({ ...p, value: 0 }))} formatValue={money} />)
     const bars = screen.getByRole('img', { name: 'Earnings per day' }).querySelectorAll('rect[data-bar]')

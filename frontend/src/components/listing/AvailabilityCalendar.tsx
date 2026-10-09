@@ -4,6 +4,7 @@ import { useState } from 'react'
 import {
   AVAILABILITY_HORIZON_DAYS,
   DAY_LEVEL_LABELS,
+  isClosedForToday,
   useAvailability,
   type DayAvailabilityDto,
   type DayLevel,
@@ -81,12 +82,13 @@ export function AvailabilityCalendar({
       )
     }
     const style = LEVEL_STYLE[day.level]
-    const closed = day.level === 'CLOSED'
+    const closedToday = day.level !== 'CLOSED' && isClosedForToday(day)
+    const closed = day.level === 'CLOSED' || closedToday
     return (
       <button
         type="button"
         disabled={closed}
-        aria-label={`${spoken}, ${DAY_LEVEL_LABELS[day.level]}`}
+        aria-label={`${spoken}, ${closedToday ? 'Closed for today' : DAY_LEVEL_LABELS[day.level]}`}
         onClick={() => {
           setPicked(date)
           onPick(day)

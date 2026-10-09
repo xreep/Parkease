@@ -13,6 +13,13 @@ export function formatINR(value: number | string | null): string {
   return Number.isFinite(n) ? inr.format(n) : '—'
 }
 
+/** "₹50k", "₹2.5L", "₹1Cr": short enough for a chart axis, in lakhs and crores. */
+export function formatCompactINR(value: number): string {
+  const units: [number, string][] = [[10_000_000, 'Cr'], [100_000, 'L'], [1_000, 'k']]
+  const [size, suffix] = units.find(([s]) => value >= s) ?? [1, '']
+  return `₹${Number((value / size).toFixed(1))}${suffix}`
+}
+
 const dateTime = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
 
 export function formatDateTime(iso: string): string {

@@ -23,8 +23,13 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 }
 
 function NextBookingCard() {
-  const { data, error, isPending } = useBookings('upcoming', 0, 1)
-  const next = data?.content[0]
+  // An active booking comes first (the Upcoming list no longer includes it); otherwise the next one to start.
+  const active = useBookings('active', 0, 1)
+  const activeBooking = active.data?.content[0]
+  const upcoming = useBookings('upcoming', 0, 1, !activeBooking && !active.isPending)
+  const next = activeBooking ?? upcoming.data?.content[0]
+  const isPending = active.isPending || (!activeBooking && upcoming.isPending)
+  const error = activeBooking ? null : upcoming.error
   return (
     <Card title="Next booking">
       {isPending ? (

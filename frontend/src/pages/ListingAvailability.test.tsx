@@ -158,6 +158,29 @@ describe('listing availability calendar', () => {
     expect(screen.getByLabelText('From')).toHaveValue(toLocalInputValue(new Date('2026-10-09T11:45:00+05:30')))
   })
 
+  it('does not offer today once the next quarter hour is at or past closing time', async () => {
+    // 11:30 IST now: the next quarter is 11:45.
+    OVERRIDES['2026-10-09'] = { level: 'AVAILABLE', openTime: '08:00', closeTime: '11:40', bookedPercent: 0 }
+    const user = userEvent.setup()
+    renderApp('/listings/7')
+    const calendar = await screen.findByRole('region', { name: 'Availability' })
+
+    const today = await within(calendar).findByRole('button', { name: '9 October 2026, Closed for today' })
+    expect(today).toBeDisabled()
+    const before = (screen.getByLabelText('From') as HTMLInputElement).value
+    await user.click(today)
+    expect(screen.getByLabelText('From')).toHaveValue(before)
+    // Tomorrow is untouched.
+    expect(within(calendar).getByRole('button', { name: '10 October 2026, Available' })).toBeEnabled()
+  })
+
+  it('still offers today while there is time before closing', async () => {
+    OVERRIDES['2026-10-09'] = { level: 'AVAILABLE', openTime: '08:00', closeTime: '11:50', bookedPercent: 0 }
+    renderApp('/listings/7')
+
+    expect(await screen.findByRole('button', { name: '9 October 2026, Available' })).toBeEnabled()
+  })
+
   it('does not change the booking card when a closed day is clicked', async () => {
     const user = userEvent.setup()
     renderApp('/listings/7')

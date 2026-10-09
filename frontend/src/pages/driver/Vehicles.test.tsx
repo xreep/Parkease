@@ -209,7 +209,7 @@ describe('driver area', () => {
       expect(await screen.findByText('PE-8KQ2M4')).toBeInTheDocument()
       expect(screen.getByText('Metro Hub Parking')).toBeInTheDocument()
       expect(screen.getByRole('link', { name: 'View booking' })).toHaveAttribute('href', '/driver/bookings/91')
-      expect(mock.history.get.find((r) => r.url === '/bookings')?.params).toEqual({ view: 'upcoming', page: 0, size: 1 })
+      expect(mock.history.get.find((r) => r.url === '/bookings')?.params).toEqual({ view: 'active', page: 0, size: 1 })
       expect(await screen.findByText('2')).toBeInTheDocument()
       expect(screen.getByRole('link', { name: 'Manage vehicles' })).toHaveAttribute('href', '/driver/vehicles')
     })
