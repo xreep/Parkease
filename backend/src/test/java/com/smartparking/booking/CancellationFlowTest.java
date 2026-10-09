@@ -8,6 +8,7 @@ import static com.smartparking.support.BookingApiSupport.reserveOk;
 import static com.smartparking.support.BookingApiSupport.tomorrowAt;
 import static com.smartparking.support.BookingApiSupport.verify;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -25,6 +26,10 @@ import com.smartparking.listing.CancellationPolicy;
 import com.smartparking.listing.ParkingListing;
 import com.smartparking.listing.ParkingListingRepository;
 import com.smartparking.location.CityRepository;
+import com.smartparking.payment.PaymentRepository;
+import com.smartparking.payment.ProviderRefund;
+import com.smartparking.payment.RefundService;
+import com.smartparking.payment.RefundStatus;
 import com.smartparking.support.AuthTestSupport;
 import com.smartparking.support.BookingApiSupport.Driver;
 import com.smartparking.support.CommittedIntegrationTest;
@@ -57,6 +62,7 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @CommittedIntegrationTest
 @Import(CancellationFlowTest.ProviderConfig.class)
@@ -83,6 +89,11 @@ class CancellationFlowTest {
     @Autowired OwnerEarningRepository earnings;
     @Autowired RecordingEmailSender emails;
     @Autowired RecordingPaymentProvider provider;
+    @Autowired TransactionTemplate tx;
+    @Autowired RefundService refundService;
+    @Autowired PaymentRepository payments;
+    @Autowired BookingLocks locks;
+    @Autowired BookingJobs jobs;
 
     private String ownerAuth;
     private String otherOwnerAuth;
@@ -270,7 +281,7 @@ class CancellationFlowTest {
         assertThat(earning(id).getStatus()).isEqualTo(EarningStatus.REVERSED);
         assertThat(paymentStatus(id)).isEqualTo("REFUNDED");
         assertThat(subjects(DRIVER_EMAIL)).containsExactly("Booking cancelled – ParkEase");
-        assertThat(emails.lastTo(DRIVER_EMAIL).textBody()).contains("A refund of ₹67.08 is on its way.");
+        assertThat(emails.lastTo(DRIVER_EMAIL).textBody()).contains("Your refund of ₹67.08 will be processed to your original payment method.");
         assertThat(subjects(OWNER_EMAIL)).containsExactly("Booking cancelled by driver – ParkEase");
         assertThat(notificationTypes(DRIVER_EMAIL)).contains("BOOKING_CANCELLED").doesNotContain("BOOKING_REFUNDED");
         assertThat(notificationTypes(OWNER_EMAIL)).contains("OWNER_BOOKING_CANCELLED");
@@ -307,7 +318,7 @@ class CancellationFlowTest {
         assertThat(earning.getCommission()).isEqualByComparingTo("6.00");
         assertThat(earning.getStatus()).isEqualTo(EarningStatus.REVERSED);
         assertThat(emails.lastTo(DRIVER_EMAIL).textBody())
-                .contains("A refund of ₹60.00 is on its way.", "₹7.08 is not refundable under the moderate policy");
+                .contains("Your refund of ₹60.00 will be processed to your original payment method.", "₹7.08 is not refundable under the moderate policy");
         assertThat(subjects(OWNER_EMAIL)).containsExactly("Booking cancelled by driver – ParkEase");
         assertThat(emails.lastTo(OWNER_EMAIL).textBody()).contains("Trip cancelled");
         assertThat(notificationTypes(OWNER_EMAIL)).contains("OWNER_BOOKING_CANCELLED");
@@ -416,6 +427,143 @@ class CancellationFlowTest {
         assertThat(jdbc.queryForObject("select status from refunds", String.class)).isEqualTo("FAILED");
         assertThat(jdbc.queryForObject("select amount from refunds", BigDecimal.class)).isEqualByComparingTo("60.00");
         assertThat(earning(id).getStatus()).isEqualTo(EarningStatus.REVERSED);
+    }
+
+    // ---- refunds the provider may already hold ----------------------------------------------------------------
+
+    /** A refund call that reached the provider but whose transaction then rolled back, leaving no refund row. */
+    private void refundLostToARollback(long bookingId, String amount) {
+        assertThatThrownBy(() -> tx.executeWithoutResult(s -> {
+            Booking booking = locks.lock(bookingId);
+            refundService.refund(booking, payments.findByBookingId(bookingId).orElseThrow(), new BigDecimal(amount),
+                    BookingActor.DRIVER, "Booking cancelled by driver", null);
+            throw new IllegalStateException("rolled back after the provider call");
+        })).isInstanceOf(IllegalStateException.class);
+        assertThat(refundCount()).isZero();
+        assertThat(provider.calls).hasSize(1);
+    }
+
+    @Test
+    void aRepeatedCancellationAdoptsTheRefundALostTransactionLeftAtTheProviderInsteadOfRefundingAgain()
+            throws Exception {
+        configureListing(CancellationPolicy.FLEXIBLE, true);
+        long id = paid(10);
+        startsIn(id, Duration.ofMinutes(45)); // half the base: 30.00
+        provider.listIssuedRefunds = true;
+        refundLostToARollback(id, "30.00");
+        String orphan = provider.issued.get(0).refundId();
+
+        cancel(driver.auth(), id, null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.refundAmount").value(30.0))
+                .andExpect(jsonPath("$.paymentStatus").value("PARTIALLY_REFUNDED"));
+
+        assertThat(provider.calls).hasSize(1); // exactly one refund at the provider, ever
+        Map<String, Object> row = jdbc.queryForMap("select provider_refund_id, status, amount from refunds");
+        assertThat(row).containsEntry("provider_refund_id", orphan).containsEntry("status", "PROCESSED");
+        assertThat((BigDecimal) row.get("amount")).isEqualByComparingTo("30.00");
+        assertThat(earning(id).getNet()).isEqualByComparingTo("30.00");
+    }
+
+    @Test
+    void aProviderRefundOfAnotherAmountBlocksTheCancellationAndChangesNothing() throws Exception {
+        configureListing(CancellationPolicy.FLEXIBLE, true);
+        long id = paid(10);
+        startsIn(id, Duration.ofMinutes(45));
+        provider.existingRefunds = List.of(new ProviderRefund("rfnd_dashboard", RefundStatus.PROCESSED, 1000L, null,
+                Map.of()));
+
+        cancel(driver.auth(), id, null)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("REFUND_RECONCILIATION_REQUIRED"))
+                .andExpect(jsonPath("$.detail").value(
+                        "We're confirming an earlier refund for this booking. Please try again in a few minutes."));
+
+        assertThat(booking(id)).containsEntry("status", "CONFIRMED");
+        assertThat(paymentStatus(id)).isEqualTo("CAPTURED");
+        assertThat(provider.calls).isEmpty();
+        assertThat(refundCount()).isZero();
+        assertThat(earning(id).getStatus()).isEqualTo(EarningStatus.HELD);
+        assertThat(notificationTypes(DRIVER_EMAIL)).doesNotContain("BOOKING_CANCELLED");
+        assertThat(emails.sentTo(DRIVER_EMAIL)).isEmpty();
+    }
+
+    @Test
+    void refundsAreTaggedWithTheBookingSoAnOrphanCanBeIdentified() throws Exception {
+        configureListing(CancellationPolicy.FLEXIBLE, true);
+        long id = paid(10);
+        startsIn(id, Duration.ofHours(2));
+
+        cancel(driver.auth(), id, null).andExpect(status().isOk());
+
+        assertThat(provider.notes).containsExactly(Map.of("bookingId", String.valueOf(id)));
+    }
+
+    @Test
+    void anUnreachableGatewayWhileCheckingLeavesAFailedRefundForTheRetryJob() throws Exception {
+        configureListing(CancellationPolicy.FLEXIBLE, true);
+        long id = paid(10);
+        startsIn(id, Duration.ofHours(2));
+        provider.failFetch = true;
+
+        cancel(driver.auth(), id, null).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CANCELLED"));
+
+        assertThat(provider.calls).isEmpty(); // not asking for a refund it could not rule out having made
+        assertThat(jdbc.queryForObject("select status from refunds", String.class)).isEqualTo("FAILED");
+    }
+
+    // ---- telling the driver about the refund -----------------------------------------------------------------
+
+    @Test
+    void aRefundTheProviderRefusedIsPromisedAsProcessedLaterAndAnnouncedOnceTheRetryGetsItThrough() throws Exception {
+        configureListing(CancellationPolicy.MODERATE, true);
+        long id = paid(10);
+        startsIn(id, Duration.ofHours(30).plusMinutes(1));
+        provider.failures.set(1);
+
+        cancel(driver.auth(), id, null).andExpect(status().isOk());
+
+        assertThat(emails.lastTo(DRIVER_EMAIL).textBody())
+                .contains("Your refund of ₹60.00 will be processed to your original payment method.")
+                .doesNotContain("on its way");
+        assertThat(jdbc.queryForObject("select body from notifications where type = 'BOOKING_CANCELLED' "
+                + "and link = ?", String.class, "/driver/bookings/" + id))
+                .contains("Your refund of ₹60.00 will be processed to your original payment method.");
+        assertThat(notificationTypes(DRIVER_EMAIL)).containsExactly("BOOKING_CONFIRMED", "BOOKING_CANCELLED");
+        emails.clear();
+
+        jobs.retryFailedRefunds();
+
+        assertThat(notificationTypes(DRIVER_EMAIL)).containsExactly("BOOKING_CONFIRMED", "BOOKING_CANCELLED", "BOOKING_REFUNDED");
+        assertThat(jdbc.queryForObject("select body from notifications where type = 'BOOKING_REFUNDED'",
+                String.class)).contains("₹60.00");
+        assertThat(subjects(DRIVER_EMAIL)).containsExactly("Refund issued – ParkEase");
+        assertThat(emails.lastTo(DRIVER_EMAIL).textBody())
+                .contains("Your refund of ₹60.00 for the cancelled booking")
+                .doesNotContain("refunded in full");
+
+        jobs.retryFailedRefunds(); // nothing left to retry
+        assertThat(notificationTypes(DRIVER_EMAIL)).containsExactly("BOOKING_CONFIRMED", "BOOKING_CANCELLED", "BOOKING_REFUNDED");
+    }
+
+    @Test
+    void aRefundTheProviderLaterReportsFailedAndThenProcessedIsAnnouncedOnceHoweverOftenTheWebhookRepeats()
+            throws Exception {
+        configureListing(CancellationPolicy.FLEXIBLE, true);
+        long id = paid(10);
+        startsIn(id, Duration.ofHours(2));
+        cancel(driver.auth(), id, null).andExpect(status().isOk());
+        String providerRefund = jdbc.queryForObject("select provider_refund_id from refunds", String.class);
+        assertThat(notificationTypes(DRIVER_EMAIL)).containsExactly("BOOKING_CONFIRMED", "BOOKING_CANCELLED");
+
+        assertThat(refundService.applyProviderStatus(providerRefund, RefundStatus.FAILED, "bank said no")).isTrue();
+        assertThat(refundService.applyProviderStatus(providerRefund, RefundStatus.FAILED, "bank said no")).isTrue();
+        assertThat(notificationTypes(DRIVER_EMAIL)).containsExactly("BOOKING_CONFIRMED", "BOOKING_CANCELLED");
+        assertThat(refundService.applyProviderStatus(providerRefund, RefundStatus.PROCESSED, null)).isTrue();
+        assertThat(refundService.applyProviderStatus(providerRefund, RefundStatus.PROCESSED, null)).isTrue();
+
+        assertThat(notificationTypes(DRIVER_EMAIL)).containsExactly("BOOKING_CONFIRMED", "BOOKING_CANCELLED", "BOOKING_REFUNDED");
     }
 
     // ---- not cancellable ------------------------------------------------------------------------------------
@@ -549,7 +697,7 @@ class CancellationFlowTest {
         assertThat(earning(id).getStatus()).isEqualTo(EarningStatus.REVERSED);
         assertThat(subjects(DRIVER_EMAIL)).containsExactly("Your booking was cancelled by the owner – ParkEase");
         assertThat(emails.lastTo(DRIVER_EMAIL).textBody())
-                .contains("Gate under repair", "A full refund of ₹67.08 is on its way.");
+                .contains("Gate under repair", "Your full refund of ₹67.08 will be processed to your original payment method.");
         assertThat(notificationTypes(DRIVER_EMAIL)).endsWith("BOOKING_CANCELLED").doesNotContain("BOOKING_REFUNDED");
         assertThat(emails.sentTo(OWNER_EMAIL)).isEmpty();
         assertThat(jdbc.queryForList("select actor from booking_events where booking_id = ? and from_status = 'CONFIRMED' and to_status = 'CANCELLED'",

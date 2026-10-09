@@ -627,7 +627,7 @@ class BookingJobsTest {
 
         jobs.retryFailedRefunds();
 
-        assertThat(provider.fetchRefundCalls.get()).isEqualTo(1);
+        assertThat(provider.fetchRefundCalls.get()).isEqualTo(2); // the first attempt's orphan check, then the retry's
         assertThat(provider.refundCalls.get()).isEqualTo(1); // no second provider refund
         assertThat(refund(id)).containsEntry("status", "PROCESSED").containsEntry("provider_refund_id", "rfnd_found")
                 .containsEntry("attempts", 2);
@@ -667,7 +667,7 @@ class BookingJobsTest {
         assertThat(jdbc.queryForList("select note from booking_events where booking_id = ? and note like '%manual review%'",
                 String.class, id)).hasSize(1);
         jobs.retryFailedRefunds(); // parked: no more provider calls, no second event
-        assertThat(provider.fetchRefundCalls.get()).isEqualTo(1);
+        assertThat(provider.fetchRefundCalls.get()).isEqualTo(2); // the first attempt's orphan check and the one retry
         assertThat(jdbc.queryForObject("select count(*) from booking_events where booking_id = ? and note like '%manual review%'",
                 Integer.class, id)).isEqualTo(1);
     }

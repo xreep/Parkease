@@ -4,15 +4,21 @@ import com.smartparking.booking.dto.OwnerBookingDto;
 import com.smartparking.common.config.AppProperties;
 import com.smartparking.common.error.ApiException;
 import com.smartparking.common.web.PageResponse;
+import com.smartparking.earning.EarningStatus;
+import com.smartparking.earning.OwnerEarning;
+import com.smartparking.earning.OwnerEarningRepository;
 import com.smartparking.email.EmailTemplates;
 import com.smartparking.listing.ParkingListing;
 import com.smartparking.notification.NotificationType;
 import com.smartparking.notification.Notifier;
 import com.smartparking.payment.RefundService;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -39,6 +45,7 @@ public class OwnerBookingService {
     private final BookingLocks locks;
     private final BookingEvents events;
     private final RefundService refunds;
+    private final OwnerEarningRepository earnings;
     private final Notifier notifier;
     private final AppProperties app;
     private final BookingProperties properties;
@@ -77,7 +84,8 @@ public class OwnerBookingService {
                         PageRequest.of(pageNumber, pageSize, Sort.by(Sort.Order.desc("startTime"), Sort.Order.desc("id"))));
             };
         }
-        return PageResponse.from(result.map(OwnerBookingService::toDto));
+        Map<Long, BigDecimal> nets = ownerNets(result.getContent().stream().map(Booking::getId).toList());
+        return PageResponse.from(result.map(b -> toDto(b, nets.get(b.getId()))));
     }
 
     private enum View { REQUESTS, UPCOMING, PAST }
@@ -117,7 +125,7 @@ public class OwnerBookingService {
                 "Your booking " + booking.getBookingCode() + " at " + booking.getListing().getTitle()
                         + " was approved.", BookingPaths.driver(booking),
                 EmailTemplates.bookingApproved(booking.getDriver(), booking, driverLink(booking)));
-        return toDto(booking);
+        return toDto(booking, ownerNet(booking.getId()));
     }
 
     /** Declines a request and refunds the driver in full. */
@@ -133,7 +141,7 @@ public class OwnerBookingService {
                 "Your request " + booking.getBookingCode() + " at " + booking.getListing().getTitle()
                         + " was declined. You will be refunded in full.", BookingPaths.driver(booking),
                 EmailTemplates.bookingRejected(booking.getDriver(), booking, reason, driverLink(booking)));
-        return toDto(booking);
+        return toDto(booking, ownerNet(booking.getId()));
     }
 
     /**
@@ -200,11 +208,29 @@ public class OwnerBookingService {
         return app.frontendUrl() + BookingPaths.driver(booking);
     }
 
-    static OwnerBookingDto toDto(Booking b) {
+    /** What the owner still earns from each booking (see {@link #net}); bookings without an earning are left out. */
+    private Map<Long, BigDecimal> ownerNets(List<Long> bookingIds) {
+        Map<Long, BigDecimal> nets = new HashMap<>();
+        if (!bookingIds.isEmpty()) {
+            earnings.findByBookingIdIn(bookingIds).forEach(e -> nets.put(e.getBooking().getId(), net(e)));
+        }
+        return nets;
+    }
+
+    private BigDecimal ownerNet(Long bookingId) {
+        return earnings.findByBookingId(bookingId).map(OwnerBookingService::net).orElse(null);
+    }
+
+    /** A reversed earning (refunded away) is worth nothing, whatever its net column still says. */
+    static BigDecimal net(OwnerEarning earning) {
+        return earning.getStatus() == EarningStatus.REVERSED ? BigDecimal.ZERO.setScale(2) : earning.getNet();
+    }
+
+    static OwnerBookingDto toDto(Booking b, BigDecimal ownerNet) {
         ParkingListing listing = b.getListing();
         return new OwnerBookingDto(b.getId(), b.getBookingCode(), b.getStatus(), listing.getId(), listing.getTitle(),
                 b.getSlot().getLabel(), b.getStartTime(), b.getEndTime(), b.getVehicleType(), b.getPlateNumber(),
-                BookingMapper.firstName(b.getDriver().getName()), b.getBaseAmount(), b.getApprovalDeadline(),
+                BookingMapper.firstName(b.getDriver().getName()), b.getBaseAmount(), ownerNet, b.getApprovalDeadline(),
                 b.getCreatedAt());
     }
 }

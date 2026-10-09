@@ -34,6 +34,15 @@ public interface PaymentProvider {
         return refund(paymentId, amountPaise, reason);
     }
 
+    /**
+     * Like the five-argument form, and also tags the refund with {@code notes} (e.g. the booking) next to the reason,
+     * so a refund found later at the provider can be traced back to what it was for.
+     */
+    default ProviderRefund refund(String paymentId, long amountPaise, String reason, String idempotencyKey,
+                                  String receipt, Map<String, String> notes) {
+        return refund(paymentId, amountPaise, reason, idempotencyKey, receipt);
+    }
+
     /** Every refund the provider has for the payment (any status). */
     List<ProviderRefund> fetchRefunds(String paymentId);
 

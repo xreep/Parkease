@@ -142,6 +142,18 @@ class NotifierTest {
         assertThat(body.substring(0, body.length() - 1)).isEqualTo(emoji.repeat((body.length() - 1) / 2));
     }
 
+    @Test
+    void aLinkTooLongForItsColumnIsDroppedNotCutShort() {
+        String fits = "/driver/bookings/" + "1".repeat(300 - "/driver/bookings/".length());
+        notifier.notify(user, NotificationType.BOOKING_CONFIRMED, "Fits", "B", fits, null);
+        notifier.notify(user, NotificationType.BOOKING_CONFIRMED, "Too long", "B", fits + "2", null);
+
+        assertThat(jdbc.queryForObject("select link from notifications where title = 'Fits'", String.class))
+                .isEqualTo(fits);
+        assertThat(jdbc.queryForObject("select link from notifications where title = 'Too long'", String.class))
+                .isNull();
+    }
+
     // ---- the refactored flows ---------------------------------------------------------------------------------
 
     private record Fixture(String ownerAuth, Long listingId, Driver driver) {

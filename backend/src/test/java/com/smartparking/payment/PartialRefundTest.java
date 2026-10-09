@@ -134,6 +134,18 @@ class PartialRefundTest {
         return "parkease-refund-" + refundId;
     }
 
+    @Test
+    void refundsTheProviderListsAndWeHaveRowsForAreNotOrphans() {
+        provider.listIssuedRefunds = true;
+
+        refund("10.00");
+        refund("5.00");
+
+        assertThat(paise()).containsExactly(1000L, 500L); // the second was not held back by the first
+        assertThat(paymentStatus()).isEqualTo("PARTIALLY_REFUNDED");
+        assertThat(bookingRefund()).isEqualByComparingTo("15.00");
+    }
+
     // ---- amounts and statuses -------------------------------------------------------------------------------
 
     @Test
