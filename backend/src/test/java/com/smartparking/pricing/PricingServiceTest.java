@@ -2,6 +2,10 @@ package com.smartparking.pricing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import com.smartparking.settings.PlatformSettings;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
@@ -11,8 +15,14 @@ class PricingServiceTest {
 
     private static final Instant T0 = Instant.parse("2026-10-06T04:30:00Z");
 
-    private final PricingService service =
-            new PricingService(new PricingProperties(new BigDecimal("10"), new BigDecimal("18")));
+    private final PricingService service = new PricingService(settings());
+
+    private static PlatformSettings settings() {
+        PlatformSettings settings = mock(PlatformSettings.class);
+        when(settings.platformFeePercent()).thenReturn(new BigDecimal("10"));
+        when(settings.gstPercent()).thenReturn(new BigDecimal("18"));
+        return settings;
+    }
 
     private static BigDecimal bd(String v) {
         return new BigDecimal(v);

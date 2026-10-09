@@ -36,4 +36,12 @@ public class City extends BaseEntity {
 
     @Column(name = "is_capital", nullable = false)
     private boolean capital;
+
+    /** Price-guideline tier: 1 = metro, 2 = other state capital, 3 = everything else. */
+    @Column(nullable = false)
+    private short tier = 3;
+
+    /** Inactive cities are hidden from the public city lists and suggestions; their listings stay. */
+    @Column(nullable = false)
+    private boolean active = true;
 }

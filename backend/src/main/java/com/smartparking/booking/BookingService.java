@@ -21,6 +21,7 @@ import com.smartparking.payment.PaymentService;
 import com.smartparking.payment.ProviderOrder;
 import com.smartparking.pricing.PricingService;
 import com.smartparking.pricing.Quote;
+import com.smartparking.settings.PlatformSettings;
 import com.smartparking.pricing.TimeWindow;
 import com.smartparking.slot.ParkingSlot;
 import com.smartparking.slot.ParkingSlotRepository;
@@ -60,6 +61,7 @@ public class BookingService {
     private final PaymentService paymentService;
     private final BookingMapper mapper;
     private final BookingProperties properties;
+    private final PlatformSettings settings;
     private final Clock clock;
     private final TransactionTemplate tx;
     private final TransactionTemplate readOnlyTx;
@@ -68,7 +70,7 @@ public class BookingService {
                           AvailabilityRuleRepository rules, AvailabilityBlockRepository blocks,
                           BookingRepository bookings, PaymentRepository payments, AvailabilityEvaluator evaluator,
                           PricingService pricing, SlotAllocator allocator, PaymentService paymentService,
-                          BookingMapper mapper, BookingProperties properties, Clock clock,
+                          BookingMapper mapper, BookingProperties properties, PlatformSettings settings, Clock clock,
                           PlatformTransactionManager txManager) {
         this.listings = listings;
         this.vehicles = vehicles;
@@ -83,6 +85,7 @@ public class BookingService {
         this.paymentService = paymentService;
         this.mapper = mapper;
         this.properties = properties;
+        this.settings = settings;
         this.clock = clock;
         this.tx = new TransactionTemplate(txManager);
         this.readOnlyTx = new TransactionTemplate(txManager);
@@ -92,7 +95,7 @@ public class BookingService {
     private record Prepared(BookingDraft draft, List<Long> freeSlotIds) {
     }
 
-    /** Holds a slot for the driver for {@code holdMinutes} and opens a payment order for it. */
+    /** Holds a slot for the driver for the configured hold time and opens a payment order for it. */
     public CheckoutDto reserve(Long driverId, CreateBookingRequest request) {
         TimeWindow window = TimeWindow.of(request.start(), request.end(), clock);
         Prepared prepared = readOnlyTx.execute(s -> prepare(driverId, request, window));
@@ -156,7 +159,7 @@ public class BookingService {
                 .orElseThrow(() -> ApiException.notFound("Vehicle not found"));
 
         Instant now = clock.instant();
-        properties.requireNoticeForRequest(listing.isAutoApprove(), window.start(), now);
+        settings.requireNoticeForRequest(listing.isAutoApprove(), window.start(), now);
         long holds = bookings.countByDriverIdAndStatusAndHoldExpiresAtAfter(driverId, BookingStatus.PENDING_PAYMENT, now);
         if (holds >= properties.maxActiveHolds()) {
             throw ApiException.conflict("TOO_MANY_HOLDS",
