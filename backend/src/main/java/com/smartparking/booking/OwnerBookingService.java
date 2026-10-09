@@ -1,0 +1,193 @@
+package com.smartparking.booking;
+
+import com.smartparking.booking.dto.OwnerBookingDto;
+import com.smartparking.common.config.AppProperties;
+import com.smartparking.common.error.ApiException;
+import com.smartparking.common.util.AfterCommit;
+import com.smartparking.common.web.PageResponse;
+import com.smartparking.email.EmailMessage;
+import com.smartparking.email.EmailSender;
+import com.smartparking.email.EmailTemplates;
+import com.smartparking.listing.ParkingListing;
+import com.smartparking.payment.RefundService;
+import java.time.Clock;
+import java.time.Instant;
+import java.util.List;
+import java.util.Locale;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * Owner decisions on paid booking requests, plus the system's own rejection of requests the owner left unanswered.
+ *
+ * <p>Every decision locks the payment row and then the booking row ({@link BookingLocks}), re-checks the status on the
+ * locked row, applies the transition and the refund in one transaction, and sends emails only after it commits.
+ */
+@Service
+@RequiredArgsConstructor
+public class OwnerBookingService {
+
+    private static final List<BookingStatus> HIDDEN_FROM_OWNERS = List.of(BookingStatus.PENDING_PAYMENT,
+            BookingStatus.EXPIRED);
+
+    private final BookingRepository bookings;
+    private final BookingLocks locks;
+    private final BookingEvents events;
+    private final RefundService refunds;
+    private final EmailSender emailSender;
+    private final AppProperties app;
+    private final BookingProperties properties;
+    private final Clock clock;
+
+    // ---- listing --------------------------------------------------------------------------------------------
+
+    /**
+     * {@code status} filters by one status; otherwise {@code view} picks requests (default), upcoming or past.
+     * Unpaid holds and lapsed holds are never visible to owners.
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<OwnerBookingDto> list(Long ownerId, BookingStatus status, String view, int page, int size) {
+        Instant now = clock.instant();
+        int pageNumber = Math.max(page, 0);
+        int pageSize = Math.min(Math.max(size, 1), 100);
+        Page<Booking> result;
+        if (status != null) {
+            if (HIDDEN_FROM_OWNERS.contains(status)) {
+                return new PageResponse<>(List.of(), pageNumber, pageSize, 0, 0);
+            }
+            Sort sort = switch (status) {
+                case AWAITING_APPROVAL -> Sort.by("approvalDeadline", "id");
+                case CONFIRMED, ACTIVE -> Sort.by("startTime", "id");
+                default -> Sort.by(Sort.Order.desc("startTime"), Sort.Order.desc("id"));
+            };
+            result = bookings.findByListingOwnerIdAndStatusIn(ownerId, List.of(status),
+                    PageRequest.of(pageNumber, pageSize, sort));
+        } else {
+            result = switch (parseView(view)) {
+                case REQUESTS -> bookings.findByListingOwnerIdAndStatusIn(ownerId, List.of(BookingStatus.AWAITING_APPROVAL),
+                        PageRequest.of(pageNumber, pageSize, Sort.by("approvalDeadline", "id")));
+                case UPCOMING -> bookings.findUpcomingForOwner(ownerId, now,
+                        PageRequest.of(pageNumber, pageSize, Sort.by("startTime", "id")));
+                case PAST -> bookings.findPastForOwner(ownerId, now,
+                        PageRequest.of(pageNumber, pageSize, Sort.by(Sort.Order.desc("startTime"), Sort.Order.desc("id"))));
+            };
+        }
+        return PageResponse.from(result.map(OwnerBookingService::toDto));
+    }
+
+    private enum View { REQUESTS, UPCOMING, PAST }
+
+    private static View parseView(String view) {
+        if (view == null || view.isBlank()) {
+            return View.REQUESTS;
+        }
+        try {
+            return View.valueOf(view.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw ApiException.badRequest("INVALID_VIEW", "view must be requests, upcoming or past");
+        }
+    }
+
+    // ---- decisions ------------------------------------------------------------------------------------------
+
+    /** Confirms a request that is still within its response window. */
+    @Transactional
+    public OwnerBookingDto approve(Long ownerId, Long bookingId) {
+        requireOwned(ownerId, bookingId);
+        Booking booking = locks.lock(bookingId);
+        Instant now = clock.instant();
+        if (booking.getStatus() != BookingStatus.AWAITING_APPROVAL
+                || booking.getApprovalDeadline() == null || !booking.getApprovalDeadline().isAfter(now)) {
+            throw invalidStatus("approved", booking);
+        }
+        booking.setStatus(BookingStatus.CONFIRMED);
+        booking.setConfirmedAt(now);
+        booking.setApprovalDeadline(null);
+        events.record(booking, BookingStatus.AWAITING_APPROVAL, BookingStatus.CONFIRMED, BookingActor.OWNER,
+                "Approved by owner");
+        send(EmailTemplates.bookingApproved(booking.getDriver(), booking, driverLink(booking)));
+        return toDto(booking);
+    }
+
+    /** Declines a request and refunds the driver in full. */
+    @Transactional
+    public OwnerBookingDto reject(Long ownerId, Long bookingId, String reason) {
+        requireOwned(ownerId, bookingId);
+        Booking booking = locks.lock(bookingId);
+        if (booking.getStatus() != BookingStatus.AWAITING_APPROVAL) {
+            throw invalidStatus("declined", booking);
+        }
+        unwind(booking, BookingActor.OWNER, reason);
+        send(EmailTemplates.bookingRejected(booking.getDriver(), booking, reason, driverLink(booking)));
+        return toDto(booking);
+    }
+
+    /**
+     * Rejects one request whose owner response deadline has passed (the background job's unit of work); false when it
+     * was decided or is not overdue after all. Runs in its own transaction, so call it from outside one.
+     */
+    @Transactional
+    public boolean autoRejectIfOverdue(Long bookingId) {
+        Booking booking = locks.lock(bookingId);
+        Instant now = clock.instant();
+        if (booking.getStatus() != BookingStatus.AWAITING_APPROVAL
+                || booking.getApprovalDeadline() == null || booking.getApprovalDeadline().isAfter(now)) {
+            return false;
+        }
+        unwind(booking, BookingActor.SYSTEM, autoRejectReason());
+        send(EmailTemplates.bookingAutoRejected(booking.getDriver(), booking, driverLink(booking)));
+        return true;
+    }
+
+    String autoRejectReason() {
+        int hours = properties.approvalHours();
+        return "The owner didn't respond within " + hours + (hours == 1 ? " hour" : " hours");
+    }
+
+    /**
+     * REJECTED + full refund, in the caller's transaction and under its locks. The refund (a provider call) is the
+     * last thing that touches money; the only work after it is queueing the post-commit email, which cannot fail the
+     * transaction.
+     */
+    private void unwind(Booking booking, BookingActor actor, String reason) {
+        BookingStatus from = booking.getStatus();
+        booking.setStatus(BookingStatus.REJECTED);
+        booking.setCancelledBy(actor);
+        booking.setCancelReason(reason);
+        events.record(booking, from, BookingStatus.REJECTED, actor, reason);
+        refunds.refundFull(booking, actor, reason);
+    }
+
+    // ---- helpers --------------------------------------------------------------------------------------------
+
+    private void requireOwned(Long ownerId, Long bookingId) {
+        if (!bookings.existsByIdAndListingOwnerId(bookingId, ownerId)) {
+            throw ApiException.notFound("Booking not found");
+        }
+    }
+
+    private static ApiException invalidStatus(String action, Booking booking) {
+        return ApiException.conflict("INVALID_STATUS",
+                "This request can no longer be " + action + " (" + booking.getStatus() + ")");
+    }
+
+    private String driverLink(Booking booking) {
+        return app.frontendUrl() + "/driver/bookings/" + booking.getId();
+    }
+
+    private void send(EmailMessage message) {
+        AfterCommit.run(() -> emailSender.send(message));
+    }
+
+    static OwnerBookingDto toDto(Booking b) {
+        ParkingListing listing = b.getListing();
+        return new OwnerBookingDto(b.getId(), b.getBookingCode(), b.getStatus(), listing.getId(), listing.getTitle(),
+                b.getSlot().getLabel(), b.getStartTime(), b.getEndTime(), b.getVehicleType(), b.getPlateNumber(),
+                BookingMapper.firstName(b.getDriver().getName()), b.getBaseAmount(), b.getApprovalDeadline(),
+                b.getCreatedAt());
+    }
+}

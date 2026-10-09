@@ -9,3 +9,5 @@ spring:
 app:
   jwt:
     secret: ${JWT_SECRET}
+  payments:
+    mock-enabled: false

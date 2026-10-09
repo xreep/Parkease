@@ -32,7 +32,10 @@ export function Navbar() {
       <NavLink to="/search" className={linkClass} onClick={() => setOpen(false)}>Find parking</NavLink>
       {user ? (
         <>
-          <NavLink to={homeFor(user.role)} className={linkClass} onClick={() => setOpen(false)}>Dashboard</NavLink>
+          <NavLink to={homeFor(user.role)} end className={linkClass} onClick={() => setOpen(false)}>Dashboard</NavLink>
+          {user.role === 'DRIVER' && (
+            <NavLink to="/driver/bookings" className={linkClass} onClick={() => setOpen(false)}>My bookings</NavLink>
+          )}
           <NavLink to="/account" className={linkClass} onClick={() => setOpen(false)}>Account</NavLink>
           <button type="button" onClick={handleLogout} className={linkClass({ isActive: false })}>Log out</button>
         </>

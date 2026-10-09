@@ -3,6 +3,7 @@ import { useAuth } from '../../auth/AuthProvider'
 import { FormError } from '../../components/AuthCard'
 import { Spinner } from '../../components/ui/Spinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
+import { useOwnerBookings } from '../../lib/bookings'
 import { errorMessage } from '../../lib/errors'
 import { useMyListings, useOwnerProfile, type OwnerProfile } from '../../lib/owner'
 
@@ -85,6 +86,21 @@ function ListingsCard() {
   )
 }
 
+/** Only shown when something is waiting, so it never adds a spinner or an error to a quiet dashboard. */
+function RequestsCard() {
+  const { data } = useOwnerBookings('requests', 0, 1)
+  const waiting = data?.totalElements ?? 0
+  if (waiting === 0) return null
+  return (
+    <Card title="Booking requests">
+      <p className="font-semibold text-slate-900 dark:text-white">
+        {`${waiting} booking ${waiting === 1 ? 'request' : 'requests'} waiting`}
+      </p>
+      <Link to="/owner/bookings" className={primaryLink}>Review requests</Link>
+    </Card>
+  )
+}
+
 export function OwnerHomePage() {
   const { user } = useAuth()
   if (!user) return null
@@ -99,6 +115,7 @@ export function OwnerHomePage() {
       <div className="grid gap-6 md:grid-cols-2">
         <VerificationCard />
         <ListingsCard />
+        <RequestsCard />
       </div>
     </div>
   )
