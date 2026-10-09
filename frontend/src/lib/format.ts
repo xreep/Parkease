@@ -3,14 +3,28 @@ import type { CancellationPolicy } from './owner'
 const inr = new Intl.NumberFormat('en-IN', {
   style: 'currency',
   currency: 'INR',
+  maximumFractionDigits: 0,
+})
+const inrPaise = new Intl.NumberFormat('en-IN', {
+  style: 'currency',
+  currency: 'INR',
+  minimumFractionDigits: 2,
   maximumFractionDigits: 2,
-  minimumFractionDigits: 0,
 })
 
 export function formatINR(value: number | string | null): string {
   if (value === null || value === undefined || value === '') return '—'
   const n = typeof value === 'string' ? Number(value) : value
-  return Number.isFinite(n) ? inr.format(n) : '—'
+  if (!Number.isFinite(n)) return '—'
+  // Whole rupees read cleanest without decimals; anything with paise always shows two digits (₹610.80, not ₹610.8).
+  return Number.isInteger(n) ? inr.format(n) : inrPaise.format(n)
+}
+
+/** "₹50k", "₹2.5L", "₹1Cr": short enough for a chart axis, in lakhs and crores. */
+export function formatCompactINR(value: number): string {
+  const units: [number, string][] = [[10_000_000, 'Cr'], [100_000, 'L'], [1_000, 'k']]
+  const [size, suffix] = units.find(([s]) => value >= s) ?? [1, '']
+  return `₹${Number((value / size).toFixed(1))}${suffix}`
 }
 
 const dateTime = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' })

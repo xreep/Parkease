@@ -64,7 +64,14 @@ function toWindow(sel: Selection): { start: string; end: string } | null {
   return { start: start.toISOString(), end: end.toISOString() }
 }
 
-export function BookingCard({ listing }: { listing: PublicListingDto }) {
+export function BookingCard({
+  listing,
+  requested,
+}: {
+  listing: PublicListingDto
+  /** A window picked elsewhere on the page (the availability calendar); each new object replaces the pickers' times. */
+  requested?: { start: string; end: string } | null
+}) {
   const { user, loading: authLoading } = useAuth()
   const isDriver = user?.role === 'DRIVER'
   const navigate = useNavigate()
@@ -102,6 +109,13 @@ export function BookingCard({ listing }: { listing: PublicListingDto }) {
 
   const change = (patch: Partial<Selection>) =>
     setSelection((s) => (Object.entries(patch).every(([k, v]) => s[k as keyof Selection] === v) ? s : { ...s, ...patch }))
+
+  // A window picked in the availability calendar replaces the pickers' times (adjusted while rendering, not in an effect).
+  const [appliedRequest, setAppliedRequest] = useState(requested)
+  if (requested !== appliedRequest) {
+    setAppliedRequest(requested)
+    if (requested) setSelection((s) => ({ ...s, start: requested.start, end: requested.end }))
+  }
 
   const vehicles = useVehicles(isDriver)
   const ofType = useMemo(

@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { api } from './api'
 import type { ListingStatus, VerificationStatus } from './format'
 import { uploadFile } from './uploads'
@@ -123,8 +123,8 @@ export const submitDocument = (type: DocumentType, file: File, onProgress?: (pct
   uploadFile<OwnerProfile>('/owner/verification', file, { documentType: type }, onProgress)
 export const getDocumentUrl = async () => (await api.get<SignedUrl>('/owner/verification/document-url')).data
 
-export const listMyListings = async (page: number) =>
-  (await api.get<Page<ListingSummary>>(base, { params: { page, size: 20 } })).data
+export const listMyListings = async (page: number, size = 20) =>
+  (await api.get<Page<ListingSummary>>(base, { params: { page, size } })).data
 export const getListing = async (id: number) => (await api.get<ListingDetail>(`${base}/${id}`)).data
 export const createListing = async (body: BasicsBody) => (await api.post<ListingDetail>(base, body)).data
 export const updateBasics = async (id: number, body: BasicsBody) => (await api.put<ListingDetail>(`${base}/${id}`, body)).data
@@ -169,8 +169,11 @@ export function useOwnerProfile() {
   return useQuery({ queryKey: ['owner', 'profile'], queryFn: getOwnerProfile })
 }
 
-export function useMyListings(page: number) {
-  return useQuery({ queryKey: ['owner', 'listings', page], queryFn: () => listMyListings(page) })
+export function useMyListings(page: number, size = 20) {
+  return useQuery({
+    queryKey: size === 20 ? ['owner', 'listings', page] : ['owner', 'listings', page, size],
+    queryFn: () => listMyListings(page, size),
+  })
 }
 
 export function useListing(id: number | undefined) {
@@ -187,6 +190,15 @@ export function useHours(id: number | undefined) {
 
 export function useBlocks(id: number | undefined) {
   return useQuery({ queryKey: ['owner', 'blocks', id], queryFn: () => listBlocks(id!), enabled: id !== undefined })
+}
+
+/** A block changes the owner's blocks, their slot calendar and the availability drivers see. */
+export function invalidateBlocks(queryClient: QueryClient, listingId: number) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['owner', 'blocks', listingId] }),
+    queryClient.invalidateQueries({ queryKey: ['owner', 'calendar'] }),
+    queryClient.invalidateQueries({ queryKey: ['availability'] }),
+  ]).then(() => undefined)
 }
 
 /** Returns a function that refetches the listing and the owner's listing list (after any edit). */

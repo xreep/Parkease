@@ -164,6 +164,7 @@ class PartialRefundTest {
         assertThat(paymentStatus()).isEqualTo("REFUNDED");
         assertThat(bookingRefund()).isEqualByComparingTo("67.08");
         assertThat(earning().getStatus()).isEqualTo(EarningStatus.REVERSED);
+        assertThat(earning().getNet()).isEqualByComparingTo("0.00");
         assertThat(paise()).containsExactly(2000L, 4708L);
         assertThat(jdbc.queryForList("select status from refunds order by id", String.class))
                 .containsExactly("PROCESSED", "PROCESSED");

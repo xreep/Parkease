@@ -101,11 +101,13 @@ export type ReasonDialogProps = {
   helper?: string
   /** Longest reason accepted (default 500). */
   maxLength?: number
+  /** Shown above the reason field: what the reason is for (e.g. which booking). */
+  summary?: ReactNode
 }
 
 type ReasonFormProps = Omit<ReasonDialogProps, 'open' | 'title'> & { onBusyChange: (busy: boolean) => void }
 
-function ReasonForm({ confirmLabel, onConfirm, onClose, onBusyChange, helper, maxLength = DEFAULT_REASON_MAX }: ReasonFormProps) {
+function ReasonForm({ confirmLabel, onConfirm, onClose, onBusyChange, helper, maxLength = DEFAULT_REASON_MAX, summary }: ReasonFormProps) {
   const [formError, setFormError] = useState<string | null>(null)
   const schema = useMemo(() => makeReasonSchema(maxLength), [maxLength])
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<ReasonValues>({
@@ -127,6 +129,7 @@ function ReasonForm({ confirmLabel, onConfirm, onClose, onBusyChange, helper, ma
 
   return (
     <form onSubmit={handleSubmit(submit)} noValidate className="space-y-4">
+      {summary}
       <FormError message={formError} />
       <TextArea label="Reason" rows={4} hint={helper} error={errors.reason?.message} {...register('reason')} />
       <div className="flex justify-end gap-2">
@@ -138,11 +141,11 @@ function ReasonForm({ confirmLabel, onConfirm, onClose, onBusyChange, helper, ma
 }
 
 /** Asks for a required reason (max 500 chars unless `maxLength`). The form remounts on each open, so it starts empty. */
-export function ReasonDialog({ open, title, confirmLabel, onConfirm, onClose, helper, maxLength }: ReasonDialogProps) {
+export function ReasonDialog({ open, title, confirmLabel, onConfirm, onClose, helper, maxLength, summary }: ReasonDialogProps) {
   const [busy, setBusy] = useState(false)
   return (
     <Dialog open={open} title={title} onClose={onClose} busy={busy}>
-      <ReasonForm confirmLabel={confirmLabel} onConfirm={onConfirm} onClose={onClose} onBusyChange={setBusy} helper={helper} maxLength={maxLength} />
+      <ReasonForm confirmLabel={confirmLabel} onConfirm={onConfirm} onClose={onClose} onBusyChange={setBusy} helper={helper} maxLength={maxLength} summary={summary} />
     </Dialog>
   )
 }

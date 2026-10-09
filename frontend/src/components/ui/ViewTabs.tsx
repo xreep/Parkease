@@ -13,7 +13,8 @@ export function ViewTabs<T extends string>({
 }: {
   items: ViewTab<T>[]
   value: T
-  onChange: (value: T) => void
+  /** `via` tells a click from the arrow/Home/End keys, so a page can replace instead of push history for the keys. */
+  onChange: (value: T, via: 'click' | 'keyboard') => void
   label: string
   idPrefix: string
 }) {
@@ -32,7 +33,7 @@ export function ViewTabs<T extends string>({
             : e.key === 'End'
               ? items[items.length - 1]
               : items[(index + (e.key === 'ArrowRight' ? 1 : items.length - 1)) % items.length]
-        onChange(next.value)
+        onChange(next.value, 'keyboard')
         const tabs = e.currentTarget.querySelectorAll<HTMLElement>('[role="tab"]')
         tabs[items.indexOf(next)]?.focus()
       }}
@@ -48,7 +49,7 @@ export function ViewTabs<T extends string>({
             aria-controls={selected ? panelId(idPrefix, item.value) : undefined}
             aria-selected={selected}
             tabIndex={selected ? 0 : -1}
-            onClick={() => onChange(item.value)}
+            onClick={() => onChange(item.value, 'click')}
             className={clsx(
               'whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition',
               selected

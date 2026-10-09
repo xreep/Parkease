@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom/vitest'
+import { QueryClient } from '@tanstack/react-query'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import MockAdapter from 'axios-mock-adapter'
@@ -122,16 +123,23 @@ describe('blocked times', () => {
     expect(JSON.parse(mock.history.post[0].data)).toMatchObject({ slotId: 32 })
   })
 
+  const invalidatedKeys = (spy: { mock: { calls: unknown[][] } }) =>
+    spy.mock.calls.map(([filters]) => (filters as { queryKey: unknown[] }).queryKey)
+
   it('refreshes the list and clears the form after adding', async () => {
     mock.onGet('/owner/listings/7/blocks').replyOnce(200, []).onGet('/owner/listings/7/blocks').reply(200, [sooner])
     mock.onPost('/owner/listings/7/blocks').reply(201, sooner)
-    renderApp('/owner/listings/7/blocks')
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    renderApp('/owner/listings/7/blocks', queryClient)
 
     await fillRange('2030-05-01T09:00', '2030-05-01T17:00')
     await userEvent.click(screen.getByRole('button', { name: 'Block time' }))
 
     expect(await screen.findByRole('button', { name: 'Remove block 1' })).toBeInTheDocument()
     expect(screen.getByLabelText('From')).toHaveValue('')
+    // A block changes what the owner's calendar and the public availability calendar show.
+    expect(invalidatedKeys(invalidate)).toEqual(expect.arrayContaining([['owner', 'blocks', 7], ['owner', 'calendar'], ['availability']]))
   })
 
   it('rejects an end that is not after the start', async () => {
@@ -170,13 +178,16 @@ describe('blocked times', () => {
   it('removes a block', async () => {
     mock.onGet('/owner/listings/7/blocks').replyOnce(200, [sooner, later]).onGet('/owner/listings/7/blocks').reply(200, [later])
     mock.onDelete('/owner/listings/7/blocks/21').reply(204)
-    renderApp('/owner/listings/7/blocks')
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    renderApp('/owner/listings/7/blocks', queryClient)
 
     await userEvent.click(await screen.findByRole('button', { name: 'Remove block 1' }))
 
     await waitFor(() => expect(mock.history.delete).toHaveLength(1))
     expect(mock.history.delete[0].url).toBe('/owner/listings/7/blocks/21')
     await waitFor(() => expect(within(screen.getByRole('list', { name: 'Upcoming blocked times' })).getAllByRole('listitem')).toHaveLength(1))
+    expect(invalidatedKeys(invalidate)).toEqual(expect.arrayContaining([['owner', 'calendar'], ['availability']]))
   })
 
   it('shows not found for a listing that is not the owner\'s', async () => {

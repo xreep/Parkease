@@ -2,11 +2,15 @@ package com.smartparking.payment;
 
 import com.smartparking.booking.BookingStatus;
 import jakarta.persistence.LockModeType;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Limit;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -14,7 +18,24 @@ import org.springframework.data.repository.query.Param;
 
 public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
+    /** Money a driver paid and got back, summed over their payments in the given statuses. */
+    interface Spending {
+        BigDecimal getPaid();
+
+        BigDecimal getRefunded();
+    }
+
     Optional<Payment> findByBookingId(Long bookingId);
+
+    @EntityGraph(attributePaths = {"booking", "booking.listing"})
+    Page<Payment> findByBookingDriverIdAndStatusIn(Long driverId, Collection<PaymentStatus> statuses,
+                                                   Pageable pageable);
+
+    @Query("""
+            select coalesce(sum(p.amount), 0) as paid, coalesce(sum(p.booking.refundAmount), 0) as refunded
+            from Payment p where p.booking.driver.id = :driverId and p.status in :statuses
+            """)
+    Spending spendingOf(@Param("driverId") Long driverId, @Param("statuses") Collection<PaymentStatus> statuses);
 
     Optional<Payment> findByOrderId(String orderId);
 

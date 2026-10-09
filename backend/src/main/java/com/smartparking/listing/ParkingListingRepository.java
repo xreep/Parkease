@@ -1,5 +1,6 @@
 package com.smartparking.listing;
 
+import jakarta.persistence.LockModeType;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -7,6 +8,7 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -27,6 +29,13 @@ public interface ParkingListingRepository extends JpaRepository<ParkingListing, 
     /** Rows of {listingId, amenity} for the given listings, in one query. */
     @Query("select l.id, a from ParkingListing l join l.amenities a where l.id in :ids")
     List<Object[]> findAmenityRowsByListingIdIn(@Param("ids") Collection<Long> ids);
+
+    /** Row-locks the listing so rating aggregates are recomputed one review at a time. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select l from ParkingListing l where l.id = :id")
+    Optional<ParkingListing> findByIdForUpdate(@Param("id") Long id);
+
+    List<ParkingListing> findByOwnerId(Long ownerId);
 
     long countByStatus(ListingStatus status);
 

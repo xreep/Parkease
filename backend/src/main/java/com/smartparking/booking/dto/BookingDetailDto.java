@@ -5,11 +5,12 @@ import com.smartparking.booking.BookingStatus;
 import com.smartparking.common.model.VehicleType;
 import com.smartparking.payment.PaymentStatus;
 import com.smartparking.pricing.PricingMode;
+import com.smartparking.review.dto.ReviewDto;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 
-/** The booking summary fields plus pricing, place, payment and the status history (flat JSON). */
+/** The booking summary fields plus pricing, place, payment and the status history (flat JSON). {@code reviewable}: the driver could post a review now; {@code review}: the one already posted, if any. */
 public record BookingDetailDto(
         Long id,
         String bookingCode,
@@ -43,7 +44,9 @@ public record BookingDetailDto(
         String invoiceNumber,
         boolean autoApprove,
         String ownerFirstName,
-        List<Event> events) {
+        List<Event> events,
+        boolean reviewable,
+        ReviewDto review) {
 
     public record Event(BookingStatus fromStatus, BookingStatus toStatus, BookingActor actor, String note, Instant at) {
     }

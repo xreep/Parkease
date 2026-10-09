@@ -93,8 +93,8 @@ class DriverBookingQueriesTest {
 
     private Fixture fixture() throws Exception {
         long ended = paid(driver, 6, 2);
-        jdbc.update("update bookings set start_time = now() - interval '5 hours', end_time = now() - interval '3 hours' "
-                + "where id = ?", ended);
+        jdbc.update("update bookings set status = 'COMPLETED', start_time = now() - interval '5 hours', "
+                + "end_time = now() - interval '3 hours' where id = ?", ended);
         long confirmedLate = paid(driver, 14, 1);
         long confirmedEarly = paid(driver, 10, 2);
         long cancelled = paid(driver, 16, 1);
@@ -134,19 +134,51 @@ class DriverBookingQueriesTest {
     }
 
     @Test
-    void pastHoldsEverythingElseNewestFirst() throws Exception {
+    void pastIsCompletedBookingsNewestFirst() throws Exception {
         Fixture f = fixture();
+        long laterCompleted = paid(driver, 8, 1);
+        jdbc.update("update bookings set status = 'COMPLETED', start_time = now() - interval '2 hours', "
+                + "end_time = now() - interval '1 hour' where id = ?", laterCompleted);
 
         list(driver, "?view=past")
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[*].id", contains((int) f.expired, (int) f.lapsedHold, (int) f.cancelled,
-                        (int) f.ended)))
-                .andExpect(jsonPath("$.content[0].status").value("EXPIRED"))
-                .andExpect(jsonPath("$.content[1].status").value("PENDING_PAYMENT"))
-                .andExpect(jsonPath("$.content[2].status").value("CANCELLED"))
-                .andExpect(jsonPath("$.content[3].status").value("CONFIRMED"))
-                .andExpect(jsonPath("$.totalElements").value(4));
+                .andExpect(jsonPath("$.content[*].id", contains((int) laterCompleted, (int) f.ended)))
+                .andExpect(jsonPath("$.content[0].status").value("COMPLETED"))
+                .andExpect(jsonPath("$.totalElements").value(2));
         list(other, "?view=past").andExpect(jsonPath("$.content", hasSize(0)));
+    }
+
+    @Test
+    void activeIsRunningBookingsSoonestFirst() throws Exception {
+        fixture();
+        long early = paid(driver, 6, 1);
+        jdbc.update("update bookings set status = 'ACTIVE', start_time = now() - interval '30 minutes', "
+                + "end_time = now() + interval '30 minutes' where id = ?", early);
+
+        list(driver, "?view=active")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[*].id", contains((int) early)))
+                .andExpect(jsonPath("$.content[0].status").value("ACTIVE"));
+        list(driver, "?view=upcoming").andExpect(jsonPath("$.totalElements").value(3)); // the active one left it
+        list(other, "?view=active").andExpect(jsonPath("$.content", hasSize(0)));
+    }
+
+    @Test
+    void cancelledHoldsCancelledRejectedAndExpiredNewestFirst() throws Exception {
+        long rejected = paid(driver, 18, 1); // before the fixture: its lapsed hold must stay the last reservation
+        jdbc.update("update bookings set status = 'REJECTED', cancelled_by = 'OWNER' where id = ?", rejected);
+        Fixture f = fixture();
+
+        list(driver, "?view=cancelled")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[*].id", contains((int) f.expired, (int) f.lapsedHold, (int) rejected,
+                        (int) f.cancelled)))
+                .andExpect(jsonPath("$.content[0].status").value("EXPIRED"))
+                .andExpect(jsonPath("$.content[1].status").value("PENDING_PAYMENT")) // a lapsed hold counts as expired
+                .andExpect(jsonPath("$.content[2].status").value("REJECTED"))
+                .andExpect(jsonPath("$.content[3].status").value("CANCELLED"))
+                .andExpect(jsonPath("$.totalElements").value(4));
+        list(other, "?view=cancelled").andExpect(jsonPath("$.content", hasSize(0)));
     }
 
     @Test
