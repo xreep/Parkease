@@ -94,3 +94,11 @@ export const CANCELLATION_POLICIES: { value: CancellationPolicy; label: string; 
   { value: 'MODERATE', label: 'Moderate', help: 'Full refund up to 24 hours before start, 50% after' },
   { value: 'STRICT', label: 'Strict', help: '50% refund up to 48 hours before start' },
 ]
+
+/** What each policy refunds of the parking charge (the platform fee and GST are never refunded after payment). */
+export const CANCELLATION_POLICY_RULES: Record<CancellationPolicy, string> = {
+  FLEXIBLE: 'Flexible policy: full refund of the parking charge up to 1 hour before the start, 50% after that.',
+  MODERATE:
+    'Moderate policy: full refund of the parking charge up to 24 hours before the start, 50% up to 2 hours before, none after that.',
+  STRICT: 'Strict policy: 50% refund of the parking charge up to 48 hours before the start, none after that.',
+}

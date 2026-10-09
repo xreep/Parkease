@@ -35,6 +35,9 @@ function BookingCard({ booking }: { booking: BookingSummaryDto }) {
         </div>
         <p className="break-words font-semibold">{booking.listingTitle}</p>
         <p className="text-sm text-slate-600 dark:text-slate-400">{formatWindow(booking.startTime, booking.endTime)}</p>
+        {booking.status === 'ACTIVE' && (
+          <p className="text-sm font-medium text-sky-700 dark:text-sky-400">Active now — show your QR code at the entrance.</p>
+        )}
         <p className="text-sm text-slate-600 dark:text-slate-400">
           <span className="font-mono">{booking.plateNumber}</span>
           {` · ${VEHICLE_TYPE_LABELS[booking.vehicleType]}`}
