@@ -3,12 +3,11 @@ package com.smartparking.booking;
 import com.smartparking.booking.dto.OwnerBookingDto;
 import com.smartparking.common.config.AppProperties;
 import com.smartparking.common.error.ApiException;
-import com.smartparking.common.util.AfterCommit;
 import com.smartparking.common.web.PageResponse;
-import com.smartparking.email.EmailMessage;
-import com.smartparking.email.EmailSender;
 import com.smartparking.email.EmailTemplates;
 import com.smartparking.listing.ParkingListing;
+import com.smartparking.notification.NotificationType;
+import com.smartparking.notification.Notifier;
 import com.smartparking.payment.RefundService;
 import java.time.Clock;
 import java.time.Instant;
@@ -38,7 +37,7 @@ public class OwnerBookingService {
     private final BookingLocks locks;
     private final BookingEvents events;
     private final RefundService refunds;
-    private final EmailSender emailSender;
+    private final Notifier notifier;
     private final AppProperties app;
     private final BookingProperties properties;
     private final Clock clock;
@@ -109,7 +108,10 @@ public class OwnerBookingService {
         booking.setApprovalDeadline(null);
         events.record(booking, BookingStatus.AWAITING_APPROVAL, BookingStatus.CONFIRMED, BookingActor.OWNER,
                 "Approved by owner");
-        send(EmailTemplates.bookingApproved(booking.getDriver(), booking, driverLink(booking)));
+        notifier.notify(booking.getDriver(), NotificationType.BOOKING_APPROVED, "Booking approved",
+                "Your booking " + booking.getBookingCode() + " at " + booking.getListing().getTitle()
+                        + " was approved.", driverPath(booking),
+                EmailTemplates.bookingApproved(booking.getDriver(), booking, driverLink(booking)));
         return toDto(booking);
     }
 
@@ -122,7 +124,10 @@ public class OwnerBookingService {
             throw invalidStatus("declined", booking);
         }
         unwind(booking, BookingActor.OWNER, reason);
-        send(EmailTemplates.bookingRejected(booking.getDriver(), booking, reason, driverLink(booking)));
+        notifier.notify(booking.getDriver(), NotificationType.BOOKING_DECLINED, "Booking request declined",
+                "Your request " + booking.getBookingCode() + " at " + booking.getListing().getTitle()
+                        + " was declined. You will be refunded in full.", driverPath(booking),
+                EmailTemplates.bookingRejected(booking.getDriver(), booking, reason, driverLink(booking)));
         return toDto(booking);
     }
 
@@ -139,7 +144,10 @@ public class OwnerBookingService {
             return false;
         }
         unwind(booking, BookingActor.SYSTEM, autoRejectReason());
-        send(EmailTemplates.bookingAutoRejected(booking.getDriver(), booking, driverLink(booking)));
+        notifier.notify(booking.getDriver(), NotificationType.BOOKING_EXPIRED_REQUEST, "Booking request expired",
+                "Your request " + booking.getBookingCode() + " at " + booking.getListing().getTitle()
+                        + " expired without an answer. You will be refunded in full.", driverPath(booking),
+                EmailTemplates.bookingAutoRejected(booking.getDriver(), booking, driverLink(booking)));
         return true;
     }
 
@@ -175,12 +183,12 @@ public class OwnerBookingService {
                 "This request can no longer be " + action + " (" + booking.getStatus() + ")");
     }
 
-    private String driverLink(Booking booking) {
-        return app.frontendUrl() + "/driver/bookings/" + booking.getId();
+    private static String driverPath(Booking booking) {
+        return "/driver/bookings/" + booking.getId();
     }
 
-    private void send(EmailMessage message) {
-        AfterCommit.run(() -> emailSender.send(message));
+    private String driverLink(Booking booking) {
+        return app.frontendUrl() + driverPath(booking);
     }
 
     static OwnerBookingDto toDto(Booking b) {

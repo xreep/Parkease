@@ -8,7 +8,6 @@ import com.smartparking.availability.AvailabilityRuleRepository;
 import com.smartparking.common.config.AppProperties;
 import com.smartparking.common.error.ApiException;
 import com.smartparking.common.web.PageResponse;
-import com.smartparking.email.EmailSender;
 import com.smartparking.email.EmailTemplates;
 import com.smartparking.listing.ListingCompleteness;
 import com.smartparking.listing.ListingMapper;
@@ -18,6 +17,8 @@ import com.smartparking.listing.ListingStatus;
 import com.smartparking.listing.ParkingListing;
 import com.smartparking.listing.ParkingListingRepository;
 import com.smartparking.listing.dto.ListingDetailDto;
+import com.smartparking.notification.NotificationType;
+import com.smartparking.notification.Notifier;
 import com.smartparking.owner.OwnerProfile;
 import com.smartparking.owner.OwnerProfileRepository;
 import com.smartparking.owner.OwnerProfileService;
@@ -45,7 +46,7 @@ public class AdminReviewService {
     private final AvailabilityRuleRepository rules;
     private final ListingMapper mapper;
     private final ListingCompleteness completeness;
-    private final EmailSender emailSender;
+    private final Notifier notifier;
     private final AppProperties app;
     private final Clock clock;
 
@@ -76,7 +77,10 @@ public class AdminReviewService {
         profile.setVerifiedAt(clock.instant());
         profile.setRejectionReason(null);
         ownerProfiles.save(profile);
-        emailSender.send(EmailTemplates.ownerVerified(profile.getUser(), app.frontendUrl() + "/owner/listings"));
+        notifier.notify(profile.getUser(), NotificationType.OWNER_VERIFIED, "You're verified",
+                "Your identity has been verified. You can now submit parking listings for approval.",
+                "/owner/verification",
+                EmailTemplates.ownerVerified(profile.getUser(), app.frontendUrl() + "/owner/listings"));
         return toOwnerDto(profile);
     }
 
@@ -87,8 +91,9 @@ public class AdminReviewService {
         profile.setVerificationStatus(VerificationStatus.REJECTED);
         profile.setRejectionReason(trimmed);
         ownerProfiles.save(profile);
-        emailSender.send(EmailTemplates.ownerRejected(profile.getUser(), trimmed,
-                app.frontendUrl() + "/owner/verification"));
+        notifier.notify(profile.getUser(), NotificationType.OWNER_REJECTED, "Verification needs attention",
+                "We could not verify your document. Reason: " + trimmed, "/owner/verification",
+                EmailTemplates.ownerRejected(profile.getUser(), trimmed, app.frontendUrl() + "/owner/verification"));
         return toOwnerDto(profile);
     }
 
@@ -135,8 +140,10 @@ public class AdminReviewService {
         listing.setApprovedAt(clock.instant());
         listing.setRejectionReason(null);
         listings.save(listing);
-        emailSender.send(EmailTemplates.listingApproved(listing.getOwner(), listing.getTitle(),
-                app.frontendUrl() + "/owner/listings"));
+        notifier.notify(listing.getOwner(), NotificationType.LISTING_APPROVED, "Listing approved",
+                "\"" + listing.getTitle() + "\" has been approved and is now live.", "/owner/listings",
+                EmailTemplates.listingApproved(listing.getOwner(), listing.getTitle(),
+                        app.frontendUrl() + "/owner/listings"));
         return toDetail(listing);
     }
 
@@ -147,8 +154,10 @@ public class AdminReviewService {
         listing.setStatus(ListingStatus.REJECTED);
         listing.setRejectionReason(trimmed);
         listings.save(listing);
-        emailSender.send(EmailTemplates.listingRejected(listing.getOwner(), listing.getTitle(), trimmed,
-                app.frontendUrl() + "/owner/listings/" + id + "/edit"));
+        notifier.notify(listing.getOwner(), NotificationType.LISTING_REJECTED, "Listing needs changes",
+                "\"" + listing.getTitle() + "\" was not approved. Reason: " + trimmed, "/owner/listings",
+                EmailTemplates.listingRejected(listing.getOwner(), listing.getTitle(), trimmed,
+                        app.frontendUrl() + "/owner/listings/" + id + "/edit"));
         return toDetail(listing);
     }
 
