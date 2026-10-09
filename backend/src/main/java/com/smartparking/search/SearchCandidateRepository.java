@@ -8,7 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
-/** One native query that returns the nearest APPROVED listings passing the static (non-window) filters. */
+/** One native query that returns the nearest APPROVED listings of active owners passing the static (non-window) filters. */
 @Repository
 @RequiredArgsConstructor
 public class SearchCandidateRepository {
@@ -35,6 +35,7 @@ public class SearchCandidateRepository {
                   WHERE l.status = 'APPROVED'
                     AND l.lat BETWEEN :minLat AND :maxLat
                     AND l.lng BETWEEN :minLng AND :maxLng
+                    AND EXISTS (SELECT 1 FROM users o WHERE o.id = l.owner_id AND o.status = 'ACTIVE')
                 """);
         if (!c.types().isEmpty()) {
             sql.append("    AND l.listing_type IN (:types)\n");

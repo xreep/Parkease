@@ -53,6 +53,26 @@ public final class EmailTemplates {
                 "Edit listing", link);
     }
 
+    public static EmailMessage accountSuspended(User user, String reason, String link) {
+        return build(user, "Your account has been suspended – ParkEase",
+                "Your ParkEase account has been suspended. Reason: " + reason + ". "
+                        + "Existing bookings are still honoured. If you think this is a mistake, please contact support.",
+                "Visit ParkEase", link);
+    }
+
+    public static EmailMessage listingSuspended(User user, String title, String reason, String link) {
+        return build(user, "Listing suspended – ParkEase",
+                "\"" + title + "\" has been suspended and is no longer visible to drivers. Reason: " + reason + ". "
+                        + "Bookings that already exist are still honoured.",
+                "View your listings", link);
+    }
+
+    public static EmailMessage listingReinstated(User user, String title, String link) {
+        return build(user, "Listing reinstated – ParkEase",
+                "\"" + title + "\" has been reinstated and drivers can find it again.",
+                "View your listings", link);
+    }
+
     /** Booking emails read lazy associations of {@code booking}; build them inside a transaction. */
     public static EmailMessage bookingConfirmed(User driver, Booking booking, String link) {
         return build(driver, "Booking confirmed – ParkEase",

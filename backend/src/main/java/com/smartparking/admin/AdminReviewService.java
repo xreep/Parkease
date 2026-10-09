@@ -168,6 +168,39 @@ public class AdminReviewService {
         return toDetail(listing);
     }
 
+    @Transactional
+    public AdminListingDetailDto suspendListing(AuthUser admin, Long id, String reason) {
+        ParkingListing listing = requireListing(id);
+        if (listing.getStatus() != ListingStatus.APPROVED && listing.getStatus() != ListingStatus.PAUSED) {
+            throw ApiException.conflict("INVALID_STATUS", "Only approved or paused listings can be suspended");
+        }
+        String trimmed = reason.trim();
+        listing.setStatus(ListingStatus.SUSPENDED);
+        listings.save(listing);
+        audit.record(admin, "LISTING_SUSPENDED", "LISTING", id, "Reason: " + trimmed);
+        notifier.notify(listing.getOwner(), NotificationType.LISTING_SUSPENDED, "Listing suspended",
+                "\"" + listing.getTitle() + "\" was suspended. Reason: " + trimmed, "/owner/listings",
+                EmailTemplates.listingSuspended(listing.getOwner(), listing.getTitle(), trimmed,
+                        app.frontendUrl() + "/owner/listings"));
+        return toDetail(listing);
+    }
+
+    @Transactional
+    public AdminListingDetailDto reinstateListing(AuthUser admin, Long id) {
+        ParkingListing listing = requireListing(id);
+        if (listing.getStatus() != ListingStatus.SUSPENDED) {
+            throw ApiException.conflict("INVALID_STATUS", "Only suspended listings can be reinstated");
+        }
+        listing.setStatus(ListingStatus.APPROVED);
+        listings.save(listing);
+        audit.record(admin, "LISTING_REINSTATED", "LISTING", id, null);
+        notifier.notify(listing.getOwner(), NotificationType.LISTING_REINSTATED, "Listing reinstated",
+                "\"" + listing.getTitle() + "\" has been reinstated and is live again.", "/owner/listings",
+                EmailTemplates.listingReinstated(listing.getOwner(), listing.getTitle(),
+                        app.frontendUrl() + "/owner/listings"));
+        return toDetail(listing);
+    }
+
     private ParkingListing requireListing(Long id) {
         return listings.findById(id).orElseThrow(() -> ApiException.notFound("Listing not found"));
     }

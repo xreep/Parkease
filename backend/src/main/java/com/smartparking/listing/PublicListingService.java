@@ -18,6 +18,7 @@ import com.smartparking.settings.PlatformSettings;
 import com.smartparking.slot.ParkingSlot;
 import com.smartparking.slot.ParkingSlotRepository;
 import com.smartparking.slot.SlotSize;
+import com.smartparking.user.UserStatus;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.HashSet;
@@ -81,6 +82,7 @@ public class PublicListingService {
 
     private ParkingListing requireApproved(Long id) {
         return listings.findByIdAndStatus(id, ListingStatus.APPROVED)
+                .filter(l -> l.getOwner().getStatus() == UserStatus.ACTIVE) // a suspended owner's listings are hidden
                 .orElseThrow(() -> ApiException.notFound("Listing not found"));
     }
 
