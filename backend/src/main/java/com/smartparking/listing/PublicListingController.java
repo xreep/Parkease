@@ -1,9 +1,12 @@
 package com.smartparking.listing;
 
+import com.smartparking.availability.AvailabilityCalendarService;
+import com.smartparking.availability.dto.AvailabilityCalendarDto;
 import com.smartparking.common.model.VehicleType;
 import com.smartparking.listing.dto.ListingQuoteResponse;
 import com.smartparking.listing.dto.PublicListingDto;
 import java.time.Instant;
+import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -18,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class PublicListingController {
 
     private final PublicListingService service;
+    private final AvailabilityCalendarService calendar;
 
     @GetMapping("/{id}")
     public PublicListingDto get(@PathVariable Long id) {
@@ -30,5 +34,13 @@ public class PublicListingController {
                                       @RequestParam(required = false) Instant end,
                                       @RequestParam(required = false) VehicleType vehicleType) {
         return service.quote(id, start, end, vehicleType);
+    }
+
+    /** Day-level availability (IST dates, at most 31 days, from today up to 90 days ahead); indicative only. */
+    @GetMapping("/{id}/availability")
+    public AvailabilityCalendarDto availability(@PathVariable Long id,
+                                                @RequestParam(required = false) LocalDate from,
+                                                @RequestParam(required = false) LocalDate to) {
+        return calendar.calendar(id, from, to);
     }
 }
