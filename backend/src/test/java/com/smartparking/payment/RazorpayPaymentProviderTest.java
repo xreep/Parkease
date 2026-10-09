@@ -37,4 +37,17 @@ class RazorpayPaymentProviderTest {
         assertThat(noWebhook.verifyWebhook("{}", Signatures.hmacSha256Hex("k", "{}"))).isFalse();
         assertThat(new RazorpayPaymentProvider("rzp_test_key", "secret", null).verifyWebhook("{}", "x")).isFalse();
     }
+
+    @Test
+    void mapsAProviderPaymentFromRazorpaysJson() throws org.json.JSONException {
+        ProviderPayment payment = RazorpayPaymentProvider.toProviderPayment(new org.json.JSONObject(
+                "{\"id\":\"pay_1\",\"status\":\"authorized\",\"order_id\":\"order_1\",\"amount\":6708,"
+                        + "\"currency\":\"INR\",\"method\":\"upi\"}"));
+
+        assertThat(payment).isEqualTo(new ProviderPayment("pay_1", "authorized", "order_1", 6708L, "INR", "upi"));
+        ProviderPayment bare = RazorpayPaymentProvider.toProviderPayment(new org.json.JSONObject(
+                "{\"id\":\"pay_2\",\"status\":\"created\",\"order_id\":null,\"amount\":100,\"currency\":\"INR\"}"));
+        assertThat(bare.orderId()).isNull();
+        assertThat(bare.method()).isNull();
+    }
 }

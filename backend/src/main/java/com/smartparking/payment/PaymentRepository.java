@@ -1,6 +1,9 @@
 package com.smartparking.payment;
 
+import com.smartparking.booking.BookingStatus;
 import jakarta.persistence.LockModeType;
+import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Limit;
@@ -31,8 +34,22 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     @Query("select p from Payment p where p.booking.id = :bookingId")
     Optional<Payment> findByBookingIdForUpdate(@Param("bookingId") Long bookingId);
 
-    /** Bookings that lapsed (EXPIRED) while their payment order is still open (CREATED). */
-    @Query("select p.booking.id from Payment p where p.status = :paymentStatus "
-            + "and p.booking.status = com.smartparking.booking.BookingStatus.EXPIRED order by p.id")
-    List<Long> findExpiredBookingIdsWithPaymentIn(@Param("paymentStatus") PaymentStatus paymentStatus, Limit limit);
+    /**
+     * Bookings that are EXPIRED, whose payment is in one of {@code paymentStatuses} and that have no EXPIRED entry in
+     * their history yet (the slot allocator expires lapsed holds in bulk without writing one).
+     */
+    @Query("select p.booking.id from Payment p where p.status in :paymentStatuses "
+            + "and p.booking.status = com.smartparking.booking.BookingStatus.EXPIRED "
+            + "and not exists (select 1 from BookingEvent e where e.booking = p.booking "
+            + "and e.toStatus = com.smartparking.booking.BookingStatus.EXPIRED) order by p.id")
+    List<Long> findExpiredBookingIdsWithoutExpiredEvent(
+            @Param("paymentStatuses") Collection<PaymentStatus> paymentStatuses, Limit limit);
+
+    /** Order ids of unconfirmed payments of one provider whose booking could still be (or have been) paid. */
+    @Query("select p.orderId from Payment p where p.provider = :provider and p.status in :paymentStatuses "
+            + "and p.booking.status in :bookingStatuses and p.createdAt >= :since order by p.id")
+    List<String> findOrderIdsToReconcile(@Param("provider") PaymentProviderType provider,
+                                         @Param("paymentStatuses") Collection<PaymentStatus> paymentStatuses,
+                                         @Param("bookingStatuses") Collection<BookingStatus> bookingStatuses,
+                                         @Param("since") Instant since, Limit limit);
 }

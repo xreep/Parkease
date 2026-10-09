@@ -234,6 +234,29 @@ class BookingJobsTest {
                 .isEqualTo(2);
     }
 
+    @Test
+    void sweptHoldWhosePaymentIsAlreadyFailedStillGetsItsExpiredEvent() throws Exception {
+        long lapsed = hold(10);
+        clock.advance(Duration.ofMinutes(11));
+        long again = hold(10); // bulk-expires the lapsed hold without an event
+        jdbc.update("update payments set status = 'FAILED', failure_reason = 'Card declined' where booking_id = ?", lapsed);
+        assertThat(booking(lapsed)).containsEntry("status", "EXPIRED");
+        assertThat(jdbc.queryForObject("select count(*) from booking_events where booking_id = ? and to_status = 'EXPIRED'",
+                Integer.class, lapsed)).isZero();
+
+        jobs.expireHolds();
+
+        assertThat(booking(again)).containsEntry("status", "PENDING_PAYMENT");
+        assertThat(jdbc.queryForList("select note from booking_events where booking_id = ? and to_status = 'EXPIRED'",
+                String.class, lapsed)).containsExactly("Payment window expired");
+        // The payment keeps its own failure reason.
+        assertThat(jdbc.queryForObject("select failure_reason from payments where booking_id = ?", String.class, lapsed))
+                .isEqualTo("Card declined");
+        jobs.expireHolds(); // idempotent
+        assertThat(jdbc.queryForObject("select count(*) from booking_events where booking_id = ?", Integer.class, lapsed))
+                .isEqualTo(2);
+    }
+
     // ---- autoRejectOverdue ----------------------------------------------------------------------------------
 
     @Test

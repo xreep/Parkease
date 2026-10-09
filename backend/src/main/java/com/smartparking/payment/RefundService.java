@@ -107,8 +107,18 @@ public class RefundService {
                 earning.setStatus(EarningStatus.REVERSED);
             }
         });
-        payments.flush();
+        return Optional.of(refundAndNote(booking, payment, actor, reason));
+    }
 
+    /**
+     * Refunds a captured payment in full and notes the outcome in the booking's history; the booking's own status is
+     * left as it is. For callers that already settled the booking's state (late payments, payments that arrive for a
+     * booking that can no longer be paid). Joins the caller's transaction, which must hold the payment row lock and
+     * then the booking row lock.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Refund refundAndNote(Booking booking, Payment payment, BookingActor actor, String reason) {
+        payments.flush();
         Refund refund = refundFull(payment, reason);
         String amount = "₹" + payment.getAmount().toPlainString();
         String note = switch (refund.getStatus()) {
@@ -117,7 +127,7 @@ public class RefundService {
             case FAILED -> "Refund of " + amount + " could not be issued yet; it will be retried";
         };
         events.record(booking, booking.getStatus(), booking.getStatus(), actor, note);
-        return Optional.of(refund);
+        return refund;
     }
 
     /** Ids of FAILED refunds that still have attempts left, oldest first. */
