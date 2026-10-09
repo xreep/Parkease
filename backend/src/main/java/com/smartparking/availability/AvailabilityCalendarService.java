@@ -1,5 +1,7 @@
 package com.smartparking.availability;
 
+import com.smartparking.availability.SlotCoverage.OpenWindow;
+import com.smartparking.availability.SlotCoverage.Span;
 import com.smartparking.availability.dto.AvailabilityCalendarDto;
 import com.smartparking.availability.dto.DayAvailabilityDto;
 import com.smartparking.booking.BookingRepository;
@@ -13,12 +15,12 @@ import com.smartparking.slot.ParkingSlotRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,18 +39,12 @@ public class AvailabilityCalendarService {
     static final int LIMITED_FROM_PERCENT = 60;
     static final int FULL_FROM_PERCENT = 98;
 
-    private static final long DAY_SECONDS = 24 * 3600L;
-
     private final ParkingListingRepository listings;
     private final ParkingSlotRepository slots;
     private final AvailabilityRuleRepository rules;
     private final AvailabilityBlockRepository blocks;
     private final BookingRepository bookings;
     private final Clock clock;
-
-    /** A half-open span of epoch seconds. */
-    private record Span(long start, long end) {
-    }
 
     @Transactional(readOnly = true)
     public AvailabilityCalendarDto calendar(Long listingId, LocalDate from, LocalDate to) {
@@ -92,73 +88,26 @@ public class AvailabilityCalendarService {
 
     private DayAvailabilityDto day(LocalDate date, boolean open24x7, AvailabilityRule rule, List<ParkingSlot> active,
                                    Map<Long, List<Span>> busy, List<Span> listingWide, long nowSecond) {
-        long dayStart = startOf(date).getEpochSecond();
-        String openLabel;
-        String closeLabel;
-        long openSecond;
-        long closeSecond;
-        if (open24x7) {
-            openLabel = "00:00";
-            closeLabel = "24:00";
-            openSecond = 0;
-            closeSecond = DAY_SECONDS;
-        } else if (rule == null) {
+        Optional<OpenWindow> open = SlotCoverage.openWindow(open24x7, rule, date);
+        if (open.isEmpty()) {
             return new DayAvailabilityDto(date, AvailabilityLevel.CLOSED, null, null, 0);
-        } else {
-            openLabel = rule.getOpenTime().toString();
-            closeLabel = rule.getCloseTime().toString();
-            openSecond = rule.getOpenTime().toSecondOfDay();
-            // A rule running to 23:59 means "until the end of the day" (see AvailabilityEvaluator.isOpen).
-            closeSecond = rule.getCloseTime().equals(LocalTime.of(23, 59)) ? DAY_SECONDS
-                    : rule.getCloseTime().toSecondOfDay();
         }
-        Span window = new Span(dayStart + openSecond, dayStart + closeSecond);
-        long windowLength = window.end() - window.start();
-        long open = windowLength * active.size();
+        Span window = open.get().span();
+        long openSeconds = window.length() * active.size();
         int percent = 100;
-        if (open > 0) {
+        if (openSeconds > 0) {
             long taken = 0;
             for (ParkingSlot slot : active) {
                 List<Span> spans = new ArrayList<>(listingWide);
                 spans.addAll(busy.getOrDefault(slot.getId(), List.of()));
                 spans.add(new Span(Long.MIN_VALUE, nowSecond)); // time that has passed cannot be booked
-                taken += coveredLength(spans, window);
+                taken += SlotCoverage.coveredLength(spans, window);
             }
-            percent = (int) (taken * 100 / open);
+            percent = (int) (taken * 100 / openSeconds);
         }
         AvailabilityLevel level = percent >= FULL_FROM_PERCENT ? AvailabilityLevel.FULL
                 : percent >= LIMITED_FROM_PERCENT ? AvailabilityLevel.LIMITED : AvailabilityLevel.AVAILABLE;
-        return new DayAvailabilityDto(date, level, openLabel, closeLabel, percent);
-    }
-
-    /** Length of the union of the spans after clipping them to the window. */
-    private static long coveredLength(List<Span> spans, Span window) {
-        List<Span> clipped = new ArrayList<>();
-        for (Span s : spans) {
-            long start = Math.max(s.start(), window.start());
-            long end = Math.min(s.end(), window.end());
-            if (start < end) {
-                clipped.add(new Span(start, end));
-            }
-        }
-        clipped.sort((a, b) -> Long.compare(a.start(), b.start()));
-        long total = 0;
-        long curStart = 0;
-        long curEnd = 0;
-        boolean open = false;
-        for (Span s : clipped) {
-            if (open && s.start() <= curEnd) {
-                curEnd = Math.max(curEnd, s.end());
-            } else {
-                if (open) {
-                    total += curEnd - curStart;
-                }
-                curStart = s.start();
-                curEnd = s.end();
-                open = true;
-            }
-        }
-        return open ? total + (curEnd - curStart) : total;
+        return new DayAvailabilityDto(date, level, open.get().openLabel(), open.get().closeLabel(), percent);
     }
 
     private static Span span(Instant start, Instant end) {
