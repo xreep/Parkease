@@ -32,6 +32,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,6 +65,12 @@ public class PaymentService {
     private final AppProperties app;
     private final Clock clock;
     private final TransactionTemplate tx;
+    private final AtomicInteger deadlockRetries = new AtomicInteger();
+
+    /** How often a confirmation was repeated because Postgres picked it as a deadlock victim (should stay 0). */
+    public int deadlockRetries() {
+        return deadlockRetries.get();
+    }
 
     // ---- checkout -------------------------------------------------------------------------------------------
 
@@ -146,14 +153,28 @@ public class PaymentService {
      * rolled back as a whole and repeated as a cancel-and-refund, so captured money is never left unaccounted for.
      */
     public Long confirmPayment(String orderId, String paymentId, String method, BookingActor actor) {
-        try {
-            return tx.execute(s -> confirmAttempt(orderId, paymentId, method, actor, false));
-        } catch (RuntimeException e) {
-            if (!SqlStates.EXCLUSION_VIOLATION.equals(SqlStates.of(e))) {
-                throw e;
+        boolean slotTaken = false;
+        boolean retriedDeadlock = false;
+        while (true) {
+            boolean refundBecauseSlotTaken = slotTaken;
+            try {
+                return tx.execute(s -> confirmAttempt(orderId, paymentId, method, actor, refundBecauseSlotTaken));
+            } catch (RuntimeException e) {
+                String state = SqlStates.of(e);
+                if (SqlStates.EXCLUSION_VIOLATION.equals(state) && !slotTaken) {
+                    log.warn("Slot of the booking for order {} was taken while its payment arrived; refunding", orderId);
+                    slotTaken = true;
+                } else if (SqlStates.DEADLOCK_DETECTED.equals(state) && !retriedDeadlock) {
+                    // Every path takes payment row then booking row, so this should not happen; the stale-hold sweep
+                    // below can still lock other bookings' rows. Postgres aborted this attempt as the victim, which
+                    // rolled it back completely, so repeating it once is safe. A second deadlock propagates.
+                    log.warn("Deadlock while confirming order {}; retrying once", orderId);
+                    retriedDeadlock = true;
+                    deadlockRetries.incrementAndGet();
+                } else {
+                    throw e;
+                }
             }
-            log.warn("Slot of the booking for order {} was taken while its payment arrived; refunding", orderId);
-            return tx.execute(s -> confirmAttempt(orderId, paymentId, method, actor, true));
         }
     }
 
@@ -162,11 +183,14 @@ public class PaymentService {
         Long bookingId = payments.findBookingIdByOrderId(orderId)
                 .orElseThrow(() -> ApiException.notFound("Payment not found"));
         Instant now = clock.instant();
-        // Frees the slot from lapsed holds (possibly this booking's own). Clears the persistence context, so it
-        // must run before any entity is loaded in this transaction.
+        // Lock order everywhere is payment row, then booking row. The payment goes first, before the sweep below
+        // (which row-locks the lapsed bookings it expires, possibly this very one).
+        payments.findByOrderIdForUpdate(orderId).orElseThrow(() -> ApiException.notFound("Payment not found"));
+        // Frees the slot from lapsed holds (possibly this booking's own). Clears the persistence context, so the
+        // payment and booking are (re)loaded after it, never before.
         bookings.expireStaleHolds(List.of(bookings.findSlotIdById(bookingId)), now);
 
-        Payment payment = payments.findByOrderIdForUpdate(orderId)
+        Payment payment = payments.findByOrderIdForUpdate(orderId) // already ours; re-read fresh after the clear
                 .orElseThrow(() -> ApiException.notFound("Payment not found"));
         Booking booking = bookings.findByIdForUpdate(bookingId).orElseThrow();
         if (payment.getPaymentId() != null && payment.getStatus() != PaymentStatus.CREATED

@@ -16,6 +16,10 @@ public class MutableClock extends Clock {
         now = Instant.now();
     }
 
+    public void set(Instant instant) {
+        now = instant;
+    }
+
     public void advance(Duration duration) {
         now = now.plus(duration);
     }

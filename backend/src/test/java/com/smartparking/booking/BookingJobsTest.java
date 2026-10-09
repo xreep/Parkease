@@ -2,11 +2,18 @@ package com.smartparking.booking;
 
 import static com.smartparking.support.BookingApiSupport.bookingId;
 import static com.smartparking.support.BookingApiSupport.driverWithVehicle;
+import static com.smartparking.support.BookingApiSupport.mockPay;
+import static com.smartparking.support.BookingApiSupport.verify;
 import static com.smartparking.support.BookingApiSupport.payOk;
 import static com.smartparking.support.BookingApiSupport.reserveOk;
 import static com.smartparking.support.BookingApiSupport.tomorrowAt;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.jayway.jsonpath.JsonPath;
 import com.smartparking.common.error.ApiException;
 import com.smartparking.common.security.JwtProperties;
 import com.smartparking.earning.EarningStatus;
@@ -18,6 +25,9 @@ import com.smartparking.location.CityRepository;
 import com.smartparking.payment.MockPaymentProvider;
 import com.smartparking.payment.PaymentProvider;
 import com.smartparking.payment.ProviderRefund;
+import com.smartparking.payment.RefundService;
+import com.smartparking.payment.RefundStatus;
+import com.smartparking.payment.Signatures;
 import com.smartparking.support.AuthTestSupport;
 import com.smartparking.support.BookingApiSupport.Driver;
 import com.smartparking.support.CommittedIntegrationTest;
@@ -26,6 +36,7 @@ import com.smartparking.support.ListingTestSupport;
 import com.smartparking.support.MutableClock;
 import com.smartparking.support.RecordingEmailSender;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
@@ -39,8 +50,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 
 @CommittedIntegrationTest
 @Import(BookingJobsTest.JobTestConfig.class)
@@ -48,11 +61,16 @@ class BookingJobsTest {
 
     private static final String OWNER_EMAIL = "bj-owner@example.com";
     private static final String DRIVER_EMAIL = "bj-driver@example.com";
+    private static final String WEBHOOK_SECRET = "whsec_jobs_test";
 
     /** The mock provider with a movable clock, and refunds that can be told to fail. */
     static class FlakyProvider extends MockPaymentProvider {
         final AtomicInteger refundCalls = new AtomicInteger();
         final AtomicInteger failures = new AtomicInteger();
+        /** When true, accepted refunds are PENDING (settling) instead of PROCESSED. */
+        volatile boolean pendingRefunds;
+        volatile long lastRefundPaise;
+        volatile String lastRefundPaymentId;
 
         FlakyProvider(String jwtSecret) {
             super(jwtSecret);
@@ -61,11 +79,19 @@ class BookingJobsTest {
         @Override
         public ProviderRefund refund(String paymentId, long amountPaise, String reason) {
             refundCalls.incrementAndGet();
+            lastRefundPaise = amountPaise;
+            lastRefundPaymentId = paymentId;
             if (failures.get() > 0) {
                 failures.decrementAndGet();
                 throw new ApiException(HttpStatus.BAD_GATEWAY, "PAYMENT_PROVIDER_ERROR", "Provider is down");
             }
-            return super.refund(paymentId, amountPaise, reason);
+            ProviderRefund accepted = super.refund(paymentId, amountPaise, reason);
+            return pendingRefunds ? new ProviderRefund(accepted.refundId(), RefundStatus.PENDING) : accepted;
+        }
+
+        @Override
+        public boolean verifyWebhook(String rawBody, String signature) {
+            return Signatures.matches(Signatures.hmacSha256Hex(WEBHOOK_SECRET, rawBody), signature);
         }
     }
 
@@ -93,7 +119,10 @@ class BookingJobsTest {
     @Autowired BookingJobs jobs;
     @Autowired MutableClock clock;
     @Autowired FlakyProvider provider;
+    @Autowired OwnerBookingService ownerBookings;
+    @Autowired RefundService refundService;
 
+    private String ownerAuth;
     private Long listingId;
     private Driver driver;
 
@@ -103,7 +132,8 @@ class BookingJobsTest {
         clock.reset();
         provider.refundCalls.set(0);
         provider.failures.set(0);
-        String ownerAuth = AuthTestSupport.bearer(AuthTestSupport.accessToken(
+        provider.pendingRefunds = false;
+        ownerAuth = AuthTestSupport.bearer(AuthTestSupport.accessToken(
                 AuthTestSupport.register(mvc, OWNER_EMAIL, "OWNER")));
         listingId = ListingTestSupport.approvedListingAt(mvc, ownerAuth, listings,
                 ListingTestSupport.puneCityId(cities), "Job Spot", 18.5204, 73.8567, 30);
@@ -319,6 +349,165 @@ class BookingJobsTest {
         jobs.retryFailedRefunds();
 
         assertThat(provider.refundCalls.get()).isEqualTo(1);
+    }
+
+    // ---- money path: amounts, boundaries, ordering ----------------------------------------------------------
+
+    @Test
+    void refundsAskTheProviderForTheExactTotalInPaise() throws Exception {
+        long overdue = paidAwaitingApproval(10);
+        clock.advance(Duration.ofHours(3));
+        jobs.autoRejectOverdue();
+        assertThat(provider.lastRefundPaise).isEqualTo(6708L);
+        assertThat(provider.lastRefundPaymentId).isEqualTo(
+                jdbc.queryForObject("select provider_payment_id from payments where booking_id = ?", String.class, overdue));
+
+        clock.reset();
+        long rejected = hold(14);
+        payOk(mvc, driver.auth(), rejected);
+        provider.lastRefundPaise = 0;
+        mvc.perform(post("/api/v1/owner/bookings/" + rejected + "/reject")
+                        .header("Authorization", ownerAuth).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"No\"}"))
+                .andExpect(status().isOk());
+        assertThat(provider.lastRefundPaise).isEqualTo(6708L);
+        assertThat(provider.refundCalls.get()).isEqualTo(2);
+    }
+
+    @Test
+    void theApprovalDeadlineItselfIsAlreadyTooLate() throws Exception {
+        long id = paidAwaitingApproval(10);
+        Long ownerId = jdbc.queryForObject("select id from users where email = ?", Long.class, OWNER_EMAIL);
+        Instant deadline = jdbc.queryForObject("select approval_deadline from bookings where id = ?",
+                java.sql.Timestamp.class, id).toInstant();
+        clock.set(deadline);
+
+        assertThatThrownBy(() -> ownerBookings.approve(ownerId, id))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.getCode()).isEqualTo("INVALID_STATUS"));
+        assertThat(booking(id)).containsEntry("status", "AWAITING_APPROVAL");
+
+        jobs.autoRejectOverdue();
+
+        assertThat(booking(id)).containsEntry("status", "REJECTED").containsEntry("cancelled_by", "SYSTEM");
+        assertThat(paymentStatus(id)).isEqualTo("REFUNDED");
+    }
+
+    @Test
+    void oneMillisecondBeforeTheDeadlineStillAllowsApprovalAndTheJobLeavesItAlone() throws Exception {
+        long id = paidAwaitingApproval(10);
+        Long ownerId = jdbc.queryForObject("select id from users where email = ?", Long.class, OWNER_EMAIL);
+        Instant deadline = jdbc.queryForObject("select approval_deadline from bookings where id = ?",
+                java.sql.Timestamp.class, id).toInstant();
+        clock.set(deadline.minusMillis(1));
+
+        jobs.autoRejectOverdue();
+        assertThat(booking(id)).containsEntry("status", "AWAITING_APPROVAL");
+        assertThat(ownerBookings.approve(ownerId, id).status()).isEqualTo(BookingStatus.CONFIRMED);
+    }
+
+    @Test
+    void lateVerifyAfterTheExpireJobStillConfirmsTheBooking() throws Exception {
+        long id = hold(10);
+        String pay = mockPay(mvc, driver.auth(), id);
+        clock.advance(Duration.ofMinutes(11));
+        jobs.expireHolds();
+        assertThat(booking(id)).containsEntry("status", "EXPIRED");
+        assertThat(paymentStatus(id)).isEqualTo("FAILED");
+
+        verify(mvc, driver.auth(), id, JsonPath.read(pay, "$.orderId"), JsonPath.read(pay, "$.paymentId"),
+                JsonPath.read(pay, "$.signature"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CONFIRMED"))
+                .andExpect(jsonPath("$.paymentStatus").value("CAPTURED"))
+                .andExpect(jsonPath("$.invoiceNumber").isNotEmpty());
+
+        assertThat(booking(id)).containsEntry("status", "CONFIRMED");
+        assertThat(paymentStatus(id)).isEqualTo("CAPTURED");
+        assertThat(jdbc.queryForObject("select failure_reason from payments where booking_id = ?", String.class, id))
+                .isNull();
+        assertThat(jdbc.queryForObject("select count(*) from refunds", Integer.class)).isZero();
+    }
+
+    @Test
+    void retriesPickLeastTriedAndLongestWaitingFirstSoOneBadRefundCannotStarveTheRest() throws Exception {
+        long first = paidAwaitingApproval(10);
+        long second = hold(14);
+        payOk(mvc, driver.auth(), second);
+        provider.failures.set(2);
+        clock.advance(Duration.ofHours(3));
+        jobs.autoRejectOverdue();
+        long firstRefund = ((Number) refund(first).get("id")).longValue();
+        long secondRefund = ((Number) refund(second).get("id")).longValue();
+        // The first refund has been tried more often than the second.
+        jdbc.update("update refunds set attempts = 3 where id = ?", firstRefund);
+
+        assertThat(refundService.retryableRefundIds(10)).containsExactly(secondRefund, firstRefund);
+        assertThat(refundService.retryableRefundIds(1)).containsExactly(secondRefund);
+
+        jdbc.update("update refunds set attempts = 2 where id = ?", firstRefund);
+        jdbc.update("update refunds set attempts = 2, updated_at = now() + interval '1 hour' where id = ?", secondRefund);
+        assertThat(refundService.retryableRefundIds(10)).containsExactly(firstRefund, secondRefund);
+    }
+
+    // ---- provider-reported refund failures ------------------------------------------------------------------
+
+    private ResultActions webhook(String event, String providerRefundId, String eventId) throws Exception {
+        String body = """
+                {"entity":"event","event":"%s","payload":{"refund":{"entity":{"id":"%s","payment_id":"pay_x"}}}}"""
+                .formatted(event, providerRefundId);
+        return mvc.perform(post("/api/v1/payments/webhook").contentType(MediaType.APPLICATION_JSON)
+                .content(body.getBytes(StandardCharsets.UTF_8))
+                .header("X-Razorpay-Signature", Signatures.hmacSha256Hex(WEBHOOK_SECRET, body))
+                .header("X-Razorpay-Event-Id", eventId));
+    }
+
+    @Test
+    void refundTheProviderLaterReportsAsFailedIsPutBackOnTheRetryQueueAndCompletes() throws Exception {
+        long id = paidAwaitingApproval(10);
+        provider.pendingRefunds = true;
+        clock.advance(Duration.ofHours(3));
+        jobs.autoRejectOverdue();
+        // Accepted but still settling: books say refunded.
+        assertThat(refund(id)).containsEntry("status", "PENDING");
+        assertThat(paymentStatus(id)).isEqualTo("REFUNDED");
+        assertThat((BigDecimal) booking(id).get("refund_amount")).isEqualByComparingTo("67.08");
+        String providerRefundId = (String) refund(id).get("provider_refund_id");
+        provider.pendingRefunds = false;
+
+        webhook("refund.failed", providerRefundId, "evt_rf_1").andExpect(status().isOk());
+
+        assertThat(refund(id)).containsEntry("status", "FAILED");
+        assertThat(paymentStatus(id)).isEqualTo("CAPTURED");
+        assertThat((BigDecimal) booking(id).get("refund_amount")).isEqualByComparingTo("0");
+        assertThat(jdbc.queryForList("select note from booking_events where booking_id = ? order by id desc limit 1",
+                String.class, id)).containsExactly("Refund failed at the provider — retrying");
+
+        webhook("refund.failed", providerRefundId, "evt_rf_2").andExpect(status().isOk()); // redelivery: no change
+        assertThat(jdbc.queryForObject("select count(*) from booking_events where booking_id = ? and note like 'Refund failed%'",
+                Integer.class, id)).isEqualTo(1);
+
+        jobs.retryFailedRefunds();
+
+        assertThat(refund(id)).containsEntry("status", "PROCESSED").containsEntry("attempts", 2);
+        assertThat(paymentStatus(id)).isEqualTo("REFUNDED");
+        assertThat((BigDecimal) booking(id).get("refund_amount")).isEqualByComparingTo("67.08");
+        assertThat(provider.lastRefundPaise).isEqualTo(6708L);
+    }
+
+    @Test
+    void exhaustingTheFiveAttemptsLeavesAnEventForSupport() throws Exception {
+        long id = paidAwaitingApproval(10);
+        provider.failures.set(100);
+        clock.advance(Duration.ofHours(3));
+        jobs.autoRejectOverdue();
+
+        for (int i = 0; i < 6; i++) {
+            jobs.retryFailedRefunds();
+        }
+
+        assertThat(refund(id)).containsEntry("attempts", 5).containsEntry("status", "FAILED");
+        assertThat(jdbc.queryForList("select note from booking_events where booking_id = ? and note like '%manual action%'",
+                String.class, id)).containsExactly("Refund failed after 5 attempts — manual action needed");
     }
 
     @Test

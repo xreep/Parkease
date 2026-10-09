@@ -3,7 +3,7 @@ package com.smartparking.payment;
 import com.smartparking.booking.Booking;
 import com.smartparking.booking.BookingActor;
 import com.smartparking.booking.BookingEvents;
-import com.smartparking.booking.BookingRepository;
+import com.smartparking.booking.BookingLocks;
 import com.smartparking.common.error.ApiException;
 import com.smartparking.earning.EarningStatus;
 import com.smartparking.earning.OwnerEarningRepository;
@@ -31,21 +31,24 @@ public class RefundService {
 
     private static final int MAX_REASON = 255;
 
+    static final String PROVIDER_FAILED_NOTE = "Refund failed at the provider — retrying";
+    static final String EXHAUSTED_NOTE = "Refund failed after " + MAX_ATTEMPTS + " attempts — manual action needed";
+
     private final PaymentProvider provider;
     private final RefundRepository refunds;
     private final PaymentRepository payments;
-    private final BookingRepository bookings;
+    private final BookingLocks locks;
     private final OwnerEarningRepository earnings;
     private final BookingEvents events;
     private final TransactionTemplate tx;
 
     public RefundService(PaymentProvider provider, RefundRepository refunds, PaymentRepository payments,
-                         BookingRepository bookings, OwnerEarningRepository earnings, BookingEvents events,
+                         BookingLocks locks, OwnerEarningRepository earnings, BookingEvents events,
                          PlatformTransactionManager txManager) {
         this.provider = provider;
         this.refunds = refunds;
         this.payments = payments;
-        this.bookings = bookings;
+        this.locks = locks;
         this.earnings = earnings;
         this.events = events;
         this.tx = new TransactionTemplate(txManager);
@@ -68,6 +71,9 @@ public class RefundService {
             refund.setProviderRefundId(result.refundId());
             refund.setStatus(result.status());
         } catch (ApiException e) {
+            // Only ApiException (what the providers raise for a refused or unreachable gateway) means "the refund did
+            // not happen". Anything else is a bug whose effect on the money is unknown, so it is left to propagate and
+            // roll the caller's transaction back instead of being recorded as a clean FAILED refund.
             log.error("Provider refund failed for payment {}: {}", payment.getId(), e.getMessage());
             refund.setStatus(RefundStatus.FAILED);
         }
@@ -101,7 +107,7 @@ public class RefundService {
                 earning.setStatus(EarningStatus.REVERSED);
             }
         });
-        bookings.flush();
+        payments.flush();
 
         Refund refund = refundFull(payment, reason);
         String amount = "₹" + payment.getAmount().toPlainString();
@@ -127,12 +133,12 @@ public class RefundService {
      */
     public boolean retry(Long refundId) {
         Boolean done = tx.execute(status -> {
-            Long paymentId = refunds.findPaymentIdById(refundId).orElse(null);
-            if (paymentId == null) {
+            Long bookingId = refunds.findBookingIdById(refundId).orElse(null);
+            if (bookingId == null) {
                 return false;
             }
-            Payment payment = payments.findByIdForUpdate(paymentId).orElseThrow();
-            Booking booking = bookings.findByIdForUpdate(payment.getBooking().getId()).orElseThrow();
+            Booking booking = locks.lock(bookingId); // payment row, then booking row
+            Payment payment = payments.findByBookingId(bookingId).orElseThrow();
             Refund refund = refunds.findById(refundId).orElseThrow();
             if (refund.getStatus() != RefundStatus.FAILED || refund.getAttempts() >= MAX_ATTEMPTS
                     || payment.getStatus() != PaymentStatus.CAPTURED
@@ -146,11 +152,15 @@ public class RefundService {
                 refund.setProviderRefundId(result.refundId());
                 refund.setStatus(result.status());
             } catch (RuntimeException e) {
-                log.error("Retry {} of refund {} for payment {} failed: {}", refund.getAttempts(), refundId, paymentId,
-                        e.getMessage());
+                // Unlike the first attempt, any provider-side failure must count here: the attempts counter is what
+                // stops the job from retrying forever, and nothing else in this transaction needs to roll back.
+                log.error("Retry {} of refund {} for payment {} failed: {}", refund.getAttempts(), refundId,
+                        payment.getId(), e.getMessage());
                 if (refund.getAttempts() >= MAX_ATTEMPTS) {
                     log.error("Giving up on refund {}: {} attempts used; it needs manual attention", refundId,
                             MAX_ATTEMPTS);
+                    events.record(booking, booking.getStatus(), booking.getStatus(), BookingActor.SYSTEM,
+                            EXHAUSTED_NOTE);
                 }
                 return false;
             }
@@ -161,6 +171,40 @@ public class RefundService {
             return true;
         });
         return Boolean.TRUE.equals(done);
+    }
+
+    /**
+     * The provider reported (webhook {@code refund.failed}) that a refund it had accepted did not go through. Puts the
+     * books back to "money still owed" so {@link #retry} picks it up: the refund becomes FAILED, a REFUNDED payment
+     * returns to CAPTURED unless other live refunds still cover it in full, and the booking's refund amount drops by
+     * this refund. Own transaction (call it outside one); payment row first, then booking row. Idempotent.
+     */
+    public void providerReportedFailure(Long refundId) {
+        tx.executeWithoutResult(status -> {
+            Long bookingId = refunds.findBookingIdById(refundId).orElse(null);
+            if (bookingId == null) {
+                return;
+            }
+            Booking booking = locks.lock(bookingId);
+            Payment payment = payments.findByBookingId(bookingId).orElseThrow();
+            Refund refund = refunds.findById(refundId).orElseThrow();
+            if (refund.getStatus() == RefundStatus.FAILED) {
+                return;
+            }
+            refund.setStatus(RefundStatus.FAILED);
+            BigDecimal covered = refunds.findByPaymentId(payment.getId()).stream()
+                    .filter(r -> !r.getId().equals(refundId))
+                    .filter(r -> r.getStatus() != RefundStatus.FAILED)
+                    .map(Refund::getAmount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (payment.getStatus() == PaymentStatus.REFUNDED && covered.compareTo(payment.getAmount()) < 0) {
+                payment.setStatus(PaymentStatus.CAPTURED);
+            }
+            booking.setRefundAmount(booking.getRefundAmount().subtract(refund.getAmount()).max(BigDecimal.ZERO));
+            events.record(booking, booking.getStatus(), booking.getStatus(), BookingActor.SYSTEM,
+                    refund.getAttempts() >= MAX_ATTEMPTS ? EXHAUSTED_NOTE : PROVIDER_FAILED_NOTE);
+            log.warn("Provider reported refund {} of payment {} as failed", refundId, payment.getId());
+        });
     }
 
     /** Keeps free text within what the refund row and the provider's notes accept. */
