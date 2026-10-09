@@ -4,8 +4,10 @@ import { CANCELLATION_POLICIES, REFUND_NOTE, formatAddress, formatCompactINR, fo
 describe('format helpers', () => {
   it('formats rupees', () => {
     expect(formatINR(30)).toBe('₹30')
-    expect(formatINR(1250.5)).toMatch(/^₹1,250\.50?$/)
-    expect(formatINR('99.5')).toMatch(/^₹99\.50?$/)
+    expect(formatINR(1250.5)).toBe('₹1,250.50')
+    expect(formatINR('99.5')).toBe('₹99.50')
+    expect(formatINR(610.8)).toBe('₹610.80')
+    expect(formatINR('2.16')).toBe('₹2.16')
     expect(formatINR(null)).toBe('—')
   })
 
