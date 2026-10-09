@@ -66,15 +66,6 @@ public class RefundService {
     }
 
     /**
-     * Refunds the whole payment and records it (see {@link #refund}). Joins the caller's transaction, which must hold
-     * the payment row lock and then the booking row lock.
-     */
-    @Transactional(propagation = Propagation.MANDATORY)
-    public Refund refundFull(Payment payment, String reason) {
-        return refund(payment.getBooking(), payment, payment.getAmount(), BookingActor.SYSTEM, reason, null);
-    }
-
-    /**
      * Refunds {@code amount} of a captured payment through the provider and records it: the single place that creates
      * refund rows. Joins the caller's transaction, which must already hold the payment row lock and then the booking
      * row lock (payment first, always).

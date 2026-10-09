@@ -8,6 +8,8 @@ import static com.smartparking.support.BookingApiSupport.reserveOk;
 import static com.smartparking.support.BookingApiSupport.tomorrowAt;
 import static com.smartparking.support.BookingApiSupport.verify;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -282,7 +284,7 @@ class CancellationFlowTest {
     void moderateMoreThanADayBeforeStartRefundsTheBaseAndKeepsTheFees() throws Exception {
         configureListing(CancellationPolicy.MODERATE, true);
         long id = paid(10);
-        startsIn(id, Duration.ofHours(30));
+        startsIn(id, Duration.ofHours(30).plusMinutes(1));
         assertThat(booking(id)).containsEntry("status", "CONFIRMED");
 
         preview(driver.auth(), id)
@@ -315,7 +317,7 @@ class CancellationFlowTest {
     void moderateThreeHoursBeforeStartRefundsHalfTheBaseAndTheEarningKeepsTheRest() throws Exception {
         configureListing(CancellationPolicy.MODERATE, true);
         long id = paid(10);
-        startsIn(id, Duration.ofHours(3));
+        startsIn(id, Duration.ofHours(3).plusMinutes(1));
 
         preview(driver.auth(), id)
                 .andExpect(jsonPath("$.refundPercent").value(50))
@@ -332,7 +334,7 @@ class CancellationFlowTest {
         OwnerEarning earning = earning(id);
         assertThat(earning.getNet()).isEqualByComparingTo("30.00");
         assertThat(earning.getCommission()).isEqualByComparingTo("6.00");
-        assertThat(earning.getStatus()).isEqualTo(EarningStatus.HELD);
+        assertThat(earning.getStatus()).isEqualTo(EarningStatus.PENDING_PAYOUT);
         assertThat((BigDecimal) booking(id).get("refund_amount")).isEqualByComparingTo("30.00");
     }
 
@@ -359,7 +361,7 @@ class CancellationFlowTest {
         assertThat(refundCount()).isZero();
         OwnerEarning earning = earning(id);
         assertThat(earning.getNet()).isEqualByComparingTo("60.00");
-        assertThat(earning.getStatus()).isEqualTo(EarningStatus.HELD);
+        assertThat(earning.getStatus()).isEqualTo(EarningStatus.PENDING_PAYOUT); // cancelled for good: payable now
         assertThat(emails.lastTo(DRIVER_EMAIL).textBody()).contains("No refund applies under the strict policy.");
         assertThat(notificationTypes(DRIVER_EMAIL)).endsWith("BOOKING_CANCELLED").doesNotContain("BOOKING_REFUNDED");
         // The slot is free again even though the money stays.
@@ -385,10 +387,24 @@ class CancellationFlowTest {
     }
 
     @Test
+    void flexibleAnHourOrMoreBeforeStartRefundsTheWholeBaseAndReversesTheEarning() throws Exception {
+        configureListing(CancellationPolicy.FLEXIBLE, true);
+        long id = paid(10);
+        startsIn(id, Duration.ofHours(2));
+
+        cancel(driver.auth(), id, null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.refundAmount").value(60.0));
+
+        assertThat(earning(id).getNet()).isEqualByComparingTo("0.00");
+        assertThat(earning(id).getStatus()).isEqualTo(EarningStatus.REVERSED);
+    }
+
+    @Test
     void aProviderThatRefusesTheRefundStillCancelsAndLeavesTheRefundForTheRetryJob() throws Exception {
         configureListing(CancellationPolicy.MODERATE, true);
         long id = paid(10);
-        startsIn(id, Duration.ofHours(30));
+        startsIn(id, Duration.ofHours(30).plusMinutes(1));
         provider.failures.set(1);
 
         cancel(driver.auth(), id, null)
@@ -491,7 +507,7 @@ class CancellationFlowTest {
     @Test
     void concurrentCancellationsRefundExactlyOnce() throws Exception {
         long id = paid(10);
-        startsIn(id, Duration.ofHours(30));
+        startsIn(id, Duration.ofHours(30).plusMinutes(1));
         ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
             CyclicBarrier barrier = new CyclicBarrier(2);
@@ -546,6 +562,26 @@ class CancellationFlowTest {
     }
 
     @Test
+    void anOwnerCancellationStandsWhenTheProviderRefusesTheRefundAndTheRefundIsLeftForRetry() throws Exception {
+        long id = paid(10);
+        startsIn(id, Duration.ofHours(5));
+        provider.failures.set(1);
+
+        ownerCancel(ownerAuth, id, "{\"reason\":\"Gate under repair\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+
+        assertThat(booking(id)).containsEntry("status", "CANCELLED").containsEntry("cancelled_by", "OWNER");
+        assertThat(jdbc.queryForObject("select status from refunds", String.class)).isEqualTo("FAILED");
+        assertThat(jdbc.queryForObject("select amount from refunds", BigDecimal.class)).isEqualByComparingTo("67.08");
+        assertThat(jdbc.queryForObject("select attempts from refunds", Integer.class)).isEqualTo(1); // retryable
+        assertThat(paymentStatus(id)).isEqualTo("CAPTURED");
+        assertThat(earning(id).getStatus()).isEqualTo(EarningStatus.REVERSED);
+        assertThat(subjects(DRIVER_EMAIL)).containsExactly("Your booking was cancelled by the owner – ParkEase");
+        assertThat(notificationTypes(DRIVER_EMAIL)).endsWith("BOOKING_CANCELLED");
+    }
+
+    @Test
     void ownerCancellationNeedsAReasonAndOwnershipAndAConfirmedBookingThatHasNotStarted() throws Exception {
         long id = paid(10);
 
@@ -569,7 +605,9 @@ class CancellationFlowTest {
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("NOT_CANCELLABLE"));
         jdbc.update("update bookings set status = 'AWAITING_APPROVAL' where id = ?", id);
         ownerCancel(ownerAuth, id, "{\"reason\":\"Decline it instead\"}")
-                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("NOT_CANCELLABLE"));
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("NOT_CANCELLABLE"))
+                .andExpect(jsonPath("$.detail").value(not(containsString("AWAITING_APPROVAL"))))
+                .andExpect(jsonPath("$.detail").value(containsString("awaiting approval")));
         jdbc.update("update bookings set status = 'CANCELLED' where id = ?", id);
         ownerCancel(ownerAuth, id, "{\"reason\":\"Again\"}")
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("NOT_CANCELLABLE"));
