@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthProvider'
+import { createBooking, invalidateBookingQueries } from '../../lib/bookings'
 import { toProblem } from '../../lib/errors'
 import { formatINR, VEHICLE_TYPE_LABELS } from '../../lib/format'
 import {
@@ -11,7 +13,10 @@ import {
   type VehicleType,
 } from '../../lib/search'
 import { browserIsIst, defaultWindow, fromLocalInputValue, IST_HINT, toLocalInputValue } from '../../lib/time'
+import { useVehicles, type VehicleDto } from '../../lib/vehicles'
+import { VehicleForm } from '../vehicles/VehicleForm'
 import { Button } from '../ui/Button'
+import { Dialog } from '../ui/Dialog'
 import { Select } from '../ui/Select'
 import { Spinner } from '../ui/Spinner'
 import { TextField } from '../ui/TextField'
@@ -23,6 +28,11 @@ const UNAVAILABLE_MESSAGES: Record<QuoteUnavailableReason, string> = {
   BLOCKED: 'Not available at these times.',
   NO_VEHICLE_SLOTS: 'No slots for this vehicle type.',
   FULLY_BOOKED: 'All slots are taken for these times.',
+}
+
+const RESERVE_ERRORS: Record<string, string> = {
+  SLOT_UNAVAILABLE: 'Sorry, that slot was just taken. Try different times.',
+  TOO_MANY_HOLDS: 'You have unpaid reservations. Complete or wait for them to expire.',
 }
 
 type Selection = { start: string; end: string; vehicle: VehicleType }
@@ -56,7 +66,9 @@ function toWindow(sel: Selection): { start: string; end: string } | null {
 
 export function BookingCard({ listing }: { listing: PublicListingDto }) {
   const { user, loading: authLoading } = useAuth()
+  const isDriver = user?.role === 'DRIVER'
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const [selection, setSelection] = useState(() => initialSelection(searchParams, listing))
@@ -88,17 +100,75 @@ export function BookingCard({ listing }: { listing: PublicListingDto }) {
     )
   }, [start, end, settled.vehicle, setSearchParams])
 
-  const change = (patch: Partial<Selection>) => setSelection((s) => ({ ...s, ...patch }))
+  const change = (patch: Partial<Selection>) =>
+    setSelection((s) => (Object.entries(patch).every(([k, v]) => s[k as keyof Selection] === v) ? s : { ...s, ...patch }))
+
+  const vehicles = useVehicles(isDriver)
+  const ofType = useMemo(
+    () => (vehicles.data ?? []).filter((v) => v.type === selection.vehicle),
+    [vehicles.data, selection.vehicle],
+  )
+  /** The driver's pick, if it still fits the vehicle type; otherwise the default (or first) vehicle of that type. */
+  const [pickedId, setPickedId] = useState<number | null>(null)
+  const vehicle: VehicleDto | undefined = ofType.find((v) => v.id === pickedId) ?? ofType.find((v) => v.isDefault) ?? ofType[0]
+  const [addingVehicle, setAddingVehicle] = useState(false)
+  const [reserving, setReserving] = useState(false)
+  const [reserveError, setReserveError] = useState<string | null>(null)
+
+  /** Picking a vehicle also moves the vehicle-type select (kept in sync even if the list is ever mixed). */
+  function pickVehicle(id: number) {
+    const picked = vehicles.data?.find((v) => v.id === id)
+    setPickedId(id)
+    if (picked) change({ vehicle: picked.type })
+  }
 
   const answer = quote.data
   const problem = quote.isError ? toProblem(quote.error) : null
   const unavailable = answer !== undefined && !answer.available
-  const canReserve = !authLoading && !unavailable && !problem
+  // The price on screen is for `settled`; only reserve once it matches what the pickers show.
+  const canReserve = !authLoading && !unavailable && !problem && selection === settled && range !== null
 
   function reserve() {
-    const now = toWindow(selection)
-    const next = now ? listingHref(listing.id, now.start, now.end, selection.vehicle) : location.pathname + location.search
-    navigate(`/login?next=${encodeURIComponent(next)}`)
+    if (!isDriver) {
+      const now = toWindow(selection)
+      const next = now ? listingHref(listing.id, now.start, now.end, selection.vehicle) : location.pathname + location.search
+      navigate(`/login?next=${encodeURIComponent(next)}`)
+      return
+    }
+    setReserveError(null)
+    if (vehicles.isError) {
+      setReserveError("Couldn't load your vehicles. Try again.")
+      void vehicles.refetch()
+    } else if (!vehicle) setAddingVehicle(true)
+    else void book(vehicle)
+  }
+
+  async function book(chosen: VehicleDto) {
+    const when = toWindow(selection)
+    if (!when) return
+    setReserving(true)
+    try {
+      const checkout = await createBooking({ listingId: listing.id, vehicleId: chosen.id, start: when.start, end: when.end })
+      void invalidateBookingQueries(queryClient)
+      queryClient.setQueryData(['checkout', String(checkout.booking.id)], checkout)
+      navigate(`/checkout/${checkout.booking.id}`)
+    } catch (error) {
+      const p = toProblem(error)
+      setReserveError(RESERVE_ERRORS[p.code] ?? p.detail)
+      if (p.code === 'SLOT_UNAVAILABLE') void queryClient.invalidateQueries({ queryKey: ['quote', listing.id] })
+      setReserving(false)
+    }
+  }
+
+  function vehicleAdded(added: VehicleDto) {
+    setAddingVehicle(false)
+    setPickedId(added.id)
+    if (added.type !== selection.vehicle) {
+      // A different type than the quote is for: show its price first.
+      change({ vehicle: added.type })
+      return
+    }
+    void book(added)
   }
 
   const prices = [
@@ -139,10 +209,26 @@ export function BookingCard({ listing }: { listing: PublicListingDto }) {
           onChange={(e) => change({ end: e.target.value })}
         />
         {!browserIsIst() && <p className="-mt-1 text-xs text-slate-500">{IST_HINT}</p>}
-        <Select label="Vehicle" value={selection.vehicle} onChange={(e) => change({ vehicle: e.target.value as VehicleType })}>
+        <Select
+          label={isDriver ? 'Vehicle type' : 'Vehicle'}
+          value={selection.vehicle}
+          onChange={(e) => {
+            setPickedId(null)
+            change({ vehicle: e.target.value as VehicleType })
+          }}
+        >
           <option value="FOUR_WHEELER">{VEHICLE_TYPE_LABELS.FOUR_WHEELER}</option>
           <option value="TWO_WHEELER">{VEHICLE_TYPE_LABELS.TWO_WHEELER}</option>
         </Select>
+        {isDriver && vehicle && (
+          <Select label="Vehicle" value={vehicle.id} onChange={(e) => pickVehicle(Number(e.target.value))}>
+            {ofType.map((v) => (
+              <option key={v.id} value={v.id}>
+                {`${v.plateNumber}${v.makeModel ? ` · ${v.makeModel}` : ''}`}
+              </option>
+            ))}
+          </Select>
+        )}
       </div>
 
       <div aria-live="polite" className="min-h-16 text-sm">
@@ -192,18 +278,31 @@ export function BookingCard({ listing }: { listing: PublicListingDto }) {
         <Button
           type="button"
           className="w-full"
-          disabled={!canReserve || user !== null}
+          loading={reserving}
+          disabled={!canReserve || (user !== null && !isDriver) || (isDriver && vehicles.isPending)}
           onClick={reserve}
         >
           Reserve
         </Button>
-        {user?.role === 'DRIVER' && (
-          <p className="text-center text-xs text-slate-600 dark:text-slate-400">Online booking opens in the next update.</p>
+        {reserveError && (
+          <p role="alert" className="text-center text-sm text-red-600 dark:text-red-400">{reserveError}</p>
         )}
-        {user && user.role !== 'DRIVER' && (
+        {user && !isDriver && (
           <p className="text-center text-xs text-slate-600 dark:text-slate-400">Sign in as a driver to book.</p>
         )}
       </div>
+      <Dialog open={addingVehicle} title="Add your vehicle" onClose={() => setAddingVehicle(false)}>
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600 dark:text-slate-400">Tell us which vehicle you'll park and we'll reserve your spot.</p>
+          <VehicleForm
+            defaultType={selection.vehicle}
+            submitLabel="Add vehicle"
+            showDefault={false}
+            onCancel={() => setAddingVehicle(false)}
+            onSaved={vehicleAdded}
+          />
+        </div>
+      </Dialog>
     </section>
   )
 }

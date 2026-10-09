@@ -96,11 +96,12 @@ export const mockPay = async (bookingId: number) =>
 
 /**
  * Refetches everything a booking or a status change can affect: the driver's lists and details,
- * and the availability shown by quotes and search results.
+ * and the availability shown by quotes and search results. Checkouts are left alone: one is fixed
+ * until it is paid or expires, and refetching it right after paying would only fail.
  */
 export function invalidateBookingQueries(queryClient: QueryClient) {
   return Promise.all(
-    ['bookings', 'booking', 'checkout', 'quote', 'search'].map((key) => queryClient.invalidateQueries({ queryKey: [key] })),
+    ['bookings', 'booking', 'quote', 'search'].map((key) => queryClient.invalidateQueries({ queryKey: [key] })),
   ).then(() => undefined)
 }
 
@@ -132,8 +133,11 @@ export function useCheckout(id: number | string | undefined) {
     queryFn: () => getCheckout(id!),
     enabled: id !== undefined,
     retry: false,
-    // The hold is time-limited and the order is fixed: never silently refetch behind the countdown.
-    staleTime: Infinity,
+    // The hold is time-limited and the order is fixed: don't refetch behind the countdown, and don't
+    // keep a checkout around once the page is left (it may be paid or expired by the time we return).
+    staleTime: 60_000,
+    gcTime: 0,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   })
 }
