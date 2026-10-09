@@ -50,7 +50,14 @@ public class AvailabilityCalendarService {
     public AvailabilityCalendarDto calendar(Long listingId, LocalDate from, LocalDate to) {
         Instant now = clock.instant();
         LocalDate today = now.atZone(AvailabilityEvaluator.ZONE).toLocalDate();
-        validate(from, to, today);
+        validate(from, to);
+        // Only today up to 90 days ahead can be booked: the requested range is clamped to that window.
+        LocalDate maxDay = today.plusDays(MAX_AHEAD_DAYS);
+        from = from.isBefore(today) ? today : from;
+        to = to.isAfter(maxDay) ? maxDay : to;
+        if (from.isAfter(to)) {
+            throw invalid("The range lies outside the bookable window (today to " + MAX_AHEAD_DAYS + " days ahead)");
+        }
         ParkingListing listing = listings.findByIdAndStatus(listingId, ListingStatus.APPROVED)
                 .orElseThrow(() -> ApiException.notFound("Listing not found"));
 
@@ -118,7 +125,8 @@ public class AvailabilityCalendarService {
         return date.atStartOfDay(AvailabilityEvaluator.ZONE).toInstant();
     }
 
-    private static void validate(LocalDate from, LocalDate to, LocalDate today) {
+    /** The requested range must be complete, not reversed and span at most {@value #MAX_DAYS} days. */
+    private static void validate(LocalDate from, LocalDate to) {
         if (from == null || to == null) {
             throw invalid("from and to are required");
         }
@@ -127,12 +135,6 @@ public class AvailabilityCalendarService {
         }
         if (ChronoUnit.DAYS.between(from, to) + 1 > MAX_DAYS) {
             throw invalid("The range can span at most " + MAX_DAYS + " days");
-        }
-        if (from.isBefore(today)) {
-            throw invalid("from must not be in the past");
-        }
-        if (to.isAfter(today.plusDays(MAX_AHEAD_DAYS))) {
-            throw invalid("to must be within " + MAX_AHEAD_DAYS + " days from today");
         }
     }
 

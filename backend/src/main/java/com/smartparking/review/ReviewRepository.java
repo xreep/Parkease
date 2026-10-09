@@ -13,6 +13,20 @@ import org.springframework.data.repository.query.Param;
 
 public interface ReviewRepository extends JpaRepository<Review, Long> {
 
+    /** Sum of the ratings and number of reviews. */
+    interface RatingTotals {
+        long getRatingSum();
+
+        long getRatingCount();
+    }
+
+    /** All reviews of the owner's listings added up. */
+    @Query("""
+            select coalesce(sum(r.rating), 0) as ratingSum, count(r) as ratingCount
+            from Review r where r.listing.owner.id = :ownerId
+            """)
+    RatingTotals totalsForOwner(@Param("ownerId") Long ownerId);
+
     boolean existsByBookingId(Long bookingId);
 
     @EntityGraph(attributePaths = {"driver"})

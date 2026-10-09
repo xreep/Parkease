@@ -11,7 +11,6 @@ import com.smartparking.common.util.PersonNames;
 import com.smartparking.listing.ParkingListingRepository;
 import com.smartparking.owner.dashboard.dto.OwnerCalendarDto;
 import com.smartparking.slot.ParkingSlotRepository;
-import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Comparator;
@@ -33,7 +32,6 @@ public class OwnerCalendarService {
     private final ParkingSlotRepository slots;
     private final BookingRepository bookings;
     private final AvailabilityBlockRepository blocks;
-    private final Clock clock;
 
     @Transactional(readOnly = true)
     public OwnerCalendarDto calendar(Long ownerId, Long listingId, LocalDate from, LocalDate to) {
@@ -45,7 +43,7 @@ public class OwnerCalendarService {
         Instant start = startOf(from);
         Instant end = startOf(to.plusDays(1));
 
-        List<Booking> rangeBookings = bookings.findForCalendar(listingId, start, end, clock.instant());
+        List<Booking> rangeBookings = bookings.findForCalendar(listingId, start, end);
         List<AvailabilityBlock> rangeBlocks = blocks.findOverlapping(List.of(listingId), start, end).stream()
                 .sorted(Comparator.comparing(AvailabilityBlock::getStartTime)).toList();
         // Active slots, plus retired ones that a booking or block in the range still points at (every bar needs a row).

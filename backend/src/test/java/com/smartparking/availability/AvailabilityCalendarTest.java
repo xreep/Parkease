@@ -320,13 +320,31 @@ class AvailabilityCalendarTest {
                 .andExpect(jsonPath("$.code").value("INVALID_DATE_RANGE"));
         calendar(today, today.plusDays(31)).andExpect(status().isBadRequest()) // 32 days
                 .andExpect(jsonPath("$.code").value("INVALID_DATE_RANGE"));
-        calendar(today.minusDays(1), today.plusDays(1)).andExpect(status().isBadRequest())
+        calendar(today.minusDays(10), today.plusDays(21)).andExpect(status().isBadRequest()) // 32 days as requested
                 .andExpect(jsonPath("$.code").value("INVALID_DATE_RANGE"));
-        calendar(today.plusDays(80), today.plusDays(91)).andExpect(status().isBadRequest())
+        calendar(today.minusDays(5), today.minusDays(2)).andExpect(status().isBadRequest()) // nothing left to show
+                .andExpect(jsonPath("$.code").value("INVALID_DATE_RANGE"));
+        calendar(today.plusDays(91), today.plusDays(95)).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_DATE_RANGE"));
         mvc.perform(get("/api/v1/listings/" + listingId + "/availability"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_DATE_RANGE"));
+    }
+
+    @Test
+    void rangesPartlyOutsideTheBookableWindowAreClamped() throws Exception {
+        calendar(today.minusDays(2), today.plusDays(1))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.days", hasSize(2)))
+                .andExpect(jsonPath("$.days[0].date").value(today.toString()))
+                .andExpect(jsonPath("$.days[1].date").value(today.plusDays(1).toString()));
+        calendar(today.plusDays(80), today.plusDays(100))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.days", hasSize(11)))
+                .andExpect(jsonPath("$.days[0].date").value(today.plusDays(80).toString()))
+                .andExpect(jsonPath("$.days[10].date").value(today.plusDays(90).toString()));
+        calendar(today.minusDays(3), today.plusDays(90 + 3)) // 97 days: still too long as requested
+                .andExpect(status().isBadRequest());
     }
 
     @Test

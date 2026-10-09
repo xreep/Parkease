@@ -20,10 +20,16 @@ import java.util.Set;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.DynamicUpdate;
 
 @Getter
 @Setter
 @NoArgsConstructor
+/**
+ * Dynamic updates write only the columns an edit changed, so an owner or admin edit built on a stale copy cannot
+ * overwrite the rating aggregates that a review committed meanwhile.
+ */
+@DynamicUpdate
 @Entity
 @Table(name = "parking_listings")
 public class ParkingListing extends BaseEntity {
