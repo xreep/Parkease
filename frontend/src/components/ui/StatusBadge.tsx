@@ -1,4 +1,5 @@
 import clsx from 'clsx'
+import { BOOKING_STATUS_LABELS, type BookingStatus } from '../../lib/bookings'
 import { listingStatusLabel, verificationStatusLabel, type ListingStatus, type VerificationStatus } from '../../lib/format'
 
 const tones = {
@@ -25,13 +26,35 @@ const verificationTone: Record<VerificationStatus, keyof typeof tones> = {
   REJECTED: 'red',
 }
 
+const bookingTone: Record<BookingStatus, keyof typeof tones> = {
+  PENDING_PAYMENT: 'amber',
+  AWAITING_APPROVAL: 'amber',
+  CONFIRMED: 'emerald',
+  ACTIVE: 'sky',
+  COMPLETED: 'slate',
+  CANCELLED: 'slate',
+  REJECTED: 'red',
+  EXPIRED: 'slate',
+}
+
 export type StatusBadgeProps =
   | { kind: 'listing'; status: ListingStatus }
   | { kind: 'verification'; status: VerificationStatus }
+  | { kind: 'booking'; status: BookingStatus }
 
 export function StatusBadge(props: StatusBadgeProps) {
-  const label = props.kind === 'listing' ? listingStatusLabel(props.status) : verificationStatusLabel(props.status)
-  const tone = props.kind === 'listing' ? listingTone[props.status] : verificationTone[props.status]
+  const label =
+    props.kind === 'listing'
+      ? listingStatusLabel(props.status)
+      : props.kind === 'verification'
+        ? verificationStatusLabel(props.status)
+        : BOOKING_STATUS_LABELS[props.status]
+  const tone =
+    props.kind === 'listing'
+      ? listingTone[props.status]
+      : props.kind === 'verification'
+        ? verificationTone[props.status]
+        : bookingTone[props.status]
   return (
     <span className={clsx('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold', tones[tone])}>
       {label}

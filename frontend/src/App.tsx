@@ -15,7 +15,7 @@ import { ResetPasswordPage } from './pages/auth/ResetPasswordPage'
 import { VerifyEmailPage } from './pages/auth/VerifyEmailPage'
 import { BookingDetailPage } from './pages/driver/BookingDetailPage'
 import { CheckoutPage } from './pages/driver/CheckoutPage'
-import { DriverBookingsPage } from './pages/driver/DriverBookingsPage'
+import { MyBookingsPage } from './pages/driver/MyBookingsPage'
 import { DriverHomePage } from './pages/driver/DriverHomePage'
 import { DriverLayout } from './pages/driver/DriverLayout'
 import { VehiclesPage } from './pages/driver/VehiclesPage'
@@ -48,7 +48,7 @@ export default function App() {
         <Route path="account" element={<RequireRole><AccountPage /></RequireRole>} />
         <Route path="driver" element={<RequireRole roles={['DRIVER']}><DriverLayout /></RequireRole>}>
           <Route index element={<DriverHomePage />} />
-          <Route path="bookings" element={<DriverBookingsPage />} />
+          <Route path="bookings" element={<MyBookingsPage />} />
           <Route path="bookings/:id" element={<BookingDetailPage />} />
           <Route path="vehicles" element={<VehiclesPage />} />
         </Route>
