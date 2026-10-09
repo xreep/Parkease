@@ -410,7 +410,6 @@ class CancellationFlowTest {
 
         assertThat(earning(id).getNet()).isEqualByComparingTo("0.00");
         assertThat(earning(id).getStatus()).isEqualTo(EarningStatus.REVERSED);
-        assertThat(earning(id).getNet()).isEqualByComparingTo("0.00"); // a reversed earning is worth nothing
     }
 
     @Test

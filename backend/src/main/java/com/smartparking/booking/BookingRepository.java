@@ -1,5 +1,6 @@
 package com.smartparking.booking;
 
+import com.smartparking.payment.PaymentStatus;
 import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.Collection;
@@ -21,13 +22,6 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     interface SlotWindow {
         Long getSlotId();
 
-        Instant getStartTime();
-
-        Instant getEndTime();
-    }
-
-    /** Start and end of a booking. */
-    interface TimeSpan {
         Instant getStartTime();
 
         Instant getEndTime();
@@ -235,9 +229,12 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     long countByListingOwnerIdAndStatus(Long ownerId, BookingStatus status);
 
-    /** The owner's bookings in the given statuses that start after {@code after}; the page's sort picks the order. */
+    /**
+     * The owner's bookings in the given statuses that start after {@code after}; the pageable's sort and size pick
+     * the order and the cut (a list result, so no count query runs).
+     */
     @EntityGraph(attributePaths = {"listing", "slot", "driver"})
-    Page<Booking> findByListingOwnerIdAndStatusInAndStartTimeAfter(Long ownerId, Collection<BookingStatus> statuses,
+    List<Booking> findByListingOwnerIdAndStatusInAndStartTimeAfter(Long ownerId, Collection<BookingStatus> statuses,
                                                                    Instant after, Pageable pageable);
 
     /** Start and status of the owner's bookings in the given statuses that start in [from, to). */
@@ -283,13 +280,26 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     long countByDriverIdAndStatusIn(Long driverId, Collection<BookingStatus> statuses);
 
+    /** The driver's bookings that have a payment in one of the given statuses (money actually moved). */
     @Query("""
-            select b.startTime as startTime, b.endTime as endTime from Booking b
-            where b.driver.id = :driverId and b.status = com.smartparking.booking.BookingStatus.COMPLETED
+            select count(b) from Booking b
+            where b.driver.id = :driverId
+              and exists (select 1 from Payment p where p.booking = b and p.status in :paymentStatuses)
             """)
-    List<TimeSpan> findCompletedSpans(@Param("driverId") Long driverId);
+    long countPaidByDriver(@Param("driverId") Long driverId,
+                           @Param("paymentStatuses") Collection<PaymentStatus> paymentStatuses);
 
-    /** Ids of the driver's completed bookings that ended at or after {@code cutoff} and have no review, latest end first. */
+    /** Total parked time of the driver's completed bookings, in seconds. */
+    @Query(value = """
+            select cast(coalesce(sum(extract(epoch from (end_time - start_time))), 0) as bigint)
+            from bookings where driver_id = :driverId and status = 'COMPLETED'
+            """, nativeQuery = true)
+    long sumCompletedSeconds(@Param("driverId") Long driverId);
+
+    /**
+     * Ids of the driver's completed bookings that ended at or after {@code cutoff} and have no review, latest end
+     * first.
+     */
     @Query("""
             select b.id from Booking b
             where b.driver.id = :driverId and b.status = com.smartparking.booking.BookingStatus.COMPLETED

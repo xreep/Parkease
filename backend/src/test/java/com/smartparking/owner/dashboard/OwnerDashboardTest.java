@@ -5,9 +5,12 @@ import static com.smartparking.support.ListingTestSupport.puneCityId;
 import static com.smartparking.support.OwnerTestSupport.verifiedOwner;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -40,11 +43,11 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.time.temporal.ChronoUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
+import org.springframework.test.util.AopTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
@@ -63,6 +66,7 @@ class OwnerDashboardTest {
     @Autowired BookingRepository bookings;
     @Autowired OwnerEarningRepository earnings;
     @Autowired AvailabilityBlockRepository blocks;
+    @Autowired OwnerEarningsService earningsService;
 
     String ownerAuth;
     String otherOwnerAuth;
@@ -344,14 +348,14 @@ class OwnerDashboardTest {
 
         String csv = getWith(ownerAuth, "/api/v1/owner/earnings?format=csv")
                 .andExpect(status().isOk())
-                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
-                        .string(HttpHeaders.CONTENT_DISPOSITION,
-                                org.hamcrest.Matchers.containsString("parkease-earnings-" + today + ".csv")))
-                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
-                        .contentTypeCompatibleWith("text/csv"))
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION,
+                        containsString("parkease-earnings-" + today + ".csv")))
+                .andExpect(header().doesNotExist("X-Truncated"))
+                .andExpect(content().contentTypeCompatibleWith("text/csv"))
                 .andReturn().getResponse().getContentAsString();
 
-        String[] lines = csv.split("\r\n");
+        assertThat(csv).startsWith("\uFEFFBooking,"); // a BOM, so spreadsheets read the file as UTF-8
+        String[] lines = csv.substring(1).split("\r\n");
         assertThat(lines).hasSize(3);
         assertThat(lines[0]).isEqualTo(
                 "Booking,Listing,Start (IST),End (IST),Gross,Commission,Net,Status,Paid at,Payout reference");
@@ -364,6 +368,32 @@ class OwnerDashboardTest {
         String filtered = getWith(ownerAuth, "/api/v1/owner/earnings?format=csv&status=HELD")
                 .andReturn().getResponse().getContentAsString();
         assertThat(filtered.split("\r\n")).hasSize(2);
+    }
+
+    @Test
+    void earningsCsvIsCutAtTheRowCapNewestFirstAndSaysSo() throws Exception {
+        ledger(); // four earnings of the owner
+        OwnerEarningsService target = AopTestUtils.getUltimateTargetObject(earningsService);
+        int original = target.csvMaxRows;
+        try {
+            target.csvMaxRows = 3;
+            String cut = getWith(ownerAuth, "/api/v1/owner/earnings?format=csv")
+                    .andExpect(status().isOk())
+                    .andExpect(header().string("X-Truncated", "true"))
+                    .andReturn().getResponse().getContentAsString();
+            String[] lines = cut.split("\r\n");
+            assertThat(lines).hasSize(4); // header and the three newest of four
+            assertThat(lines[1]).contains(",REVERSED,"); // newest booking first
+            assertThat(cut).doesNotContain(",PAID,");   // the oldest one fell off
+
+            target.csvMaxRows = 4;
+            String whole = getWith(ownerAuth, "/api/v1/owner/earnings?format=csv")
+                    .andExpect(header().doesNotExist("X-Truncated"))
+                    .andReturn().getResponse().getContentAsString();
+            assertThat(whole.split("\r\n")).hasSize(5);
+        } finally {
+            target.csvMaxRows = original;
+        }
     }
 
     // ---- calendar -------------------------------------------------------------------------------------------
@@ -428,6 +458,39 @@ class OwnerDashboardTest {
     }
 
     @Test
+    void calendarKeepsInactiveSlotsThatBookingsOrBlocksStillPointAt() throws Exception {
+        LocalDate day = today.plusDays(1);
+        ParkingSlot retired = new ParkingSlot();
+        retired.setListing(listing);
+        retired.setLabel("B-01");
+        retired.setVehicleType(com.smartparking.common.model.VehicleType.FOUR_WHEELER);
+        retired.setSize(com.smartparking.slot.SlotSize.MEDIUM);
+        retired.setActive(false);
+        slots.saveAndFlush(retired);
+        ParkingSlot unused = new ParkingSlot();
+        unused.setListing(listing);
+        unused.setLabel("B-02");
+        unused.setVehicleType(com.smartparking.common.model.VehicleType.FOUR_WHEELER);
+        unused.setSize(com.smartparking.slot.SlotSize.MEDIUM);
+        unused.setActive(false);
+        slots.saveAndFlush(unused);
+        booking(listing, retired, BookingStatus.CONFIRMED, day, "10:00", "12:00");
+
+        getWith(ownerAuth, "/api/v1/owner/calendar?listingId=" + listing.getId() + "&from=" + day + "&to=" + day)
+                .andExpect(jsonPath("$.slots[*].label", contains("A-01", "B-01")))
+                .andExpect(jsonPath("$.bookings[0].slotId").value(retired.getId().intValue()));
+
+        AvailabilityBlock block = new AvailabilityBlock();
+        block.setListing(listing);
+        block.setSlot(unused);
+        block.setStartTime(at(day, "14:00"));
+        block.setEndTime(at(day, "15:00"));
+        blocks.saveAndFlush(block);
+        getWith(ownerAuth, "/api/v1/owner/calendar?listingId=" + listing.getId() + "&from=" + day + "&to=" + day)
+                .andExpect(jsonPath("$.slots[*].label", contains("A-01", "B-01", "B-02")));
+    }
+
+    @Test
     void calendarRulesAndAuthorization() throws Exception {
         String base = "/api/v1/owner/calendar?listingId=" + listing.getId();
         getWith(ownerAuth, base + "&from=" + today + "&to=" + today.plusDays(13)).andExpect(status().isOk());
@@ -439,7 +502,9 @@ class OwnerDashboardTest {
         getWith(ownerAuth, "/api/v1/owner/calendar?listingId=999999&from=" + today + "&to=" + today)
                 .andExpect(status().isNotFound());
         // past weeks are fine for an owner looking back
-        getWith(ownerAuth, base + "&from=" + today.minusDays(7) + "&to=" + today.minusDays(1)).andExpect(status().isOk());
-        assertThat(ChronoUnit.DAYS.between(today.minusDays(7), today)).isEqualTo(7);
+        getWith(ownerAuth, base + "&from=" + today.minusDays(7) + "&to=" + today.minusDays(1))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.from").value(today.minusDays(7).toString()))
+                .andExpect(jsonPath("$.to").value(today.minusDays(1).toString()));
     }
 }

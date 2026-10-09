@@ -145,10 +145,16 @@ public class OwnerStatsService {
         Map<Long, Map<Integer, AvailabilityRule>> weekly = new HashMap<>();
         rules.findByListingIdIn(ids).forEach(r -> weekly
                 .computeIfAbsent(r.getListing().getId(), k -> new HashMap<>()).putIfAbsent(r.getDayOfWeek(), r));
-        Map<Long, List<Span>> bookedBySlot = new HashMap<>();
+        // Booked spans bucketed by slot and IST day, so each (slot, day) only looks at the spans that touch it.
+        Map<Long, Map<LocalDate, List<Span>>> bookedBySlotAndDay = new HashMap<>();
         for (ListingSlotWindow w : bookings.findBookedWindows(ownerId, startOf(from), startOf(to.plusDays(1)))) {
-            bookedBySlot.computeIfAbsent(w.getSlotId(), k -> new ArrayList<>())
-                    .add(new Span(w.getStartTime().getEpochSecond(), w.getEndTime().getEpochSecond()));
+            Span span = new Span(w.getStartTime().getEpochSecond(), w.getEndTime().getEpochSecond());
+            LocalDate first = max(dateOf(w.getStartTime()), from);
+            LocalDate last = min(dateOf(w.getEndTime().minusSeconds(1)), to);
+            Map<LocalDate, List<Span>> perDay = bookedBySlotAndDay.computeIfAbsent(w.getSlotId(), k -> new HashMap<>());
+            for (LocalDate d = first; !d.isAfter(last); d = d.plusDays(1)) {
+                perDay.computeIfAbsent(d, k -> new ArrayList<>()).add(span);
+            }
         }
 
         long open = 0;
@@ -164,7 +170,8 @@ public class OwnerStatsService {
                 Span span = window.get().span();
                 open += span.length() * listingSlots.size();
                 for (ParkingSlot s : listingSlots) {
-                    taken += SlotCoverage.coveredLength(bookedBySlot.getOrDefault(s.getId(), List.of()), span);
+                    taken += SlotCoverage.coveredLength(
+                            bookedBySlotAndDay.getOrDefault(s.getId(), Map.of()).getOrDefault(d, List.of()), span);
                 }
             }
         }
@@ -172,6 +179,14 @@ public class OwnerStatsService {
             return BigDecimal.ZERO.setScale(1);
         }
         return BigDecimal.valueOf(taken * 100).divide(BigDecimal.valueOf(open), 1, RoundingMode.HALF_UP);
+    }
+
+    private static LocalDate max(LocalDate a, LocalDate b) {
+        return a.isAfter(b) ? a : b;
+    }
+
+    private static LocalDate min(LocalDate a, LocalDate b) {
+        return a.isBefore(b) ? a : b;
     }
 
     private static BigDecimal money(BigDecimal value) {

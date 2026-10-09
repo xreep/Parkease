@@ -36,6 +36,9 @@ public class OwnerEarningsService {
 
     private final OwnerEarningRepository earnings;
 
+    /** The CSV row cap; an instance field so a test can lower it. */
+    int csvMaxRows = CSV_MAX_ROWS;
+
     @Transactional(readOnly = true)
     public OwnerEarningsDto list(Long ownerId, EarningStatus status, LocalDate from, LocalDate to, int page, int size) {
         Specification<OwnerEarning> filter = filter(ownerId, status, from, to);
@@ -44,12 +47,19 @@ public class OwnerEarningsService {
         return new OwnerEarningsDto(totals(ownerId), PageResponse.from(result.map(OwnerEarningsService::toDto)));
     }
 
-    /** All rows matching the filters (at most {@value #CSV_MAX_ROWS}), newest booking first, as CSV text. */
+    /** The CSV text and whether the row cap cut it short. */
+    public record CsvExport(String text, boolean truncated) {
+    }
+
+    /** Rows matching the filters (at most {@value #CSV_MAX_ROWS}), newest booking first, as CSV text. */
     @Transactional(readOnly = true)
-    public String csv(Long ownerId, EarningStatus status, LocalDate from, LocalDate to) {
-        List<OwnerEarning> rows = earnings.findAll(filter(ownerId, status, from, to),
-                PageRequest.of(0, CSV_MAX_ROWS, NEWEST_FIRST)).getContent();
-        return EarningsCsv.write(rows);
+    public CsvExport csv(Long ownerId, EarningStatus status, LocalDate from, LocalDate to) {
+        int cap = csvMaxRows;
+        // One row more than the cap tells whether there is more; no count query is needed.
+        List<OwnerEarning> rows = earnings.findBy(filter(ownerId, status, from, to),
+                q -> q.project("booking", "booking.listing").sortBy(NEWEST_FIRST).limit(cap + 1).all());
+        boolean truncated = rows.size() > cap;
+        return new CsvExport(EarningsCsv.write(truncated ? rows.subList(0, cap) : rows), truncated);
     }
 
     private OwnerEarningsDto.Totals totals(Long ownerId) {
