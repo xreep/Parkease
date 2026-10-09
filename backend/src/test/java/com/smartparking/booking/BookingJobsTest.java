@@ -315,6 +315,7 @@ class BookingJobsTest {
         assertThat(refund(overdue)).containsEntry("status", "PROCESSED").containsEntry("attempts", 1);
         assertThat(paymentStatus(overdue)).isEqualTo("REFUNDED");
         assertThat(earnings.findByBookingId(overdue).orElseThrow().getStatus()).isEqualTo(EarningStatus.REVERSED);
+        assertThat(earnings.findByBookingId(overdue).orElseThrow().getNet()).isEqualByComparingTo("0.00");
         Map<String, Object> event = jdbc.queryForMap(
                 "select from_status, to_status, actor from booking_events where booking_id = ? and from_status = 'AWAITING_APPROVAL' and to_status = 'REJECTED'",
                 overdue);

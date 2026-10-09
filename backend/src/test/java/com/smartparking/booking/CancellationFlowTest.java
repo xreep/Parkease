@@ -279,6 +279,7 @@ class CancellationFlowTest {
 
         assertThat(provider.calls).extracting(RecordingPaymentProvider.Call::paise).containsExactly(6708L);
         assertThat(earning(id).getStatus()).isEqualTo(EarningStatus.REVERSED);
+        assertThat(earning(id).getNet()).isEqualByComparingTo("0.00"); // a reversed earning is worth nothing
         assertThat(paymentStatus(id)).isEqualTo("REFUNDED");
         assertThat(subjects(DRIVER_EMAIL)).containsExactly("Booking cancelled – ParkEase");
         assertThat(emails.lastTo(DRIVER_EMAIL).textBody()).contains("Your refund of ₹67.08 will be processed to your original payment method.");
@@ -409,6 +410,7 @@ class CancellationFlowTest {
 
         assertThat(earning(id).getNet()).isEqualByComparingTo("0.00");
         assertThat(earning(id).getStatus()).isEqualTo(EarningStatus.REVERSED);
+        assertThat(earning(id).getNet()).isEqualByComparingTo("0.00"); // a reversed earning is worth nothing
     }
 
     @Test
@@ -427,6 +429,7 @@ class CancellationFlowTest {
         assertThat(jdbc.queryForObject("select status from refunds", String.class)).isEqualTo("FAILED");
         assertThat(jdbc.queryForObject("select amount from refunds", BigDecimal.class)).isEqualByComparingTo("60.00");
         assertThat(earning(id).getStatus()).isEqualTo(EarningStatus.REVERSED);
+        assertThat(earning(id).getNet()).isEqualByComparingTo("0.00"); // a reversed earning is worth nothing
     }
 
     // ---- refunds the provider may already hold ----------------------------------------------------------------
@@ -695,6 +698,7 @@ class CancellationFlowTest {
         assertThat(paymentStatus(id)).isEqualTo("REFUNDED");
         assertThat(provider.calls).extracting(RecordingPaymentProvider.Call::paise).containsExactly(6708L);
         assertThat(earning(id).getStatus()).isEqualTo(EarningStatus.REVERSED);
+        assertThat(earning(id).getNet()).isEqualByComparingTo("0.00"); // a reversed earning is worth nothing
         assertThat(subjects(DRIVER_EMAIL)).containsExactly("Your booking was cancelled by the owner – ParkEase");
         assertThat(emails.lastTo(DRIVER_EMAIL).textBody())
                 .contains("Gate under repair", "Your full refund of ₹67.08 will be processed to your original payment method.");
@@ -725,6 +729,7 @@ class CancellationFlowTest {
         assertThat(jdbc.queryForObject("select attempts from refunds", Integer.class)).isEqualTo(1); // retryable
         assertThat(paymentStatus(id)).isEqualTo("CAPTURED");
         assertThat(earning(id).getStatus()).isEqualTo(EarningStatus.REVERSED);
+        assertThat(earning(id).getNet()).isEqualByComparingTo("0.00"); // a reversed earning is worth nothing
         assertThat(subjects(DRIVER_EMAIL)).containsExactly("Your booking was cancelled by the owner – ParkEase");
         assertThat(notificationTypes(DRIVER_EMAIL)).endsWith("BOOKING_CANCELLED");
     }

@@ -26,6 +26,24 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
         Instant getEndTime();
     }
 
+    /** Start time and status of a booking. */
+    interface StartAndStatus {
+        Instant getStartTime();
+
+        BookingStatus getStatus();
+    }
+
+    /** Listing, slot and time span of a booking. */
+    interface ListingSlotWindow {
+        Long getListingId();
+
+        Long getSlotId();
+
+        Instant getStartTime();
+
+        Instant getEndTime();
+    }
+
     /** Slot and time span of the listing's live bookings that overlap [start, end), in one query. */
     @Query("""
             select b.slot.id as slotId, b.startTime as startTime, b.endTime as endTime from Booking b
@@ -203,4 +221,52 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     Page<Booking> findByDriverId(Long driverId, Pageable pageable);
 
     Optional<Booking> findByIdAndListingOwnerId(Long id, Long ownerId);
+
+    // ---- owner dashboard ------------------------------------------------------------------------------------
+
+    long countByListingOwnerIdAndStatus(Long ownerId, BookingStatus status);
+
+    /** The owner's bookings in the given statuses that start after {@code after}; the page's sort picks the order. */
+    @EntityGraph(attributePaths = {"listing", "slot", "driver"})
+    Page<Booking> findByListingOwnerIdAndStatusInAndStartTimeAfter(Long ownerId, Collection<BookingStatus> statuses,
+                                                                   Instant after, Pageable pageable);
+
+    /** Start and status of the owner's bookings in the given statuses that start in [from, to). */
+    @Query("""
+            select b.startTime as startTime, b.status as status from Booking b
+            where b.listing.owner.id = :ownerId and b.status in :statuses
+              and b.startTime >= :from and b.startTime < :to
+            """)
+    List<StartAndStatus> findStartsInRange(@Param("ownerId") Long ownerId,
+                                           @Param("statuses") Collection<BookingStatus> statuses,
+                                           @Param("from") Instant from, @Param("to") Instant to);
+
+    /** Booked spans (CONFIRMED, ACTIVE, COMPLETED) of the owner's APPROVED listings overlapping [from, to). */
+    @Query("""
+            select b.listing.id as listingId, b.slot.id as slotId, b.startTime as startTime, b.endTime as endTime
+            from Booking b
+            where b.listing.owner.id = :ownerId
+              and b.listing.status = com.smartparking.listing.ListingStatus.APPROVED
+              and b.status in (com.smartparking.booking.BookingStatus.CONFIRMED,
+                               com.smartparking.booking.BookingStatus.ACTIVE,
+                               com.smartparking.booking.BookingStatus.COMPLETED)
+              and b.startTime < :to and b.endTime > :from
+            """)
+    List<ListingSlotWindow> findBookedWindows(@Param("ownerId") Long ownerId, @Param("from") Instant from,
+                                              @Param("to") Instant to);
+
+    /** Live and completed bookings of one listing overlapping [from, to), for the owner's calendar. */
+    @EntityGraph(attributePaths = {"slot", "driver"})
+    @Query("""
+            select b from Booking b
+            where b.listing.id = :listingId and b.startTime < :to and b.endTime > :from
+              and (b.status in (com.smartparking.booking.BookingStatus.AWAITING_APPROVAL,
+                                com.smartparking.booking.BookingStatus.CONFIRMED,
+                                com.smartparking.booking.BookingStatus.ACTIVE,
+                                com.smartparking.booking.BookingStatus.COMPLETED)
+                   or (b.status = com.smartparking.booking.BookingStatus.PENDING_PAYMENT and b.holdExpiresAt > :now))
+            order by b.startTime, b.id
+            """)
+    List<Booking> findForCalendar(@Param("listingId") Long listingId, @Param("from") Instant from,
+                                  @Param("to") Instant to, @Param("now") Instant now);
 }

@@ -207,7 +207,7 @@ public class RefundService {
 
     /**
      * Follows the refunds owed on the payment (failed attempts count: the money is still owed and will be retried) in
-     * the owner's earning. Everything refunded reverses it. Otherwise the refund comes out of the base amount (fees
+     * the owner's earning. Everything refunded reverses it (net becomes zero). Otherwise the refund comes out of the base amount (fees
      * are never refunded in part), so {@code net = gross - refundedBase}; the commission stays, and the earning is
      * reversed once nothing is left of the net. Paid-out earnings are left alone.
      */
@@ -221,6 +221,7 @@ public class RefundService {
                     .map(Refund::getAmount)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             if (owed.compareTo(payment.getAmount()) >= 0) {
+                earning.setNet(BigDecimal.ZERO.setScale(2)); // a reversed earning is worth nothing
                 earning.setStatus(EarningStatus.REVERSED);
                 return;
             }
