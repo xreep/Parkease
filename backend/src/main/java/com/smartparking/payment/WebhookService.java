@@ -143,7 +143,16 @@ public class WebhookService {
             log.warn("Ignoring payment.captured for unknown order {}", orderId);
             return IGNORED;
         }
-        paymentService.confirmPayment(orderId, paymentId, payment.optString("method", null), BookingActor.SYSTEM);
+        try {
+            paymentService.confirmWithProvider(orderId, paymentId, payment.optString("method", null),
+                    BookingActor.SYSTEM);
+        } catch (ApiException e) {
+            if (!"PAYMENT_VERIFICATION_FAILED".equals(e.getCode())) {
+                throw e; // e.g. the provider was unreachable: let Razorpay deliver the event again
+            }
+            // Redelivering will not make a mismatching payment match, so acknowledge it (already logged as an error).
+            return IGNORED;
+        }
         return OK;
     }
 

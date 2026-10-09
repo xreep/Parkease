@@ -1,10 +1,13 @@
 package com.smartparking.booking;
 
 import com.smartparking.payment.Payment;
+import com.smartparking.payment.PaymentProviderType;
 import com.smartparking.payment.PaymentRepository;
+import com.smartparking.payment.PaymentService;
 import com.smartparking.payment.PaymentStatus;
 import com.smartparking.payment.RefundService;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -31,6 +34,10 @@ public class BookingJobs {
     /** Bookings handled per run; the next run picks up the rest. */
     private static final int BATCH = 200;
 
+    /** Orders asked about per reconciliation run (each is a Razorpay API call) and how far back they may reach. */
+    private static final int RECONCILE_BATCH = 100;
+    private static final Duration RECONCILE_WINDOW = Duration.ofHours(24);
+
     static final String EXPIRED_NOTE = "Payment window expired";
     static final String HOLD_EXPIRED_REASON = "Hold expired";
 
@@ -40,11 +47,14 @@ public class BookingJobs {
     private final BookingEvents events;
     private final OwnerBookingService ownerBookings;
     private final RefundService refunds;
+    private final PaymentService paymentService;
+    private final BookingEventRepository eventRows;
     private final Clock clock;
     private final TransactionTemplate tx;
 
     public BookingJobs(BookingRepository bookings, PaymentRepository payments, BookingLocks locks,
-                       BookingEvents events, OwnerBookingService ownerBookings, RefundService refunds, Clock clock,
+                       BookingEvents events, OwnerBookingService ownerBookings, RefundService refunds,
+                       PaymentService paymentService, BookingEventRepository eventRows, Clock clock,
                        PlatformTransactionManager txManager) {
         this.bookings = bookings;
         this.payments = payments;
@@ -52,6 +62,8 @@ public class BookingJobs {
         this.events = events;
         this.ownerBookings = ownerBookings;
         this.refunds = refunds;
+        this.paymentService = paymentService;
+        this.eventRows = eventRows;
         this.clock = clock;
         this.tx = new TransactionTemplate(txManager);
     }
@@ -64,7 +76,8 @@ public class BookingJobs {
     public void expireHolds() {
         Instant now = clock.instant();
         List<Long> ids = new ArrayList<>(tx.execute(s -> bookings.findLapsedHoldIds(now, Limit.of(BATCH))));
-        ids.addAll(tx.execute(s -> payments.findExpiredBookingIdsWithPaymentIn(PaymentStatus.CREATED, Limit.of(BATCH))));
+        ids.addAll(tx.execute(s -> payments.findExpiredBookingIdsWithoutExpiredEvent(
+                List.of(PaymentStatus.CREATED, PaymentStatus.FAILED), Limit.of(BATCH))));
         int expired = 0;
         for (Long id : ids) {
             try {
@@ -85,8 +98,11 @@ public class BookingJobs {
         Payment payment = payments.findByBookingId(id).orElse(null);
         boolean lapsedHold = booking.getStatus() == BookingStatus.PENDING_PAYMENT
                 && booking.getHoldExpiresAt() != null && !booking.getHoldExpiresAt().isAfter(now);
+        // Expired in bulk by the slot allocator (no history entry yet); its payment is open or already failed.
         boolean alreadyExpired = booking.getStatus() == BookingStatus.EXPIRED
-                && payment != null && payment.getStatus() == PaymentStatus.CREATED;
+                && payment != null && (payment.getStatus() == PaymentStatus.CREATED
+                || payment.getStatus() == PaymentStatus.FAILED)
+                && !eventRows.existsByBookingIdAndToStatus(id, BookingStatus.EXPIRED);
         if (!lapsedHold && !alreadyExpired) {
             return false;
         }
@@ -133,6 +149,31 @@ public class BookingJobs {
         }
         if (succeeded > 0) {
             log.info("Retried and completed {} failed refunds", succeeded);
+        }
+    }
+
+
+    /**
+     * Picks up payments that were taken at Razorpay but never confirmed here (the browser closed before the verify
+     * call and the webhook was missed or is not configured): for every unconfirmed Razorpay order of the last 24
+     * hours whose booking is still waiting (or only just lapsed) it asks the provider and confirms what was captured.
+     */
+    @Scheduled(fixedDelay = 300_000)
+    public void reconcileLostPayments() {
+        Instant since = clock.instant().minus(RECONCILE_WINDOW);
+        List<String> orderIds = tx.execute(s -> payments.findOrderIdsToReconcile(PaymentProviderType.RAZORPAY,
+                List.of(PaymentStatus.CREATED, PaymentStatus.FAILED),
+                List.of(BookingStatus.PENDING_PAYMENT, BookingStatus.EXPIRED), since, Limit.of(RECONCILE_BATCH)));
+        int recovered = 0;
+        for (String orderId : orderIds) {
+            try {
+                recovered += paymentService.reconcileOrder(orderId);
+            } catch (RuntimeException e) {
+                log.error("Could not reconcile order {}", orderId, e);
+            }
+        }
+        if (recovered > 0) {
+            log.warn("Reconciliation recovered {} payments that had not been confirmed", recovered);
         }
     }
 }

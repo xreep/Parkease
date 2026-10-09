@@ -132,8 +132,80 @@ public class PaymentService {
                 || !provider.verifyPayment(request.orderId(), request.paymentId(), request.signature())) {
             throw verificationFailed();
         }
-        Long bookingId = confirmPayment(request.orderId(), request.paymentId(), null, BookingActor.DRIVER);
+        Long bookingId = confirmWithProvider(request.orderId(), request.paymentId(), null, BookingActor.DRIVER);
         return tx.execute(s -> mapper.toDetail(bookings.findById(bookingId).orElseThrow()));
+    }
+
+    /** What the payment row says the provider must have charged. */
+    private record Expected(BigDecimal amount, String currency, boolean alreadyConfirmed) {
+    }
+
+    /**
+     * Confirms a payment the caller was told about (checkout callback, webhook) only after asking the provider for
+     * it: the payment must belong to this order, be for exactly the order amount in its currency, and be captured
+     * (an authorized one is captured first). Anything else is {@code PAYMENT_VERIFICATION_FAILED}. A payment that is
+     * already confirmed is not asked about again. The provider calls are network calls, so this must run outside
+     * transactions. {@code fallbackMethod} is used only if the provider does not report the payment method.
+     */
+    public Long confirmWithProvider(String orderId, String paymentId, String fallbackMethod, BookingActor actor) {
+        Expected expected = expectedFor(orderId, paymentId);
+        if (expected.alreadyConfirmed()) {
+            return confirmPayment(orderId, paymentId, fallbackMethod, actor);
+        }
+        return confirmFetched(orderId, expected, provider.fetchPayment(paymentId), fallbackMethod, actor);
+    }
+
+    private Expected expectedFor(String orderId, String paymentId) {
+        return tx.execute(s -> {
+            Payment payment = payments.findByOrderId(orderId).orElseThrow(() -> ApiException.notFound("Payment not found"));
+            boolean confirmed = paymentId.equals(payment.getPaymentId()) && payment.getStatus() != PaymentStatus.CREATED
+                    && payment.getStatus() != PaymentStatus.FAILED;
+            return new Expected(payment.getAmount(), payment.getCurrency(), confirmed);
+        });
+    }
+
+    private Long confirmFetched(String orderId, Expected expected, ProviderPayment fetched, String fallbackMethod,
+                                BookingActor actor) {
+        boolean sameOrder = fetched.orderId() == null || orderId.equals(fetched.orderId());
+        boolean sameAmount = fetched.amountPaise() == null || fetched.amountPaise() == RefundService.toPaise(expected.amount());
+        boolean sameCurrency = fetched.currency() == null || expected.currency().equals(fetched.currency());
+        if (!sameOrder || !sameAmount || !sameCurrency) {
+            log.error("Payment {} does not match order {} (provider says order {}, {} {}; expected {} {} paise)",
+                    fetched.paymentId(), orderId, fetched.orderId(), fetched.amountPaise(), fetched.currency(),
+                    RefundService.toPaise(expected.amount()), expected.currency());
+            throw verificationFailed();
+        }
+        if (ProviderPayment.AUTHORIZED.equals(fetched.status())) {
+            provider.capture(fetched.paymentId(), RefundService.toPaise(expected.amount()), expected.currency());
+        } else if (!ProviderPayment.CAPTURED.equals(fetched.status())) {
+            log.warn("Payment {} of order {} is '{}' at the provider, not captured", fetched.paymentId(), orderId,
+                    fetched.status());
+            throw verificationFailed();
+        }
+        String method = fetched.method() != null ? fetched.method() : fallbackMethod;
+        return confirmPayment(orderId, fetched.paymentId(), method, actor);
+    }
+
+    /**
+     * Asks the provider what happened to an order whose confirmation never reached us and confirms every captured
+     * payment it has (an extra captured payment on an already-paid order is refunded). Returns how many captured
+     * payments were applied. A network call plus the usual confirmation transactions: call it outside a transaction.
+     */
+    public int reconcileOrder(String orderId) {
+        int applied = 0;
+        for (ProviderPayment found : provider.fetchOrderPayments(orderId)) {
+            if (!ProviderPayment.CAPTURED.equals(found.status())) {
+                continue;
+            }
+            try {
+                confirmFetched(orderId, expectedFor(orderId, found.paymentId()), found, null, BookingActor.SYSTEM);
+                applied++;
+            } catch (ApiException e) {
+                log.error("Order {}: provider payment {} could not be applied: {}", orderId, found.paymentId(),
+                        e.getMessage());
+            }
+        }
+        return applied;
     }
 
     private ApiException verificationFailed() {
@@ -227,8 +299,7 @@ public class PaymentService {
                 }
             }
             default -> {
-                log.warn("Payment {} captured for booking {} in status {}; leaving the booking unchanged",
-                        paymentId, booking.getBookingCode(), from);
+                refundUnpayable(booking, payment, from);
                 return bookingId;
             }
         }
@@ -247,9 +318,34 @@ public class PaymentService {
         booking.setCancelledBy(BookingActor.SYSTEM);
         booking.setCancelReason(reason);
         events.record(booking, from, BookingStatus.CANCELLED, BookingActor.SYSTEM, reason);
-        Refund refund = refunds.refundFull(payment, reason);
+        Refund refund = refunds.refundAndNote(booking, payment, BookingActor.SYSTEM, reason);
         log.warn("Late payment for booking {} (via {}): {}; refund {} is {}", booking.getBookingCode(), actor, reason,
                 refund.getProviderRefundId(), refund.getStatus());
+        queueRefundEmail(booking, refund);
+    }
+
+    /**
+     * A capture arrived for a booking that cannot be paid any more (cancelled, rejected, completed, ...): the money
+     * is recorded as captured and handed straight back, and the booking is left exactly as it was.
+     */
+    private void refundUnpayable(Booking booking, Payment payment, BookingStatus status) {
+        String reason = "Booking no longer payable (" + status + ")";
+        log.warn("Payment {} captured for booking {} in status {}; refunding it in full",
+                payment.getPaymentId(), booking.getBookingCode(), status);
+        events.record(booking, status, status, BookingActor.SYSTEM,
+                "Payment received but the booking is no longer payable (" + status + ")");
+        Refund refund = refunds.refundAndNote(booking, payment, BookingActor.SYSTEM, reason);
+        queueRefundEmail(booking, refund);
+    }
+
+    /** Tells the driver their money is on its way back (not when the provider refused: the retry job handles it). */
+    private void queueRefundEmail(Booking booking, Refund refund) {
+        if (refund.getStatus() == RefundStatus.FAILED) {
+            return;
+        }
+        EmailMessage message = EmailTemplates.paymentRefunded(booking.getDriver(), booking,
+                app.frontendUrl() + "/driver/bookings/" + booking.getId());
+        AfterCommit.run(() -> emailSender.send(message));
     }
 
     private void saveEarning(Booking booking, ParkingListing listing) {

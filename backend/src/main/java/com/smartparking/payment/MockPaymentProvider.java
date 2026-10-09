@@ -5,6 +5,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -41,6 +42,22 @@ public class MockPaymentProvider implements PaymentProvider {
     /** The signature a genuine checkout would return; used by the mock pay endpoint and tests. */
     public String signForTesting(String orderId, String paymentId) {
         return Signatures.hmacSha256Hex(secret, orderId + "|" + paymentId);
+    }
+
+    /** The mock checkout is verified by its signature alone, so there is nothing more to learn about the payment. */
+    @Override
+    public ProviderPayment fetchPayment(String paymentId) {
+        return ProviderPayment.assumedCaptured(paymentId);
+    }
+
+    @Override
+    public void capture(String paymentId, long amountPaise, String currency) {
+        // Mock payments are captured from the start.
+    }
+
+    @Override
+    public List<ProviderPayment> fetchOrderPayments(String orderId) {
+        return List.of();
     }
 
     @Override

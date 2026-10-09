@@ -3,6 +3,7 @@ package com.smartparking.payment;
 import com.razorpay.RazorpayClient;
 import com.razorpay.RazorpayException;
 import com.smartparking.common.error.ApiException;
+import java.util.List;
 import java.util.Map;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -61,6 +62,44 @@ public class RazorpayPaymentProvider implements PaymentProvider {
     }
 
     @Override
+    public ProviderPayment fetchPayment(String paymentId) {
+        try {
+            return toProviderPayment(client.payments.fetch(paymentId).toJson());
+        } catch (RazorpayException | JSONException e) {
+            throw providerError("fetch payment", e);
+        }
+    }
+
+    @Override
+    public void capture(String paymentId, long amountPaise, String currency) {
+        try {
+            client.payments.capture(paymentId, new JSONObject().put("amount", amountPaise).put("currency", currency));
+        } catch (RazorpayException | JSONException e) {
+            throw providerError("capture payment", e);
+        }
+    }
+
+    @Override
+    public List<ProviderPayment> fetchOrderPayments(String orderId) {
+        try {
+            return client.orders.fetchPayments(orderId).stream().map(p -> toProviderPayment(p.toJson())).toList();
+        } catch (RazorpayException | JSONException e) {
+            throw providerError("fetch the payments of an order", e);
+        }
+    }
+
+    static ProviderPayment toProviderPayment(JSONObject payment) {
+        return new ProviderPayment(payment.getString("id"), payment.getString("status"),
+                optText(payment, "order_id"), payment.getLong("amount"), payment.getString("currency"),
+                optText(payment, "method"));
+    }
+
+    /** The text of a field, or null when it is missing or JSON null (org.json would answer "null"). */
+    private static String optText(JSONObject json, String key) {
+        return json.isNull(key) ? null : json.optString(key, null);
+    }
+
+    @Override
     public ProviderRefund refund(String paymentId, long amountPaise, String reason) {
         try {
             JSONObject request = new JSONObject()
@@ -84,7 +123,7 @@ public class RazorpayPaymentProvider implements PaymentProvider {
     }
 
     private static ApiException providerError(String action, Exception e) {
-        log.error("Razorpay failed to {}: {}", action, e.getMessage());
+        log.error("Razorpay failed to {}", action, e);
         return new ApiException(HttpStatus.BAD_GATEWAY, "PAYMENT_PROVIDER_ERROR",
                 "Payment provider is unavailable. Please try again.");
     }

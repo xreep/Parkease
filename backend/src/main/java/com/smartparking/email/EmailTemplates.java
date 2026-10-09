@@ -66,14 +66,14 @@ public final class EmailTemplates {
 
     public static EmailMessage newBookingForOwner(User owner, Booking booking, String link) {
         return build(owner, "New booking – ParkEase",
-                "You have a new confirmed booking.\n\n" + details(booking), "View bookings", link);
+                "You have a new confirmed booking.\n\n" + ownerDetails(booking), "View bookings", link);
     }
 
     public static EmailMessage bookingApprovalNeeded(User owner, Booking booking, String link) {
         return build(owner, "Approve a booking request – ParkEase",
                 "A driver has paid for a booking and is waiting for your approval. Please respond by "
                         + formatTime(booking.getApprovalDeadline()) + ", otherwise the request is declined "
-                        + "automatically and the driver is refunded.\n\n" + details(booking),
+                        + "automatically and the driver is refunded.\n\n" + ownerDetails(booking),
                 "Review request", link);
     }
 
@@ -99,11 +99,27 @@ public final class EmailTemplates {
                 "View booking", link);
     }
 
+    /** Sent when a payment could not be turned into a booking (slot gone, hold lapsed, booking no longer payable). */
+    public static EmailMessage paymentRefunded(User driver, Booking booking, String link) {
+        return build(driver, "Payment refunded – ParkEase",
+                "We couldn't hold your slot, so your payment of ₹" + booking.getTotalAmount().toPlainString()
+                        + " has been refunded in full.\n\n" + details(booking),
+                "View booking", link);
+    }
+
     private static String details(Booking b) {
+        return bookingLines(b) + "\nTotal: ₹" + b.getTotalAmount().toPlainString();
+    }
+
+    /** Owners see what they earn, not what the driver pays (which includes the platform fee and GST). */
+    private static String ownerDetails(Booking b) {
+        return bookingLines(b) + "\nYou earn ₹" + b.getBaseAmount().toPlainString();
+    }
+
+    private static String bookingLines(Booking b) {
         return "Booking " + b.getBookingCode() + "\n"
                 + b.getListing().getTitle() + ", slot " + b.getSlot().getLabel() + "\n"
-                + formatTime(b.getStartTime()) + " to " + formatTime(b.getEndTime()) + " (IST)\n"
-                + "Total: ₹" + b.getTotalAmount().toPlainString();
+                + formatTime(b.getStartTime()) + " to " + formatTime(b.getEndTime()) + " (IST)";
     }
 
     private static String formatTime(Instant time) {

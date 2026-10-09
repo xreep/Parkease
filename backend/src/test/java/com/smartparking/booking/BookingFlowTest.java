@@ -157,6 +157,9 @@ class BookingFlowTest {
                 .containsExactly("Booking confirmed – ParkEase");
         assertThat(emails.sentTo(OWNER_EMAIL)).extracting(EmailMessage::subject)
                 .containsExactly("New booking – ParkEase");
+        // The owner sees what they earn (the base amount), not what the driver pays.
+        assertThat(emails.lastTo(OWNER_EMAIL).textBody()).contains("You earn ₹60.00")
+                .doesNotContain("Total:").doesNotContain("67.08");
         String driverText = emails.lastTo(DRIVER_EMAIL).textBody();
         assertThat(driverText).contains((String) JsonPath.read(paid, "$.bookingCode"), "Booking Spot", "A-01", "67.08",
                 "/driver/bookings/" + id);
@@ -209,7 +212,8 @@ class BookingFlowTest {
                 .containsExactly("Booking request sent – ParkEase");
         assertThat(emails.sentTo(OWNER_EMAIL)).extracting(EmailMessage::subject)
                 .containsExactly("Approve a booking request – ParkEase");
-        assertThat(emails.lastTo(OWNER_EMAIL).textBody()).contains("/owner/bookings");
+        assertThat(emails.lastTo(OWNER_EMAIL).textBody()).contains("/owner/bookings", "You earn ₹30.00")
+                .doesNotContain("Total:");
         assertThat(earnings.findByBookingId(id)).isPresent();
     }
 
@@ -384,6 +388,13 @@ class BookingFlowTest {
         assertThat((BigDecimal) refund.get("amount")).isEqualByComparingTo("67.08");
         assertThat(count("select count(*) from invoices")).isZero();
         assertThat(count("select count(*) from owner_earnings")).isZero();
+        assertThat(emails.sentTo(DRIVER_EMAIL)).extracting(EmailMessage::subject)
+                .containsExactly("Payment refunded – ParkEase");
+        assertThat(emails.lastTo(DRIVER_EMAIL).textBody()).contains(
+                "We couldn't hold your slot, so your payment of ₹67.08 has been refunded in full.");
+        assertThat(emails.sentTo(OWNER_EMAIL)).isEmpty();
+        assertThat(jdbc.queryForList("select note from booking_events where booking_id = ? order by id", String.class, id))
+                .contains("Slot was taken before the payment arrived", "Refund of ₹67.08 issued");
         // The other driver's hold is untouched.
         assertThat(count("select count(*) from bookings where status = 'PENDING_PAYMENT'")).isEqualTo(1);
     }
