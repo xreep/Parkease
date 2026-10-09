@@ -19,6 +19,8 @@ import com.smartparking.availability.AvailabilityBlock;
 import com.smartparking.availability.AvailabilityBlockRepository;
 import com.smartparking.availability.AvailabilityRule;
 import com.smartparking.availability.AvailabilityRuleRepository;
+import com.smartparking.booking.BookingRepository;
+import com.smartparking.booking.BookingStatus;
 import com.smartparking.listing.Amenity;
 import com.smartparking.listing.ListingType;
 import com.smartparking.listing.ParkingListing;
@@ -27,7 +29,10 @@ import com.smartparking.location.CityRepository;
 import com.smartparking.owner.OwnerProfileRepository;
 import com.smartparking.slot.ParkingSlot;
 import com.smartparking.slot.ParkingSlotRepository;
+import com.smartparking.support.BookingTestSupport;
 import com.smartparking.support.IntegrationTest;
+import com.smartparking.support.TestUsers;
+import com.smartparking.user.Role;
 import com.smartparking.user.UserRepository;
 import java.math.BigDecimal;
 import java.time.DayOfWeek;
@@ -59,6 +64,7 @@ class SearchControllerTest {
     @Autowired ParkingSlotRepository slots;
     @Autowired AvailabilityRuleRepository rules;
     @Autowired AvailabilityBlockRepository blocks;
+    @Autowired BookingRepository bookings;
 
     String auth;
     Long pune;
@@ -217,6 +223,46 @@ class SearchControllerTest {
         second.setStartTime(start);
         second.setEndTime(end);
         blocks.saveAndFlush(second);
+        search(instants(start, end)).andExpect(jsonPath("$.content").value(empty()));
+    }
+
+    @Test
+    void liveBookingRemovesListingFromWindowedResultsOnly() throws Exception {
+        Long a = listing("Booked spot", 1, 30);
+        Long b = listing("Free spot", 2, 30);
+        var driver = users.save(TestUsers.newUser("search-driver@example.com", Role.DRIVER));
+        ParkingSlot slot = slots.findByListingIdOrderByLabelAsc(a).get(0);
+        LocalDate day = nextDay(DayOfWeek.MONDAY);
+        Instant start = istInstant(day, 10);
+        Instant end = istInstant(day, 13);
+        bookings.saveAndFlush(BookingTestSupport.booking(driver, listings.getReferenceById(a), slot,
+                BookingStatus.CONFIRMED, istInstant(day, 11), istInstant(day, 12)));
+
+        search(instants(start, end))
+                .andExpect(jsonPath("$.content[*].id").value(contains(b.intValue())));
+        // A window that only touches the booking still finds both.
+        search(instants(istInstant(day, 12), istInstant(day, 14)))
+                .andExpect(jsonPath("$.content[*].id").value(contains(a.intValue(), b.intValue())));
+        // Without a window the listing remains visible.
+        search("").andExpect(jsonPath("$.content[*].id").value(contains(a.intValue(), b.intValue())));
+    }
+
+    @Test
+    void expiredUnpaidHoldDoesNotBlockSearch() throws Exception {
+        Long a = listing("Held spot", 1, 30);
+        var driver = users.save(TestUsers.newUser("search-driver2@example.com", Role.DRIVER));
+        ParkingSlot slot = slots.findByListingIdOrderByLabelAsc(a).get(0);
+        LocalDate day = nextDay(DayOfWeek.MONDAY);
+        Instant start = istInstant(day, 10);
+        Instant end = istInstant(day, 13);
+        var hold = BookingTestSupport.booking(driver, listings.getReferenceById(a), slot,
+                BookingStatus.PENDING_PAYMENT, start, end);
+        hold.setHoldExpiresAt(Instant.now().minusSeconds(60));
+        bookings.saveAndFlush(hold);
+        search(instants(start, end)).andExpect(jsonPath("$.content[*].id").value(contains(a.intValue())));
+
+        hold.setHoldExpiresAt(Instant.now().plusSeconds(600));
+        bookings.saveAndFlush(hold);
         search(instants(start, end)).andExpect(jsonPath("$.content").value(empty()));
     }
 

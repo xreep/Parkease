@@ -14,6 +14,7 @@ import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -73,7 +74,7 @@ class AvailabilityEvaluatorTest {
         var in = input(true, List.of(), List.of(slot(VehicleType.FOUR_WHEELER, true), slot(VehicleType.FOUR_WHEELER, true)),
                 List.of());
         Result r = evaluator.evaluate(in, window(), VehicleType.FOUR_WHEELER);
-        assertThat(r).isEqualTo(new Result(true, null, 2, 2));
+        assertThat(r).usingRecursiveComparison().ignoringFields("freeSlotIds").isEqualTo(new Result(true, null, 2, 2));
     }
 
     @Test
@@ -87,13 +88,13 @@ class AvailabilityEvaluatorTest {
         // 21:00-23:00 IST = 15:30-17:30Z
         TimeWindow late = TimeWindow.of(Instant.parse("2026-10-06T15:30:00Z"), Instant.parse("2026-10-06T17:30:00Z"), clock);
         var in = input(false, monToSat("08:00", "22:00"), List.of(slot(VehicleType.FOUR_WHEELER, true)), List.of());
-        assertThat(evaluator.evaluate(in, late, null)).isEqualTo(new Result(false, "CLOSED", 0, 1));
+        assertThat(evaluator.evaluate(in, late, null)).usingRecursiveComparison().ignoringFields("freeSlotIds").isEqualTo(new Result(false, "CLOSED", 0, 1));
     }
 
     @Test
     void closedWhenNoRuleForThatDay() {
         var in = input(false, List.of(rule(7, "09:00", "21:00")), List.of(slot(VehicleType.FOUR_WHEELER, true)), List.of());
-        assertThat(evaluator.evaluate(in, window(), null)).isEqualTo(new Result(false, "CLOSED", 0, 1));
+        assertThat(evaluator.evaluate(in, window(), null)).usingRecursiveComparison().ignoringFields("freeSlotIds").isEqualTo(new Result(false, "CLOSED", 0, 1));
     }
 
     @Test
@@ -117,14 +118,14 @@ class AvailabilityEvaluatorTest {
         // 11:00-11:30 IST = 05:30-06:00Z
         var in = input(true, List.of(), List.of(slot(VehicleType.FOUR_WHEELER, true)),
                 List.of(block(null, "2026-10-06T05:30:00Z", "2026-10-06T06:00:00Z")));
-        assertThat(evaluator.evaluate(in, window(), null)).isEqualTo(new Result(false, "BLOCKED", 0, 1));
+        assertThat(evaluator.evaluate(in, window(), null)).usingRecursiveComparison().ignoringFields("freeSlotIds").isEqualTo(new Result(false, "BLOCKED", 0, 1));
     }
 
     @Test
     void blockEndingExactlyAtWindowStartDoesNotOverlap() {
         var in = input(true, List.of(), List.of(slot(VehicleType.FOUR_WHEELER, true)),
                 List.of(block(null, "2026-10-06T03:30:00Z", "2026-10-06T04:30:00Z")));
-        assertThat(evaluator.evaluate(in, window(), null)).isEqualTo(new Result(true, null, 1, 1));
+        assertThat(evaluator.evaluate(in, window(), null)).usingRecursiveComparison().ignoringFields("freeSlotIds").isEqualTo(new Result(true, null, 1, 1));
     }
 
     @Test
@@ -132,25 +133,25 @@ class AvailabilityEvaluatorTest {
         ParkingSlot a = slot(VehicleType.FOUR_WHEELER, true);
         ParkingSlot b = slot(VehicleType.FOUR_WHEELER, true);
         var one = input(true, List.of(), List.of(a, b), List.of(block(a, "2026-10-06T05:00:00Z", "2026-10-06T07:00:00Z")));
-        assertThat(evaluator.evaluate(one, window(), null)).isEqualTo(new Result(true, null, 1, 2));
+        assertThat(evaluator.evaluate(one, window(), null)).usingRecursiveComparison().ignoringFields("freeSlotIds").isEqualTo(new Result(true, null, 1, 2));
 
         var both = input(true, List.of(), List.of(a, b), List.of(
                 block(a, "2026-10-06T05:00:00Z", "2026-10-06T07:00:00Z"),
                 block(b, "2026-10-06T04:00:00Z", "2026-10-06T05:30:00Z")));
-        assertThat(evaluator.evaluate(both, window(), null)).isEqualTo(new Result(false, "FULLY_BOOKED", 0, 2));
+        assertThat(evaluator.evaluate(both, window(), null)).usingRecursiveComparison().ignoringFields("freeSlotIds").isEqualTo(new Result(false, "FULLY_BOOKED", 0, 2));
     }
 
     @Test
     void noMatchingVehicleSlots() {
         var in = input(true, List.of(), List.of(slot(VehicleType.FOUR_WHEELER, true)), List.of());
-        assertThat(evaluator.evaluate(in, window(), VehicleType.TWO_WHEELER)).isEqualTo(new Result(false, "NO_VEHICLE_SLOTS", 0, 0));
+        assertThat(evaluator.evaluate(in, window(), VehicleType.TWO_WHEELER)).usingRecursiveComparison().ignoringFields("freeSlotIds").isEqualTo(new Result(false, "NO_VEHICLE_SLOTS", 0, 0));
     }
 
     @Test
     void inactiveSlotsAreIgnored() {
         var in = input(true, List.of(), List.of(slot(VehicleType.FOUR_WHEELER, false), slot(VehicleType.FOUR_WHEELER, true)),
                 List.of());
-        assertThat(evaluator.evaluate(in, window(), null)).isEqualTo(new Result(true, null, 1, 1));
+        assertThat(evaluator.evaluate(in, window(), null)).usingRecursiveComparison().ignoringFields("freeSlotIds").isEqualTo(new Result(true, null, 1, 1));
         var allInactive = input(true, List.of(), List.of(slot(VehicleType.FOUR_WHEELER, false)), List.of());
         assertThat(evaluator.evaluate(allInactive, window(), null).reason()).isEqualTo("NO_VEHICLE_SLOTS");
     }
@@ -159,8 +160,8 @@ class AvailabilityEvaluatorTest {
     void nullVehicleTypeCountsAllActiveSlots() {
         var in = input(true, List.of(), List.of(slot(VehicleType.TWO_WHEELER, true), slot(VehicleType.FOUR_WHEELER, true)),
                 List.of());
-        assertThat(evaluator.evaluate(in, window(), null)).isEqualTo(new Result(true, null, 2, 2));
-        assertThat(evaluator.evaluate(in, window(), VehicleType.TWO_WHEELER)).isEqualTo(new Result(true, null, 1, 1));
+        assertThat(evaluator.evaluate(in, window(), null)).usingRecursiveComparison().ignoringFields("freeSlotIds").isEqualTo(new Result(true, null, 2, 2));
+        assertThat(evaluator.evaluate(in, window(), VehicleType.TWO_WHEELER)).usingRecursiveComparison().ignoringFields("freeSlotIds").isEqualTo(new Result(true, null, 1, 1));
     }
 
     @Test
@@ -174,14 +175,14 @@ class AvailabilityEvaluatorTest {
     void noVehicleSlotsTakesPrecedenceOverClosed() {
         var in = input(false, List.of(), List.of(slot(VehicleType.FOUR_WHEELER, true)), List.of());
         assertThat(evaluator.evaluate(in, window(), VehicleType.TWO_WHEELER))
-                .isEqualTo(new Result(false, "NO_VEHICLE_SLOTS", 0, 0));
+                .usingRecursiveComparison().ignoringFields("freeSlotIds").isEqualTo(new Result(false, "NO_VEHICLE_SLOTS", 0, 0));
     }
 
     @Test
     void closedTakesPrecedenceOverWholeListingBlock() {
         var in = input(false, List.of(), List.of(slot(VehicleType.FOUR_WHEELER, true)),
                 List.of(block(null, "2026-10-06T05:30:00Z", "2026-10-06T06:00:00Z")));
-        assertThat(evaluator.evaluate(in, window(), null)).isEqualTo(new Result(false, "CLOSED", 0, 1));
+        assertThat(evaluator.evaluate(in, window(), null)).usingRecursiveComparison().ignoringFields("freeSlotIds").isEqualTo(new Result(false, "CLOSED", 0, 1));
     }
 
     @Test
@@ -190,5 +191,93 @@ class AvailabilityEvaluatorTest {
         TimeWindow earlyTuesday = TimeWindow.of(Instant.parse("2026-10-05T19:30:00Z"), Instant.parse("2026-10-05T21:30:00Z"), clock);
         assertThat(evaluator.isOpen(false, List.of(rule(2, "00:00", "06:00")), earlyTuesday)).isTrue();
         assertThat(evaluator.isOpen(false, List.of(rule(1, "00:00", "06:00")), earlyTuesday)).isFalse();
+    }
+
+    private ListingAvailabilityInput booked(List<ParkingSlot> slots, Set<Long> bookedIds) {
+        return new ListingAvailabilityInput(true, List.of(), slots, List.of(), bookedIds);
+    }
+
+    @Test
+    void bookingOnOneOfTwoSlotsLeavesTheOtherFree() {
+        ParkingSlot a = slot(VehicleType.FOUR_WHEELER, true);
+        ParkingSlot b = slot(VehicleType.FOUR_WHEELER, true);
+        Result r = evaluator.evaluate(booked(List.of(a, b), Set.of(a.getId())), window(), null);
+        assertThat(r.available()).isTrue();
+        assertThat(r.freeSlots()).isEqualTo(1);
+        assertThat(r.totalSlots()).isEqualTo(2);
+        assertThat(r.freeSlotIds()).containsExactly(b.getId());
+    }
+
+    @Test
+    void allSlotsBookedIsFullyBooked() {
+        ParkingSlot a = slot(VehicleType.FOUR_WHEELER, true);
+        ParkingSlot b = slot(VehicleType.FOUR_WHEELER, true);
+        Result r = evaluator.evaluate(booked(List.of(a, b), Set.of(a.getId(), b.getId())), window(), null);
+        assertThat(r).isEqualTo(new Result(false, "FULLY_BOOKED", 0, 2, List.of()));
+    }
+
+    @Test
+    void blockedAndBookedSlotsCombineToFullyBooked() {
+        ParkingSlot a = slot(VehicleType.FOUR_WHEELER, true);
+        ParkingSlot b = slot(VehicleType.FOUR_WHEELER, true);
+        var in = new ListingAvailabilityInput(true, List.of(), List.of(a, b),
+                List.of(block(a, "2026-10-06T05:00:00Z", "2026-10-06T07:00:00Z")), Set.of(b.getId()));
+        assertThat(evaluator.evaluate(in, window(), null).reason()).isEqualTo("FULLY_BOOKED");
+    }
+
+    @Test
+    void freeSlotIdsAreOrderedByLabelAndIgnoreOtherVehicleTypes() {
+        ParkingSlot z = slot(VehicleType.FOUR_WHEELER, true);
+        z.setLabel("Z-1");
+        ParkingSlot a = slot(VehicleType.FOUR_WHEELER, true);
+        a.setLabel("A-1");
+        ParkingSlot bike = slot(VehicleType.TWO_WHEELER, true);
+        bike.setLabel("0-bike");
+        Result r = evaluator.evaluate(booked(List.of(z, a, bike), Set.of()), window(), VehicleType.FOUR_WHEELER);
+        assertThat(r.freeSlotIds()).containsExactly(a.getId(), z.getId());
+    }
+
+    private List<AvailabilityRule> everyDay(String open, String close) {
+        List<AvailabilityRule> rules = new ArrayList<>();
+        for (int d = 1; d <= 7; d++) {
+            rules.add(rule(d, open, close));
+        }
+        return rules;
+    }
+
+    /** Tue 2026-10-06 21:00 IST to the given instant. */
+    private TimeWindow eveningTo(String endUtc) {
+        return TimeWindow.of(Instant.parse("2026-10-06T15:30:00Z"), Instant.parse(endUtc), clock);
+    }
+
+    @Test
+    void windowEndingAtMidnightIsOpenWhenRuleRunsTo2359() {
+        // 21:00 IST -> 00:00 IST next day (18:30Z)
+        TimeWindow w = eveningTo("2026-10-06T18:30:00Z");
+        assertThat(evaluator.isOpen(false, everyDay("08:00", "23:59"), w)).isTrue();
+        var in = input(false, everyDay("08:00", "23:59"), List.of(slot(VehicleType.FOUR_WHEELER, true)), List.of());
+        assertThat(evaluator.evaluate(in, w, null).available()).isTrue();
+    }
+
+    @Test
+    void windowEndingAtMidnightIsClosedWhenRuleClosesEarlier() {
+        TimeWindow w = eveningTo("2026-10-06T18:30:00Z");
+        assertThat(evaluator.isOpen(false, everyDay("08:00", "22:00"), w)).isFalse();
+        var in = input(false, everyDay("08:00", "22:00"), List.of(slot(VehicleType.FOUR_WHEELER, true)), List.of());
+        assertThat(evaluator.evaluate(in, w, null).reason()).isEqualTo("CLOSED");
+    }
+
+    @Test
+    void windowEndingPastMidnightIsClosed() {
+        // 21:00 IST -> 00:15 IST next day
+        TimeWindow w = eveningTo("2026-10-06T18:45:00Z");
+        assertThat(evaluator.isOpen(false, everyDay("08:00", "23:59"), w)).isFalse();
+    }
+
+    @Test
+    void midnightWindowStillRequiresStartAtOrAfterOpening() {
+        // 07:00 IST -> would need to end at midnight; use 07:00 start to 00:00 next day (01:30Z -> 18:30Z)
+        TimeWindow w = TimeWindow.of(Instant.parse("2026-10-06T01:30:00Z"), Instant.parse("2026-10-06T18:30:00Z"), clock);
+        assertThat(evaluator.isOpen(false, everyDay("08:00", "23:59"), w)).isFalse();
     }
 }

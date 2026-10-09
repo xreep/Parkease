@@ -1,6 +1,11 @@
 package com.smartparking.email;
 
+import com.smartparking.booking.Booking;
+import com.smartparking.booking.BookingStatus;
+import com.smartparking.payment.RefundNotice;
+import com.smartparking.common.util.Ist;
 import com.smartparking.user.User;
+import java.time.Instant;
 import org.springframework.web.util.HtmlUtils;
 
 /** Plain-text + simple HTML account emails. Richer Thymeleaf templates arrive with booking emails in Phase 5. */
@@ -47,6 +52,98 @@ public final class EmailTemplates {
                 "Edit listing", link);
     }
 
+    /** Booking emails read lazy associations of {@code booking}; build them inside a transaction. */
+    public static EmailMessage bookingConfirmed(User driver, Booking booking, String link) {
+        return build(driver, "Booking confirmed – ParkEase",
+                "Your parking is confirmed.\n\n" + details(booking), "View booking", link);
+    }
+
+    public static EmailMessage bookingRequested(User driver, Booking booking, String link) {
+        return build(driver, "Booking request sent – ParkEase",
+                "Your payment was received and your request has been sent to the owner, who has until "
+                        + formatTime(booking.getApprovalDeadline()) + " to respond. "
+                        + "If they decline or do not respond, you get a full refund.\n\n" + details(booking),
+                "View booking", link);
+    }
+
+    public static EmailMessage newBookingForOwner(User owner, Booking booking, String link) {
+        return build(owner, "New booking – ParkEase",
+                "You have a new confirmed booking.\n\n" + ownerDetails(booking), "View bookings", link);
+    }
+
+    public static EmailMessage bookingApprovalNeeded(User owner, Booking booking, String link) {
+        return build(owner, "Approve a booking request – ParkEase",
+                "A driver has paid for a booking and is waiting for your approval. Please respond by "
+                        + formatTime(booking.getApprovalDeadline()) + ", otherwise the request is declined "
+                        + "automatically and the driver is refunded.\n\n" + ownerDetails(booking),
+                "Review request", link);
+    }
+
+    public static EmailMessage bookingApproved(User driver, Booking booking, String link) {
+        return build(driver, "Your booking is confirmed – ParkEase",
+                "The owner approved your request, so your parking is confirmed.\n\n" + details(booking),
+                "View booking", link);
+    }
+
+    public static EmailMessage bookingRejected(User driver, Booking booking, String reason, String link) {
+        return build(driver, "Booking request declined – ParkEase",
+                "The owner could not accept your booking request. Reason: " + reason + "\n\n"
+                        + "A full refund of ₹" + booking.getTotalAmount().toPlainString() + " is on its way.\n\n"
+                        + details(booking),
+                "View booking", link);
+    }
+
+    public static EmailMessage bookingAutoRejected(User driver, Booking booking, String link) {
+        return build(driver, "Booking request expired – ParkEase",
+                "The owner did not respond to your request in time, so it was declined automatically.\n\n"
+                        + "A full refund of ₹" + booking.getTotalAmount().toPlainString() + " is on its way.\n\n"
+                        + details(booking),
+                "View booking", link);
+    }
+
+    /**
+     * Sent when a payment could not be turned into a booking. {@code pending}: the refund is accepted but still
+     * settling. For {@link RefundNotice#BOOKING_CLOSED} the wording follows the booking's status.
+     */
+    public static EmailMessage paymentRefunded(User driver, Booking booking, String link, RefundNotice notice,
+                                               boolean pending) {
+        String money = "your payment of ₹" + booking.getTotalAmount().toPlainString()
+                + (pending ? " is being refunded in full." : " has been refunded in full.");
+        String lead = notice == RefundNotice.BOOKING_CLOSED
+                ? "This booking was already " + closedWord(booking.getStatus()) + ", so "
+                : "We couldn't hold your slot, so ";
+        return build(driver, "Payment refunded – ParkEase", lead + money + "\n\n" + details(booking),
+                "View booking", link);
+    }
+
+    private static String closedWord(BookingStatus status) {
+        return switch (status) {
+            case CANCELLED -> "cancelled";
+            case REJECTED -> "declined";
+            case COMPLETED -> "completed";
+            default -> status.name().toLowerCase().replace('_', ' ');
+        };
+    }
+
+    private static String details(Booking b) {
+        return bookingLines(b) + "\nTotal: ₹" + b.getTotalAmount().toPlainString();
+    }
+
+    /** Owners see what they earn, not what the driver pays (which includes the platform fee and GST). */
+    private static String ownerDetails(Booking b) {
+        return bookingLines(b) + "\nYou earn ₹" + b.getBaseAmount().toPlainString();
+    }
+
+    private static String bookingLines(Booking b) {
+        return "Booking " + b.getBookingCode() + "\n"
+                + b.getListing().getTitle() + ", slot " + b.getSlot().getLabel() + "\n"
+                + formatTime(b.getStartTime()) + " to " + formatTime(b.getEndTime()) + " (IST)";
+    }
+
+    private static String formatTime(Instant time) {
+        return Ist.format(time);
+    }
+
     private static EmailMessage build(User user, String subject, String body, String cta, String link) {
         String firstName = user.getName().split("\\s+")[0];
         String text = "Hi " + firstName + ",\n\n" + body + "\n\n" + cta + ": " + link + "\n\n— Team ParkEase";
@@ -58,7 +155,7 @@ public final class EmailTemplates {
                   <p><a href="%s" style="display:inline-block;background:#059669;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold">%s</a></p>
                   <p style="font-size:12px;color:#64748b">Or paste this link into your browser:<br>%s</p>
                 </div>
-                """.formatted(HtmlUtils.htmlEscape(firstName), HtmlUtils.htmlEscape(body),
+                """.formatted(HtmlUtils.htmlEscape(firstName), HtmlUtils.htmlEscape(body).replace("\n", "<br>"),
                 HtmlUtils.htmlEscape(link), cta, HtmlUtils.htmlEscape(link));
         return new EmailMessage(user.getEmail(), subject, text, html);
     }

@@ -11,8 +11,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.smartparking.availability.AvailabilityBlock;
 import com.smartparking.availability.AvailabilityBlockRepository;
+import com.smartparking.booking.BookingRepository;
+import com.smartparking.booking.BookingStatus;
 import com.smartparking.location.CityRepository;
 import com.smartparking.owner.OwnerProfileRepository;
+import com.smartparking.slot.ParkingSlotRepository;
+import com.smartparking.support.BookingTestSupport;
+import com.smartparking.support.TestUsers;
+import com.smartparking.user.Role;
 import com.smartparking.support.IntegrationTest;
 import com.smartparking.user.UserRepository;
 import java.time.Instant;
@@ -36,6 +42,8 @@ class PublicListingControllerTest {
     @Autowired OwnerProfileRepository profiles;
     @Autowired ParkingListingRepository listings;
     @Autowired AvailabilityBlockRepository blocks;
+    @Autowired BookingRepository bookings;
+    @Autowired ParkingSlotRepository slots;
 
     Long approvedId;
     Long draftId;
@@ -160,5 +168,33 @@ class PublicListingControllerTest {
         mvc.perform(get("/api/v1/listings/" + approvedId + "/quote"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_TIME_RANGE"));
+    }
+
+    @Test
+    void liveBookingOnTheOnlySlotMakesQuoteFullyBooked() throws Exception {
+        var driver = users.save(TestUsers.newUser("quote-driver@example.com", Role.DRIVER));
+        var slot = slots.findByListingIdOrderByLabelAsc(approvedId).get(0);
+        bookings.saveAndFlush(BookingTestSupport.booking(driver, listings.getReferenceById(approvedId), slot,
+                BookingStatus.CONFIRMED, start.plus(1, ChronoUnit.HOURS), end.plus(1, ChronoUnit.HOURS)));
+        quote(approvedId, start, end, "")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.available").value(false))
+                .andExpect(jsonPath("$.reason").value("FULLY_BOOKED"))
+                .andExpect(jsonPath("$.freeSlots").value(0))
+                .andExpect(jsonPath("$.quote.totalAmount").value(100.62));
+        // A touching window is unaffected.
+        quote(approvedId, end.plus(1, ChronoUnit.HOURS), end.plus(3, ChronoUnit.HOURS), "")
+                .andExpect(jsonPath("$.available").value(true));
+    }
+
+    @Test
+    void expiredHoldDoesNotBlockQuote() throws Exception {
+        var driver = users.save(TestUsers.newUser("quote-driver2@example.com", Role.DRIVER));
+        var slot = slots.findByListingIdOrderByLabelAsc(approvedId).get(0);
+        var hold = BookingTestSupport.booking(driver, listings.getReferenceById(approvedId), slot,
+                BookingStatus.PENDING_PAYMENT, start, end);
+        hold.setHoldExpiresAt(Instant.now().minus(1, ChronoUnit.MINUTES));
+        bookings.saveAndFlush(hold);
+        quote(approvedId, start, end, "").andExpect(jsonPath("$.available").value(true));
     }
 }

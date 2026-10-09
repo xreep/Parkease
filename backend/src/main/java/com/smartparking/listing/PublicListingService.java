@@ -6,6 +6,7 @@ import com.smartparking.availability.AvailabilityEvaluator;
 import com.smartparking.availability.AvailabilityEvaluator.ListingAvailabilityInput;
 import com.smartparking.availability.AvailabilityRule;
 import com.smartparking.availability.AvailabilityRuleRepository;
+import com.smartparking.booking.BookingRepository;
 import com.smartparking.common.error.ApiException;
 import com.smartparking.common.model.VehicleType;
 import com.smartparking.listing.dto.ListingQuoteResponse;
@@ -18,6 +19,7 @@ import com.smartparking.slot.ParkingSlotRepository;
 import com.smartparking.slot.SlotSize;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -35,6 +37,7 @@ public class PublicListingService {
     private final AvailabilityEvaluator evaluator;
     private final PricingService pricing;
     private final ListingMapper mapper;
+    private final BookingRepository bookings;
     private final Clock clock;
 
     @Transactional(readOnly = true)
@@ -62,9 +65,11 @@ public class PublicListingService {
         ParkingListing l = requireApproved(id);
         List<AvailabilityRule> listingRules = l.isOpen24x7() ? List.of() : rules.findByListingIdOrderByDayOfWeekAsc(id);
         List<AvailabilityBlock> overlapping = blocks.findOverlapping(List.of(id), window.start(), window.end());
+        var bookedSlotIds = new HashSet<>(
+                bookings.findLiveOverlappingSlotIds(List.of(id), window.start(), window.end(), clock.instant()));
         AvailabilityEvaluator.Result result = evaluator.evaluate(
                 new ListingAvailabilityInput(l.isOpen24x7(), listingRules, slots.findByListingIdOrderByLabelAsc(id),
-                        overlapping),
+                        overlapping, bookedSlotIds),
                 window, vehicleType);
         QuoteDto quote = QuoteDto.from(pricing.quote(l, window.start(), window.end()));
         return new ListingQuoteResponse(result.available(), result.reason(), result.freeSlots(),

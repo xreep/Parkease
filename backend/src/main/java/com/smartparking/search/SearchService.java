@@ -6,6 +6,7 @@ import com.smartparking.availability.AvailabilityEvaluator;
 import com.smartparking.availability.AvailabilityEvaluator.ListingAvailabilityInput;
 import com.smartparking.availability.AvailabilityRule;
 import com.smartparking.availability.AvailabilityRuleRepository;
+import com.smartparking.booking.BookingRepository;
 import com.smartparking.listing.Amenity;
 import com.smartparking.listing.ListingMapper;
 import com.smartparking.listing.ListingPhoto;
@@ -21,10 +22,12 @@ import com.smartparking.slot.ParkingSlot;
 import com.smartparking.slot.ParkingSlotRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -49,6 +52,8 @@ public class SearchService {
     private final AvailabilityEvaluator evaluator;
     private final PricingService pricing;
     private final ListingMapper mapper;
+    private final BookingRepository bookings;
+    private final Clock clock;
 
     /** A candidate that survived availability evaluation. */
     private record Match(ParkingListing listing, double distanceKm, int totalSlots, Integer freeSlots, Quote quote) {
@@ -90,6 +95,7 @@ public class SearchService {
         TimeWindow window = c.window();
         Map<Long, List<AvailabilityRule>> rulesByListing = new HashMap<>();
         Map<Long, List<AvailabilityBlock>> blocksByListing = new HashMap<>();
+        Set<Long> bookedSlotIds = new HashSet<>();
         if (window != null) {
             List<Long> needRules = ids.stream().filter(id -> byId.containsKey(id) && !byId.get(id).isOpen24x7()).toList();
             if (!needRules.isEmpty()) {
@@ -98,6 +104,9 @@ public class SearchService {
             }
             blocks.findOverlapping(ids, window.start(), window.end())
                     .forEach(b -> blocksByListing.computeIfAbsent(b.getListing().getId(), k -> new ArrayList<>()).add(b));
+            // Slot ids are globally unique, so one set serves every candidate listing.
+            bookedSlotIds.addAll(
+                    bookings.findLiveOverlappingSlotIds(ids, window.start(), window.end(), clock.instant()));
         }
 
         List<Match> out = new ArrayList<>();
@@ -115,7 +124,8 @@ public class SearchService {
             }
             AvailabilityEvaluator.Result r = evaluator.evaluate(
                     new ListingAvailabilityInput(l.isOpen24x7(), rulesByListing.getOrDefault(l.getId(), List.of()),
-                            listingSlots, blocksByListing.getOrDefault(l.getId(), List.of())),
+                            listingSlots, blocksByListing.getOrDefault(l.getId(), List.of()),
+                            bookedSlotIds),
                     window, c.vehicleType());
             if (r.available()) {
                 out.add(new Match(l, cand.distanceKm(), r.totalSlots(), r.freeSlots(),
