@@ -31,10 +31,6 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     @Query("select p from Payment p where p.booking.id = :bookingId")
     Optional<Payment> findByBookingIdForUpdate(@Param("bookingId") Long bookingId);
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select p from Payment p where p.id = :id")
-    Optional<Payment> findByIdForUpdate(@Param("id") Long id);
-
     /** Bookings that lapsed (EXPIRED) while their payment order is still open (CREATED). */
     @Query("select p.booking.id from Payment p where p.status = :paymentStatus "
             + "and p.booking.status = com.smartparking.booking.BookingStatus.EXPIRED order by p.id")

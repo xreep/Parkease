@@ -11,12 +11,18 @@ public interface RefundRepository extends JpaRepository<Refund, Long> {
 
     Optional<Refund> findByProviderRefundId(String providerRefundId);
 
-    /** Payment behind a refund, without loading (or locking) any entity. */
-    @Query("select r.payment.id from Refund r where r.id = :id")
-    Optional<Long> findPaymentIdById(@Param("id") Long id);
+    List<Refund> findByPaymentId(Long paymentId);
 
-    /** Refunds in {@code status} that were tried fewer than {@code maxAttempts} times, oldest first. */
-    @Query("select r.id from Refund r where r.status = :status and r.attempts < :maxAttempts order by r.id")
+    /** Booking behind a refund, without loading (or locking) any entity. */
+    @Query("select r.payment.booking.id from Refund r where r.id = :id")
+    Optional<Long> findBookingIdById(@Param("id") Long id);
+
+    /**
+     * Refunds in {@code status} that were tried fewer than {@code maxAttempts} times: least-tried first, then the
+     * longest untouched, so a refund that keeps failing cannot starve the others.
+     */
+    @Query("select r.id from Refund r where r.status = :status and r.attempts < :maxAttempts "
+            + "order by r.attempts, r.updatedAt, r.id")
     List<Long> findRetryableIds(@Param("status") RefundStatus status, @Param("maxAttempts") int maxAttempts,
                                 Limit limit);
 }

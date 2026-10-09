@@ -7,6 +7,7 @@ public final class SqlStates {
 
     public static final String EXCLUSION_VIOLATION = "23P01";
     public static final String UNIQUE_VIOLATION = "23505";
+    public static final String DEADLOCK_DETECTED = "40P01";
 
     private SqlStates() {
     }
