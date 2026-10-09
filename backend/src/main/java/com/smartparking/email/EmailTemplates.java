@@ -1,6 +1,8 @@
 package com.smartparking.email;
 
 import com.smartparking.booking.Booking;
+import com.smartparking.booking.BookingStatus;
+import com.smartparking.payment.RefundNotice;
 import com.smartparking.common.util.Ist;
 import com.smartparking.user.User;
 import java.time.Instant;
@@ -99,12 +101,28 @@ public final class EmailTemplates {
                 "View booking", link);
     }
 
-    /** Sent when a payment could not be turned into a booking (slot gone, hold lapsed, booking no longer payable). */
-    public static EmailMessage paymentRefunded(User driver, Booking booking, String link) {
-        return build(driver, "Payment refunded – ParkEase",
-                "We couldn't hold your slot, so your payment of ₹" + booking.getTotalAmount().toPlainString()
-                        + " has been refunded in full.\n\n" + details(booking),
+    /**
+     * Sent when a payment could not be turned into a booking. {@code pending}: the refund is accepted but still
+     * settling. For {@link RefundNotice#BOOKING_CLOSED} the wording follows the booking's status.
+     */
+    public static EmailMessage paymentRefunded(User driver, Booking booking, String link, RefundNotice notice,
+                                               boolean pending) {
+        String money = "your payment of ₹" + booking.getTotalAmount().toPlainString()
+                + (pending ? " is being refunded in full." : " has been refunded in full.");
+        String lead = notice == RefundNotice.BOOKING_CLOSED
+                ? "This booking was already " + closedWord(booking.getStatus()) + ", so "
+                : "We couldn't hold your slot, so ";
+        return build(driver, "Payment refunded – ParkEase", lead + money + "\n\n" + details(booking),
                 "View booking", link);
+    }
+
+    private static String closedWord(BookingStatus status) {
+        return switch (status) {
+            case CANCELLED -> "cancelled";
+            case REJECTED -> "declined";
+            case COMPLETED -> "completed";
+            default -> status.name().toLowerCase().replace('_', ' ');
+        };
     }
 
     private static String details(Booking b) {

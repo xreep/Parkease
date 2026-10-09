@@ -78,10 +78,13 @@ class BookingJobsTest {
         volatile boolean fetchRefundsFails;
         final AtomicInteger fetchRefundCalls = new AtomicInteger();
         final List<String> idempotencyKeys = new CopyOnWriteArrayList<>();
+        final List<String> receipts = new CopyOnWriteArrayList<>();
 
         @Override
-        public ProviderRefund refund(String paymentId, long amountPaise, String reason, String idempotencyKey) {
+        public ProviderRefund refund(String paymentId, long amountPaise, String reason, String idempotencyKey,
+                                     String receipt) {
             idempotencyKeys.add(idempotencyKey);
+            receipts.add(receipt);
             return refund(paymentId, amountPaise, reason);
         }
 
@@ -159,6 +162,7 @@ class BookingJobsTest {
         provider.fetchRefundsFails = false;
         provider.fetchRefundCalls.set(0);
         provider.idempotencyKeys.clear();
+        provider.receipts.clear();
         ownerAuth = AuthTestSupport.bearer(AuthTestSupport.accessToken(
                 AuthTestSupport.register(mvc, OWNER_EMAIL, "OWNER")));
         listingId = ListingTestSupport.approvedListingAt(mvc, ownerAuth, listings,
@@ -606,15 +610,20 @@ class BookingJobsTest {
                 "parkease-refund-" + rowId + "-2");
     }
 
-    @Test
-    void retryAdoptsARefundTheProviderAlreadyHasInsteadOfIssuingASecondOne() throws Exception {
-        long id = paidAwaitingApproval(10);
-        provider.failures.set(1); // the first attempt "timed out" although the provider did refund
+    private void failedFirstAttempt(long id) {
+        provider.failures.set(1); // the first attempt "timed out" although the provider may have refunded
         clock.advance(Duration.ofHours(3));
         jobs.autoRejectOverdue();
         assertThat(refund(id)).containsEntry("status", "FAILED");
+    }
+
+    @Test
+    void retryAdoptsTheRefundOurFirstAttemptLeftAtTheProviderInsteadOfIssuingASecondOne() throws Exception {
+        long id = paidAwaitingApproval(10);
+        failedFirstAttempt(id);
+        Number rowId = (Number) refund(id).get("id");
         provider.existingRefunds = List.of(new ProviderRefund("rfnd_failed_before", RefundStatus.FAILED),
-                new ProviderRefund("rfnd_found", RefundStatus.PROCESSED));
+                new ProviderRefund("rfnd_found", RefundStatus.PROCESSED, 6708L, "parkease-refund-" + rowId, Map.of()));
 
         jobs.retryFailedRefunds();
 
@@ -622,6 +631,84 @@ class BookingJobsTest {
         assertThat(provider.refundCalls.get()).isEqualTo(1); // no second provider refund
         assertThat(refund(id)).containsEntry("status", "PROCESSED").containsEntry("provider_refund_id", "rfnd_found")
                 .containsEntry("attempts", 2);
+        assertThat(paymentStatus(id)).isEqualTo("REFUNDED");
+        assertThat((BigDecimal) booking(id).get("refund_amount")).isEqualByComparingTo("67.08");
+    }
+
+    @Test
+    void retryAlsoRecognisesOurRefundByItsNoteWhenTheProviderDoesNotEchoTheReceipt() throws Exception {
+        long id = paidAwaitingApproval(10);
+        failedFirstAttempt(id);
+        Number rowId = (Number) refund(id).get("id");
+        provider.existingRefunds = List.of(new ProviderRefund("rfnd_noted", RefundStatus.PENDING, 6708L, null,
+                Map.of("parkeaseRefund", "parkease-refund-" + rowId, "reason", "x")));
+
+        jobs.retryFailedRefunds();
+
+        assertThat(provider.refundCalls.get()).isEqualTo(1);
+        assertThat(refund(id)).containsEntry("status", "PENDING").containsEntry("provider_refund_id", "rfnd_noted");
+    }
+
+    @Test
+    void aRefundMadeInTheProvidersDashboardForAnotherAmountIsNotAdopted() throws Exception {
+        long id = paidAwaitingApproval(10);
+        failedFirstAttempt(id);
+        provider.existingRefunds = List.of(new ProviderRefund("rfnd_dashboard", RefundStatus.PROCESSED, 1000L, null, Map.of()));
+
+        jobs.retryFailedRefunds();
+
+        assertThat(provider.refundCalls.get()).isEqualTo(1); // nothing new is issued either
+        Map<String, Object> row = refund(id);
+        assertThat(row).containsEntry("status", "FAILED").containsEntry("attempts", RefundService.MAX_ATTEMPTS);
+        assertThat(row.get("provider_refund_id")).isNull();
+        assertThat(row).containsEntry("failure_reason", "Existing provider refund doesn't match — manual review");
+        assertThat(paymentStatus(id)).isEqualTo("CAPTURED");
+        assertThat((BigDecimal) booking(id).get("refund_amount")).isEqualByComparingTo("0");
+        assertThat(jdbc.queryForList("select note from booking_events where booking_id = ? and note like '%manual review%'",
+                String.class, id)).hasSize(1);
+        jobs.retryFailedRefunds(); // parked: no more provider calls, no second event
+        assertThat(provider.fetchRefundCalls.get()).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select count(*) from booking_events where booking_id = ? and note like '%manual review%'",
+                Integer.class, id)).isEqualTo(1);
+    }
+
+    @Test
+    void aRefundWithTheRightAmountButAnotherReceiptIsNotAdoptedEither() throws Exception {
+        long id = paidAwaitingApproval(10);
+        failedFirstAttempt(id);
+        provider.existingRefunds = List.of(new ProviderRefund("rfnd_other", RefundStatus.PROCESSED, 6708L, "someone-elses", Map.of()));
+
+        jobs.retryFailedRefunds();
+
+        assertThat(provider.refundCalls.get()).isEqualTo(1);
+        assertThat(refund(id)).containsEntry("status", "FAILED");
+        assertThat(refund(id).get("provider_refund_id")).isNull();
+        assertThat(paymentStatus(id)).isEqualTo("CAPTURED");
+    }
+
+    @Test
+    void refundsCarryTheirRowBasedReceipt() throws Exception {
+        long id = paidAwaitingApproval(10);
+        clock.advance(Duration.ofHours(3));
+        jobs.autoRejectOverdue();
+        Number rowId = (Number) refund(id).get("id");
+
+        assertThat(provider.receipts).containsExactly("parkease-refund-" + rowId);
+    }
+
+    @Test
+    void aFailedRefundIsRetriedWhileThePaymentIsPartiallyRefunded() throws Exception {
+        long id = paidAwaitingApproval(10);
+        provider.failures.set(1);
+        clock.advance(Duration.ofHours(3));
+        jobs.autoRejectOverdue();
+        jdbc.update("update payments set status = 'PARTIALLY_REFUNDED' where booking_id = ?", id);
+        jdbc.update("update bookings set refund_amount = 10.00 where id = ?", id);
+
+        jobs.retryFailedRefunds();
+
+        assertThat(provider.refundCalls.get()).isEqualTo(2);
+        assertThat(refund(id)).containsEntry("status", "PROCESSED");
         assertThat(paymentStatus(id)).isEqualTo("REFUNDED");
         assertThat((BigDecimal) booking(id).get("refund_amount")).isEqualByComparingTo("67.08");
     }

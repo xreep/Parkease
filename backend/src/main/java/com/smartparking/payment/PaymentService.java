@@ -49,6 +49,7 @@ public class PaymentService {
 
     static final String LATE_PAYMENT_NOTE = "Payment received after hold expired";
     static final String SLOT_TAKEN_REASON = "Slot was taken before the payment arrived";
+    private static final int MAX_FAILURE_REASON = 300;
     static final String START_PASSED_REASON = "The booking start time passed before the payment arrived";
 
     private final PaymentProvider provider;
@@ -136,8 +137,12 @@ public class PaymentService {
         return tx.execute(s -> mapper.toDetail(bookings.findById(bookingId).orElseThrow()));
     }
 
-    /** What the payment row says the provider must have charged. */
-    private record Expected(BigDecimal amount, String currency, boolean alreadyConfirmed) {
+    /**
+     * What the payment row says the provider must have charged. {@code paidByAnother}: the order is already paid by a
+     * different provider payment than the one being confirmed.
+     */
+    private record Expected(Long bookingId, BigDecimal amount, String currency, boolean alreadyConfirmed,
+                            boolean paidByAnother) {
     }
 
     /**
@@ -158,32 +163,75 @@ public class PaymentService {
     private Expected expectedFor(String orderId, String paymentId) {
         return tx.execute(s -> {
             Payment payment = payments.findByOrderId(orderId).orElseThrow(() -> ApiException.notFound("Payment not found"));
-            boolean confirmed = paymentId.equals(payment.getPaymentId()) && payment.getStatus() != PaymentStatus.CREATED
+            boolean settled = payment.getPaymentId() != null && payment.getStatus() != PaymentStatus.CREATED
                     && payment.getStatus() != PaymentStatus.FAILED;
-            return new Expected(payment.getAmount(), payment.getCurrency(), confirmed);
+            return new Expected(payment.getBooking().getId(), payment.getAmount(), payment.getCurrency(),
+                    settled && paymentId.equals(payment.getPaymentId()),
+                    settled && !paymentId.equals(payment.getPaymentId()));
         });
     }
 
     private Long confirmFetched(String orderId, Expected expected, ProviderPayment fetched, String fallbackMethod,
                                 BookingActor actor) {
-        boolean sameOrder = fetched.orderId() == null || orderId.equals(fetched.orderId());
-        boolean sameAmount = fetched.amountPaise() == null || fetched.amountPaise() == RefundService.toPaise(expected.amount());
-        boolean sameCurrency = fetched.currency() == null || expected.currency().equals(fetched.currency());
+        // Only the offline mock may leave the order, amount or currency unreported; a real provider that does is wrong.
+        boolean lenient = provider.type() == PaymentProviderType.MOCK;
+        long expectedPaise = RefundService.toPaise(expected.amount());
+        boolean sameOrder = fetched.orderId() == null ? lenient : orderId.equals(fetched.orderId());
+        boolean sameAmount = fetched.amountPaise() == null ? lenient : fetched.amountPaise() == expectedPaise;
+        boolean sameCurrency = fetched.currency() == null ? lenient : expected.currency().equals(fetched.currency());
         if (!sameOrder || !sameAmount || !sameCurrency) {
             log.error("Payment {} does not match order {} (provider says order {}, {} {}; expected {} {} paise)",
                     fetched.paymentId(), orderId, fetched.orderId(), fetched.amountPaise(), fetched.currency(),
-                    RefundService.toPaise(expected.amount()), expected.currency());
+                    expectedPaise, expected.currency());
             throw verificationFailed();
         }
         if (ProviderPayment.AUTHORIZED.equals(fetched.status())) {
-            provider.capture(fetched.paymentId(), RefundService.toPaise(expected.amount()), expected.currency());
+            if (expected.paidByAnother()) {
+                // The order is already paid, so this is the customer's second attempt. Capturing it would only mean
+                // taking money to give it back; an authorization that is never captured is voided by the provider.
+                log.error("Order {} is already paid, but payment {} was authorized as well; not capturing it",
+                        orderId, fetched.paymentId());
+                return expected.bookingId();
+            }
+            fetched = capture(orderId, expected, fetched);
         } else if (!ProviderPayment.CAPTURED.equals(fetched.status())) {
             log.warn("Payment {} of order {} is '{}' at the provider, not captured", fetched.paymentId(), orderId,
                     fetched.status());
+            if (fetched.errorDescription() != null) {
+                recordFailureReason(orderId, fetched.errorDescription());
+            }
             throw verificationFailed();
         }
         String method = fetched.method() != null ? fetched.method() : fallbackMethod;
         return confirmPayment(orderId, fetched.paymentId(), method, actor);
+    }
+
+    /**
+     * Captures an authorized payment. If that fails, the payment is looked at once more: a concurrent request (the
+     * webhook, or a second verify) may have captured it first, which is as good as success.
+     */
+    private ProviderPayment capture(String orderId, Expected expected, ProviderPayment authorized) {
+        try {
+            provider.capture(authorized.paymentId(), RefundService.toPaise(expected.amount()), expected.currency());
+            return authorized;
+        } catch (ApiException e) {
+            ProviderPayment again = provider.fetchPayment(authorized.paymentId());
+            if (ProviderPayment.CAPTURED.equals(again.status())) {
+                log.info("Capture of payment {} failed but it is captured now; carrying on", authorized.paymentId());
+                return again;
+            }
+            recordFailureReason(orderId, PaymentProviderException.describe(e));
+            throw e;
+        }
+    }
+
+    /** Notes why the provider did not (yet) accept this order's payment; the payment stays open for another try. */
+    private void recordFailureReason(String orderId, String reason) {
+        tx.executeWithoutResult(s -> payments.findByOrderIdForUpdate(orderId).ifPresent(p -> {
+            if (p.getStatus() == PaymentStatus.CREATED || p.getStatus() == PaymentStatus.FAILED) {
+                p.setFailureReason(reason.length() > MAX_FAILURE_REASON ? reason.substring(0, MAX_FAILURE_REASON) : reason);
+            }
+        }));
     }
 
     /**
@@ -321,10 +369,9 @@ public class PaymentService {
         booking.setCancelledBy(BookingActor.SYSTEM);
         booking.setCancelReason(reason);
         events.record(booking, from, BookingStatus.CANCELLED, BookingActor.SYSTEM, reason);
-        Refund refund = refunds.refundAndNote(booking, payment, BookingActor.SYSTEM, reason);
+        Refund refund = refunds.refundAndNote(booking, payment, BookingActor.SYSTEM, reason, RefundNotice.SLOT_LOST);
         log.warn("Late payment for booking {} (via {}): {}; refund {} is {}", booking.getBookingCode(), actor, reason,
                 refund.getProviderRefundId(), refund.getStatus());
-        queueRefundEmail(booking, refund);
     }
 
     /**
@@ -337,18 +384,7 @@ public class PaymentService {
                 payment.getPaymentId(), booking.getBookingCode(), status);
         events.record(booking, status, status, BookingActor.SYSTEM,
                 "Payment received but the booking is no longer payable (" + status + ")");
-        Refund refund = refunds.refundAndNote(booking, payment, BookingActor.SYSTEM, reason);
-        queueRefundEmail(booking, refund);
-    }
-
-    /** Tells the driver their money is on its way back (not when the provider refused: the retry job handles it). */
-    private void queueRefundEmail(Booking booking, Refund refund) {
-        if (refund.getStatus() == RefundStatus.FAILED) {
-            return;
-        }
-        EmailMessage message = EmailTemplates.paymentRefunded(booking.getDriver(), booking,
-                app.frontendUrl() + "/driver/bookings/" + booking.getId());
-        AfterCommit.run(() -> emailSender.send(message));
+        refunds.refundAndNote(booking, payment, BookingActor.SYSTEM, reason, RefundNotice.BOOKING_CLOSED);
     }
 
     private void saveEarning(Booking booking, ParkingListing listing) {

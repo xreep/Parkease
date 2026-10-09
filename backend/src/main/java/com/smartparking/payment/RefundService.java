@@ -4,9 +4,14 @@ import com.smartparking.booking.Booking;
 import com.smartparking.booking.BookingActor;
 import com.smartparking.booking.BookingEvents;
 import com.smartparking.booking.BookingLocks;
+import com.smartparking.common.config.AppProperties;
 import com.smartparking.common.error.ApiException;
+import com.smartparking.common.util.AfterCommit;
 import com.smartparking.earning.EarningStatus;
 import com.smartparking.earning.OwnerEarningRepository;
+import com.smartparking.email.EmailMessage;
+import com.smartparking.email.EmailSender;
+import com.smartparking.email.EmailTemplates;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
@@ -33,6 +38,7 @@ public class RefundService {
     private static final int MAX_FAILURE = 300;
 
     static final String PROVIDER_FAILED_NOTE = "Refund failed at the provider — retrying";
+    static final String NO_MATCH_REASON = "Existing provider refund doesn't match — manual review";
     static final String EXHAUSTED_NOTE = "Refund failed after " + MAX_ATTEMPTS + " attempts — manual action needed";
 
     private final PaymentProvider provider;
@@ -41,17 +47,21 @@ public class RefundService {
     private final BookingLocks locks;
     private final OwnerEarningRepository earnings;
     private final BookingEvents events;
+    private final EmailSender emailSender;
+    private final AppProperties app;
     private final TransactionTemplate tx;
 
     public RefundService(PaymentProvider provider, RefundRepository refunds, PaymentRepository payments,
                          BookingLocks locks, OwnerEarningRepository earnings, BookingEvents events,
-                         PlatformTransactionManager txManager) {
+                         EmailSender emailSender, AppProperties app, PlatformTransactionManager txManager) {
         this.provider = provider;
         this.refunds = refunds;
         this.payments = payments;
         this.locks = locks;
         this.earnings = earnings;
         this.events = events;
+        this.emailSender = emailSender;
+        this.app = app;
         this.tx = new TransactionTemplate(txManager);
     }
 
@@ -62,7 +72,12 @@ public class RefundService {
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public Refund refundFull(Payment payment, String reason) {
+        return refundFull(payment, reason, null);
+    }
+
+    private Refund refundFull(Payment payment, String reason, RefundNotice notice) {
         Refund refund = new Refund();
+        refund.setNotice(notice);
         refund.setPayment(payment);
         refund.setAmount(payment.getAmount());
         String shortReason = abbreviate(reason);
@@ -86,14 +101,19 @@ public class RefundService {
     private void issue(Refund refund, String providerPaymentId, String reason) {
         try {
             ProviderRefund result = provider.refund(providerPaymentId, toPaise(refund.getAmount()), reason,
-                    idempotencyKey(refund));
+                    idempotencyKey(refund), receipt(refund));
             refund.setProviderRefundId(result.refundId());
             refund.setStatus(result.status());
         } catch (ApiException e) {
             log.error("Provider refund {} of payment {} failed", refund.getId(), providerPaymentId, e);
             refund.setStatus(RefundStatus.FAILED);
-            refund.setFailureReason(abbreviate(e.getMessage(), MAX_FAILURE));
+            refund.setFailureReason(abbreviate(PaymentProviderException.describe(e), MAX_FAILURE));
         }
+    }
+
+    /** Tags the provider refund with its row, so a refund found later at the provider can be recognised as ours. */
+    static String receipt(Refund refund) {
+        return "parkease-refund-" + refund.getId();
     }
 
     /**
@@ -128,7 +148,7 @@ public class RefundService {
                 earning.setStatus(EarningStatus.REVERSED);
             }
         });
-        return Optional.of(refundAndNote(booking, payment, actor, reason));
+        return Optional.of(refundAndNote(booking, payment, actor, reason, null));
     }
 
     /**
@@ -138,9 +158,10 @@ public class RefundService {
      * then the booking row lock.
      */
     @Transactional(propagation = Propagation.MANDATORY)
-    public Refund refundAndNote(Booking booking, Payment payment, BookingActor actor, String reason) {
+    public Refund refundAndNote(Booking booking, Payment payment, BookingActor actor, String reason,
+                                RefundNotice notice) {
         payments.flush();
-        Refund refund = refundFull(payment, reason);
+        Refund refund = refundFull(payment, reason, notice);
         String amount = "₹" + payment.getAmount().toPlainString();
         String note = switch (refund.getStatus()) {
             case PROCESSED -> "Refund of " + amount + " issued";
@@ -148,7 +169,22 @@ public class RefundService {
             case FAILED -> "Refund of " + amount + " could not be issued yet; it will be retried";
         };
         events.record(booking, booking.getStatus(), booking.getStatus(), actor, note);
+        notifyDriver(booking, refund);
         return refund;
+    }
+
+    /**
+     * Emails the driver about a refund that carries a {@link RefundNotice}, once the provider has accepted it (a
+     * refund that failed is announced when a retry gets it through). Joins the caller's transaction (lazy data).
+     */
+    private void notifyDriver(Booking booking, Refund refund) {
+        if (refund.getNotice() == null || refund.getStatus() == RefundStatus.FAILED) {
+            return;
+        }
+        EmailMessage message = EmailTemplates.paymentRefunded(booking.getDriver(), booking,
+                app.frontendUrl() + "/driver/bookings/" + booking.getId(), refund.getNotice(),
+                refund.getStatus() == RefundStatus.PENDING);
+        AfterCommit.run(() -> emailSender.send(message));
     }
 
     /** Ids of FAILED refunds that still have attempts left, oldest first. */
@@ -174,18 +210,32 @@ public class RefundService {
             Payment payment = payments.findByBookingId(bookingId).orElseThrow();
             Refund refund = refunds.findById(refundId).orElseThrow();
             boolean extraPayment = refund.getProviderPaymentId() != null;
+            boolean refundable = payment.getStatus() == PaymentStatus.CAPTURED
+                    || payment.getStatus() == PaymentStatus.PARTIALLY_REFUNDED;
             if (refund.getStatus() != RefundStatus.FAILED || refund.getAttempts() >= MAX_ATTEMPTS
-                    || (!extraPayment && (payment.getStatus() != PaymentStatus.CAPTURED
+                    || (!extraPayment && (!refundable
                     || booking.getRefundAmount().compareTo(payment.getAmount()) >= 0))) {
                 return false;
             }
             String providerPaymentId = extraPayment ? refund.getProviderPaymentId() : payment.getPaymentId();
             refund.setAttempts(refund.getAttempts() + 1);
             try {
-                ProviderRefund existing = existingRefund(providerPaymentId, refundId);
-                ProviderRefund result = existing != null ? existing
+                Existing found = lookUp(providerPaymentId, refund);
+                if (found.unmatched() && found.adopted() == null) {
+                    // The provider has a refund for this payment that is not ours (e.g. a partial refund from its
+                    // dashboard). Issuing another could refund too much, adopting it could hide a shortfall.
+                    refund.setAttempts(MAX_ATTEMPTS);
+                    refund.setFailureReason(NO_MATCH_REASON);
+                    events.record(booking, booking.getStatus(), booking.getStatus(), BookingActor.SYSTEM,
+                            "Refund of ₹" + refund.getAmount().toPlainString()
+                                    + " needs manual review: the provider already has a different refund for this payment");
+                    log.error("Refund {} of payment {}: the provider already has a refund that does not match; "
+                            + "left for manual review", refundId, payment.getId());
+                    return false;
+                }
+                ProviderRefund result = found.adopted() != null ? found.adopted()
                         : provider.refund(providerPaymentId, toPaise(refund.getAmount()), refund.getReason(),
-                                idempotencyKey(refund));
+                                idempotencyKey(refund), receipt(refund));
                 refund.setProviderRefundId(result.refundId());
                 refund.setStatus(result.status());
                 refund.setFailureReason(null);
@@ -194,6 +244,9 @@ public class RefundService {
                 // stops the job from retrying forever, and nothing else in this transaction needs to roll back.
                 log.error("Retry {} of refund {} for payment {} failed", refund.getAttempts(), refundId,
                         payment.getId(), e);
+                if (e instanceof ApiException api) {
+                    refund.setFailureReason(abbreviate(PaymentProviderException.describe(api), MAX_FAILURE));
+                }
                 if (refund.getAttempts() >= MAX_ATTEMPTS) {
                     log.error("Giving up on refund {}: {} attempts used; it needs manual attention", refundId,
                             MAX_ATTEMPTS);
@@ -208,26 +261,53 @@ public class RefundService {
             events.record(booking, booking.getStatus(), booking.getStatus(), BookingActor.SYSTEM,
                     "Refund of ₹" + refund.getAmount().toPlainString() + " issued"
                             + (extraPayment ? " for an extra payment" : ""));
+            notifyDriver(booking, refund);
             return true;
         });
         return Boolean.TRUE.equals(done);
     }
 
-    /** A refund the provider already has for the payment that is not failed and not another row's. */
-    private ProviderRefund existingRefund(String providerPaymentId, Long refundId) {
+    /** What the provider already has for the payment: a refund that is ours, and whether it has others that are not. */
+    private record Existing(ProviderRefund adopted, boolean unmatched) {
+    }
+
+    /**
+     * Looks at the provider's live (non-failed) refunds of the payment that no other row owns. One is adopted only if
+     * it is demonstrably this row's own: same amount and either our receipt or (when the provider does not echo
+     * receipts) our note. A refund of another amount or origin is never adopted.
+     */
+    private Existing lookUp(String providerPaymentId, Refund refund) {
+        ProviderRefund adopted = null;
+        boolean unmatched = false;
         for (ProviderRefund candidate : provider.fetchRefunds(providerPaymentId)) {
             if (candidate.status() == RefundStatus.FAILED) {
                 continue;
             }
             boolean claimedElsewhere = refunds.findByProviderRefundId(candidate.refundId())
-                    .map(other -> !other.getId().equals(refundId)).orElse(false);
-            if (!claimedElsewhere) {
+                    .map(other -> !other.getId().equals(refund.getId())).orElse(false);
+            if (claimedElsewhere) {
+                continue;
+            }
+            if (adopted == null && isOurs(candidate, refund)) {
                 log.warn("Refund {} already exists at the provider as {} ({}); adopting it instead of refunding again",
-                        refundId, candidate.refundId(), candidate.status());
-                return candidate;
+                        refund.getId(), candidate.refundId(), candidate.status());
+                adopted = candidate;
+            } else if (!isOurs(candidate, refund)) {
+                unmatched = true;
             }
         }
-        return null;
+        return new Existing(adopted, unmatched);
+    }
+
+    private static boolean isOurs(ProviderRefund candidate, Refund refund) {
+        if (candidate.amountPaise() == null || candidate.amountPaise() != toPaise(refund.getAmount())) {
+            return false;
+        }
+        String ours = receipt(refund);
+        if (candidate.receipt() != null && !candidate.receipt().isBlank()) {
+            return ours.equals(candidate.receipt());
+        }
+        return candidate.notes() != null && ours.equals(candidate.notes().get("parkeaseRefund"));
     }
 
     /**
