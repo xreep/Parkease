@@ -10,7 +10,8 @@ public final class Ist {
 
     private static final DateTimeFormatter WINDOW_FORMAT =
             DateTimeFormatter.ofPattern("EEE d MMM, h:mm a", Locale.ENGLISH);
-    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH);
+    private static final DateTimeFormatter DATE_TIME_FORMAT =
+            DateTimeFormatter.ofPattern("d MMM yyyy, h:mm a", Locale.ENGLISH);
 
     private Ist() {
     }
@@ -20,8 +21,8 @@ public final class Ist {
         return WINDOW_FORMAT.format(time.atZone(AvailabilityEvaluator.ZONE));
     }
 
-    /** E.g. {@code 9 Oct 2026}. */
-    public static String formatDate(Instant time) {
-        return DATE_FORMAT.format(time.atZone(AvailabilityEvaluator.ZONE));
+    /** E.g. {@code 9 Oct 2026, 10:00 AM}. */
+    public static String formatDateTime(Instant time) {
+        return DATE_TIME_FORMAT.format(time.atZone(AvailabilityEvaluator.ZONE));
     }
 }

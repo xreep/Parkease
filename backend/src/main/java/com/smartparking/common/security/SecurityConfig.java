@@ -64,7 +64,7 @@ public class SecurityConfig {
         config.setAllowedOrigins(app.corsAllowedOrigins());
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
-        config.setExposedHeaders(List.of("Retry-After"));
+        config.setExposedHeaders(List.of("Retry-After", "Content-Disposition"));
         config.setMaxAge(3600L);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
