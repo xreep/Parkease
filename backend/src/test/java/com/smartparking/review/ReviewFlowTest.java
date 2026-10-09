@@ -265,6 +265,19 @@ class ReviewFlowTest {
     }
 
     @Test
+    void lengthLimitsApplyAfterTrimming() throws Exception {
+        long booking = completed(driver, 10);
+
+        review(driver, booking, "{\"rating\":4,\"comment\":\"" + "x".repeat(1001) + "   \"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.fieldErrors[0].field").value("comment"));
+        review(driver, booking, "{\"rating\":4,\"comment\":\"  " + "x".repeat(1000) + "   \"}")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.comment").value("x".repeat(1000)));
+    }
+
+    @Test
     void ownersCannotPostReviews() throws Exception {
         long booking = completed(driver, 10);
 
@@ -340,7 +353,10 @@ class ReviewFlowTest {
         reply(driver.auth(), review, "{\"reply\":\"Hello\"}").andExpect(status().isForbidden());
         assertThat(jdbc.queryForObject("select owner_reply from reviews where id = ?", String.class, review)).isNull();
 
-        reply(ownerAuth, review, "{\"reply\":\"" + "y".repeat(500) + "\"}").andExpect(status().isOk());
+        reply(ownerAuth, review, "{\"reply\":\"" + "y".repeat(501) + "   \"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors[0].field").value("reply"));
+        reply(ownerAuth, review, "{\"reply\":\"  " + "y".repeat(500) + "   \"}").andExpect(status().isOk());
     }
 
     @Test

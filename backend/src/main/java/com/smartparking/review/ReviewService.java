@@ -6,6 +6,7 @@ import com.smartparking.booking.BookingRepository;
 import com.smartparking.booking.BookingStatus;
 import com.smartparking.common.config.AppProperties;
 import com.smartparking.common.error.ApiException;
+import com.smartparking.common.error.FieldErrorDto;
 import com.smartparking.common.util.SqlStates;
 import com.smartparking.common.web.PageResponse;
 import com.smartparking.email.EmailTemplates;
@@ -42,6 +43,13 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class ReviewService {
 
+    /** Limits on the trimmed text. */
+    public static final int COMMENT_MAX = 1000;
+    public static final int REPLY_MAX = 500;
+    /** Generous limits on the raw request body, so stray whitespace never causes a rejection. */
+    public static final int RAW_COMMENT_MAX = 5000;
+    public static final int RAW_REPLY_MAX = 2000;
+
     static final String OWNER_PATH = "/owner/reviews";
 
     private final ReviewRepository reviews;
@@ -57,6 +65,8 @@ public class ReviewService {
 
     @Transactional
     public ReviewDto create(Long driverId, Long bookingId, int rating, String rawComment) {
+        String comment = rawComment == null || rawComment.isBlank() ? null : rawComment.trim();
+        requireMaxLength("comment", comment, COMMENT_MAX);
         bookings.findByIdAndDriverId(bookingId, driverId).orElseThrow(() -> ApiException.notFound("Booking not found"));
         Booking booking = locks.lock(bookingId);
         if (booking.getStatus() == BookingStatus.COMPLETED && reviews.existsByBookingId(bookingId)) {
@@ -68,7 +78,6 @@ public class ReviewService {
         }
         ParkingListing listing = listings.findByIdForUpdate(booking.getListing().getId()).orElseThrow();
 
-        String comment = rawComment == null || rawComment.isBlank() ? null : rawComment.trim();
         Review review = new Review();
         review.setBooking(booking);
         review.setListing(listing);
@@ -94,6 +103,15 @@ public class ReviewService {
                 comment != null ? comment : "A driver rated " + listing.getTitle() + " " + rating + " out of 5.",
                 OWNER_PATH, EmailTemplates.ownerNewReview(listing.getOwner(), listing.getTitle(), rating, comment, link));
         return mapper.toDto(review);
+    }
+
+    /** Fails with the same 400 shape as bean validation when the trimmed text is too long. */
+    private static void requireMaxLength(String field, String text, int max) {
+        if (text != null && text.length() > max) {
+            String message = "must be at most " + max + " characters";
+            throw ApiException.badRequest("VALIDATION_FAILED", "Some fields are invalid")
+                    .with("fieldErrors", List.of(new FieldErrorDto(field, message)));
+        }
     }
 
     private static ApiException alreadyReviewed() {
@@ -131,12 +149,14 @@ public class ReviewService {
 
     @Transactional
     public ReviewDto reply(Long ownerId, Long reviewId, String rawReply) {
+        String reply = rawReply.trim();
+        requireMaxLength("reply", reply, REPLY_MAX);
         reviews.findByIdAndListingOwnerId(reviewId, ownerId).orElseThrow(() -> ApiException.notFound("Review not found"));
         Review review = reviews.findByIdForUpdate(reviewId).orElseThrow(() -> ApiException.notFound("Review not found"));
         if (review.getOwnerReply() != null) {
             throw ApiException.conflict("ALREADY_REPLIED", "You have already replied to this review");
         }
-        review.setOwnerReply(rawReply.trim());
+        review.setOwnerReply(reply);
         review.setOwnerRepliedAt(clock.instant());
         return mapper.toDto(review);
     }
