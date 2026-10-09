@@ -2,7 +2,7 @@ import '@testing-library/jest-dom/vitest'
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import MockAdapter from 'axios-mock-adapter'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { api } from '../../lib/api'
 import type { BookingDetailDto, BookingSummaryDto } from '../../lib/bookings'
 import { formatDateTime } from '../../lib/format'
@@ -114,6 +114,18 @@ describe('booking detail', () => {
     expect(screen.getByRole('region', { name: 'Booking QR code' })).toBeInTheDocument()
   })
 
+  it('stops polling once the booking reaches a final status', async () => {
+    mock.onGet('/bookings/91').reply(200, booking())
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    renderApp('/driver/bookings/91')
+
+    expect(await screen.findByText('Confirmed', { selector: 'span' })).toBeInTheDocument()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000)
+    })
+    expect(mock.history.get.filter((r) => r.url === '/bookings/91')).toHaveLength(1)
+  })
+
   it('offers to complete payment while the hold is valid', async () => {
     mock.onGet('/bookings/91').reply(200, booking({
       status: 'PENDING_PAYMENT', holdExpiresAt: new Date(Date.now() + 5 * 60_000).toISOString(), invoiceNumber: null, paymentStatus: 'CREATED',
@@ -160,12 +172,17 @@ describe('booking detail', () => {
     mock.onGet('/bookings/91/receipt').reply(200, pdf)
     const createObjectURL = vi.fn(() => 'blob:receipt')
     const revokeObjectURL = vi.fn()
+    const original = { create: URL.createObjectURL, revoke: URL.revokeObjectURL }
     Object.assign(URL, { createObjectURL, revokeObjectURL })
+    onTestFinished(() => {
+      Object.assign(URL, { createObjectURL: original.create, revokeObjectURL: original.revoke })
+    })
     let downloaded: { download: string; href: string } | undefined
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
       downloaded = { download: this.download, href: this.href }
     })
-    const user = userEvent.setup()
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     renderApp('/driver/bookings/91')
 
     await user.click(await screen.findByRole('button', { name: 'Download receipt' }))
@@ -174,6 +191,10 @@ describe('booking detail', () => {
     const call = mock.history.get.find((r) => r.url === '/bookings/91/receipt')
     expect(call?.responseType).toBe('blob')
     expect(createObjectURL).toHaveBeenCalledTimes(1)
+    expect(revokeObjectURL).not.toHaveBeenCalled() // revoked a moment after the click, not during it
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000)
+    })
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:receipt')
   })
 
@@ -242,8 +263,40 @@ describe('my bookings', () => {
     await user.click(screen.getByRole('tab', { name: 'Past' }))
 
     expect(await screen.findByRole('article', { name: 'PE-PAST01' })).toBeInTheDocument()
+    expect(screen.getByRole('tabpanel', { name: 'Past' })).toBeInTheDocument()
     expect(screen.queryByRole('article', { name: 'PE-8KQ2M4' })).not.toBeInTheDocument()
     expect(viewsRequested()).toEqual(['upcoming', 'past'])
+  })
+
+  it('does not show the previous tab\'s bookings while the next tab loads', async () => {
+    mock.onGet('/bookings', { params: { view: 'upcoming', page: 0, size: 20 } }).reply(200, page([summary()]))
+    mock.onGet('/bookings', { params: { view: 'past', page: 0, size: 20 } }).reply(
+      () => new Promise(() => {}),
+    )
+    const user = userEvent.setup()
+    renderApp('/driver/bookings')
+
+    await screen.findByRole('article', { name: 'PE-8KQ2M4' })
+    await user.click(screen.getByRole('tab', { name: 'Past' }))
+
+    await waitFor(() => expect(screen.queryByRole('article', { name: 'PE-8KQ2M4' })).not.toBeInTheDocument())
+    expect(screen.queryByText('No past bookings yet.')).not.toBeInTheDocument()
+  })
+
+  it('wires tabs to their panel and moves between tabs with the keyboard', async () => {
+    mock.onGet('/bookings').reply(200, page([]))
+    const user = userEvent.setup()
+    renderApp('/driver/bookings')
+
+    const upcoming = await screen.findByRole('tab', { name: 'Upcoming' })
+    expect(upcoming.getAttribute('aria-controls')).toBe(screen.getByRole('tabpanel').id)
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', upcoming.id)
+
+    upcoming.focus()
+    await user.keyboard('{End}')
+    expect(await screen.findByRole('tab', { name: 'Past' })).toHaveAttribute('aria-selected', 'true')
+    await user.keyboard('{Home}')
+    expect(await screen.findByRole('tab', { name: 'Upcoming' })).toHaveAttribute('aria-selected', 'true')
   })
 
   it('shows the empty states', async () => {

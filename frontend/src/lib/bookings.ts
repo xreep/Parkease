@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
 import { useCallback } from 'react'
 import { api } from './api'
@@ -169,7 +169,7 @@ export function useOwnerBookings(view: OwnerBookingView, page = 0, size = 20) {
   return useQuery({
     queryKey: ['owner', 'bookings', view, page, size],
     queryFn: () => listOwnerBookings(view, page, size),
-    placeholderData: keepPreviousData,
+    placeholderData: (previous, previousQuery) => (previousQuery?.queryKey[2] === view ? previous : undefined),
   })
 }
 
@@ -185,7 +185,8 @@ export function useBookings(view: BookingView, page = 0, size = 20, enabled = tr
   return useQuery({
     queryKey: ['bookings', view, page, size],
     queryFn: () => listBookings(view, page, size),
-    placeholderData: keepPreviousData,
+    // Keep the old page visible while paging, but never another tab's list.
+    placeholderData: (previous, previousQuery) => (previousQuery?.queryKey[1] === view ? previous : undefined),
     enabled,
   })
 }
