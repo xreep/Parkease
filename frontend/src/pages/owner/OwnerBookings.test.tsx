@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom/vitest'
+import { QueryClient } from '@tanstack/react-query'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import MockAdapter from 'axios-mock-adapter'
@@ -69,16 +70,23 @@ describe('owner bookings', () => {
     expect(respondBy.className).toMatch(/red/)
   })
 
+  const invalidatedKeys = (spy: { mock: { calls: unknown[][] } }) =>
+    spy.mock.calls.map(([filters]) => (filters as { queryKey: unknown[] }).queryKey[0])
+
   it('approves a request', async () => {
     mock.onGet('/owner/bookings').reply(200, page([ownerBooking()]))
     mock.onPost('/owner/bookings/5/approve').reply(200, ownerBooking({ status: 'CONFIRMED' }))
     const user = userEvent.setup()
-    renderApp('/owner/bookings')
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    renderApp('/owner/bookings', queryClient)
 
     await user.click(await screen.findByRole('button', { name: 'Approve' }))
 
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Booking approved'))
     expect(mock.history.post.map((r) => r.url)).toEqual(['/owner/bookings/5/approve'])
+    // The driver's booking, lists and the availability shown by quotes and search change too.
+    await waitFor(() => expect(invalidatedKeys(invalidate)).toEqual(expect.arrayContaining(['owner', 'bookings', 'booking', 'quote', 'search'])))
     // The list is refetched after the decision.
     await waitFor(() => expect(listCalls().length).toBeGreaterThan(1))
   })
@@ -87,7 +95,9 @@ describe('owner bookings', () => {
     mock.onGet('/owner/bookings').reply(200, page([ownerBooking()]))
     mock.onPost('/owner/bookings/5/reject').reply(200, ownerBooking({ status: 'REJECTED' }))
     const user = userEvent.setup()
-    renderApp('/owner/bookings')
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    renderApp('/owner/bookings', queryClient)
 
     await user.click(await screen.findByRole('button', { name: 'Decline' }))
     const dialog = await screen.findByRole('dialog', { name: 'Decline this booking?' })
@@ -98,6 +108,7 @@ describe('owner bookings', () => {
     const post = mock.history.post.find((r) => r.url === '/owner/bookings/5/reject')
     expect(JSON.parse(post!.data)).toEqual({ reason: 'Space is closed that day' })
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await waitFor(() => expect(invalidatedKeys(invalidate)).toEqual(expect.arrayContaining(['owner', 'booking', 'bookings', 'quote', 'search'])))
   })
 
   it('requires a reason to decline', async () => {
@@ -117,10 +128,13 @@ describe('owner bookings', () => {
     mock.onGet('/owner/bookings').reply(200, page([ownerBooking()]))
     mock.onPost('/owner/bookings/5/approve').reply(409, { code: 'INVALID_STATUS', detail: 'This booking is no longer awaiting approval' })
     const user = userEvent.setup()
-    renderApp('/owner/bookings')
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    renderApp('/owner/bookings', queryClient)
 
     await user.click(await screen.findByRole('button', { name: 'Approve' }))
 
+    await waitFor(() => expect(invalidatedKeys(invalidate)).toEqual(expect.arrayContaining(['booking', 'quote', 'search'])))
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('This booking is no longer awaiting approval'))
     await waitFor(() => expect(listCalls().length).toBeGreaterThan(1))
     expect(toast.success).not.toHaveBeenCalled()
@@ -147,6 +161,20 @@ describe('owner bookings', () => {
     await user.click(screen.getByRole('tab', { name: 'Past' }))
     expect(await screen.findByText('No past bookings yet.')).toBeInTheDocument()
     expect(listCalls().map((r) => r.params.view)).toEqual(['requests', 'upcoming', 'past'])
+  })
+
+  it('does not show the previous tab\'s requests or a wrong empty state while the next tab loads', async () => {
+    mock.onGet('/owner/bookings', { params: { view: 'requests', page: 0, size: 20 } }).reply(200, page([ownerBooking()]))
+    mock.onGet('/owner/bookings', { params: { view: 'upcoming', page: 0, size: 20 } }).reply(() => new Promise(() => {}))
+    const user = userEvent.setup()
+    renderApp('/owner/bookings')
+
+    await screen.findByRole('article', { name: 'PE-REQ001' })
+    await user.click(screen.getByRole('tab', { name: 'Upcoming' }))
+
+    await waitFor(() => expect(screen.queryByRole('article', { name: 'PE-REQ001' })).not.toBeInTheDocument())
+    expect(screen.queryByText('No upcoming bookings.')).not.toBeInTheDocument()
+    expect(screen.queryByText('No booking requests right now.')).not.toBeInTheDocument()
   })
 
   it('shows "No upcoming bookings." on an empty upcoming tab', async () => {

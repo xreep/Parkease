@@ -8,9 +8,11 @@ import { ReasonDialog } from '../../components/ui/Dialog'
 import { Pagination } from '../../components/ui/Pagination'
 import { Spinner } from '../../components/ui/Spinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
+import { panelId, tabId } from '../../components/ui/tabIds'
 import { ViewTabs } from '../../components/ui/ViewTabs'
 import {
   approveBooking,
+  invalidateBookingQueries,
   invalidateOwnerBookings,
   rejectBooking,
   useOwnerBookings,
@@ -122,13 +124,15 @@ export function OwnerBookingsPage() {
   const queryClient = useQueryClient()
   const [view, setView] = useState<OwnerBookingView>('requests')
   const [page, setPage] = useState(0)
-  const { data, error, isPending } = useOwnerBookings(view, page)
-  const refresh = () => invalidateOwnerBookings(queryClient)
+  const { data, error, isPending, isPlaceholderData } = useOwnerBookings(view, page)
+  // The decision also changes the driver's booking and the availability behind quotes and search.
+  const refresh = () => Promise.all([invalidateOwnerBookings(queryClient), invalidateBookingQueries(queryClient)])
 
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-semibold">Bookings</h2>
       <ViewTabs
+        idPrefix="owner-bookings"
         label="Booking views"
         items={TABS}
         value={view}
@@ -138,7 +142,7 @@ export function OwnerBookingsPage() {
         }}
       />
 
-      <div role="tabpanel" aria-label={TABS.find((t) => t.value === view)?.label} className="space-y-4">
+      <div role="tabpanel" id={panelId('owner-bookings', view)} aria-labelledby={tabId('owner-bookings', view)} className="space-y-4">
         {isPending ? (
           <div className="flex justify-center py-12">
             <Spinner className="h-8 w-8 text-brand-600" />
@@ -151,7 +155,7 @@ export function OwnerBookingsPage() {
           </div>
         ) : (
           <>
-            <div className="space-y-3">
+            <div className={clsx('space-y-3 transition-opacity', isPlaceholderData && 'opacity-60')} aria-busy={isPlaceholderData}>
               {data.content.map((b) => (
                 <BookingCard key={b.id} booking={b} view={view} onChanged={refresh} />
               ))}

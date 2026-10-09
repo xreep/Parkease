@@ -1,3 +1,4 @@
+import clsx from 'clsx'
 import { Check, Copy, Download, ExternalLink } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
@@ -30,9 +31,9 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
   )
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function Row({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-4">
+    <div className={clsx('flex items-baseline justify-between gap-4', className)}>
       <dt className="text-slate-600 dark:text-slate-400">{label}</dt>
       <dd className="min-w-0 break-words text-right font-medium">{children}</dd>
     </div>
@@ -67,10 +68,13 @@ function CopyCodeButton({ code }: { code: string }) {
     }
   }
   return (
-    <Button type="button" variant="secondary" className="px-3 py-1.5" onClick={() => void copy()}>
-      {copied ? <Check aria-hidden className="h-4 w-4" /> : <Copy aria-hidden className="h-4 w-4" />}
-      {copied ? 'Copied' : 'Copy code'}
-    </Button>
+    <>
+      <Button type="button" variant="secondary" className="px-3 py-1.5" onClick={() => void copy()}>
+        {copied ? <Check aria-hidden className="h-4 w-4" /> : <Copy aria-hidden className="h-4 w-4" />}
+        {copied ? 'Copied' : 'Copy code'}
+      </Button>
+      <span role="status" aria-live="polite" className="sr-only">{copied ? 'Booking code copied' : ''}</span>
+    </>
   )
 }
 
@@ -90,7 +94,8 @@ function ReceiptButton({ booking }: { booking: BookingDetailDto }) {
       document.body.appendChild(link)
       link.click()
       link.remove()
-      URL.revokeObjectURL(url)
+      // Revoking right away can cancel the download in some browsers, so give it a moment.
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch (e) {
       setError(errorMessage(e))
     } finally {
@@ -172,15 +177,13 @@ function BookingContent({ booking, isNew }: { booking: BookingDetailDto; isNew: 
               <Row label={booking.pricingBreakdown}>{formatINR(booking.baseAmount)}</Row>
               <Row label="Platform fee">{formatINR(booking.platformFee)}</Row>
               <Row label="GST">{formatINR(booking.gstAmount)}</Row>
-              <div className="border-t border-slate-200 pt-2 dark:border-slate-800">
-                <Row label="Total">
-                  <span className="text-base font-bold">{formatINR(booking.totalAmount)}</span>
-                </Row>
-              </div>
-              {booking.refundAmount > 0 && (
-                <p className="font-medium text-emerald-700 dark:text-emerald-400">{`Refunded ${formatINR(booking.refundAmount)}`}</p>
-              )}
+              <Row label="Total" className="border-t border-slate-200 pt-2 dark:border-slate-800">
+                <span className="text-base font-bold">{formatINR(booking.totalAmount)}</span>
+              </Row>
             </dl>
+            {booking.refundAmount > 0 && (
+              <p className="font-medium text-emerald-700 dark:text-emerald-400">{`Refunded ${formatINR(booking.refundAmount)}`}</p>
+            )}
             {booking.cancelReason && (
               <p className="rounded-lg bg-slate-100 px-3 py-2 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
                 {`Reason${cancelledBy}: ${booking.cancelReason}`}

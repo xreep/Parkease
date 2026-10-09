@@ -1,9 +1,11 @@
+import clsx from 'clsx'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { FormError } from '../../components/AuthCard'
 import { Pagination } from '../../components/ui/Pagination'
 import { Spinner } from '../../components/ui/Spinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
+import { panelId, tabId } from '../../components/ui/tabIds'
 import { ViewTabs } from '../../components/ui/ViewTabs'
 import { useBookings, type BookingSummaryDto, type BookingView } from '../../lib/bookings'
 import { errorMessage } from '../../lib/errors'
@@ -49,12 +51,13 @@ function BookingCard({ booking }: { booking: BookingSummaryDto }) {
 export function MyBookingsPage() {
   const [view, setView] = useState<BookingView>('upcoming')
   const [page, setPage] = useState(0)
-  const { data, error, isPending } = useBookings(view, page)
+  const { data, error, isPending, isPlaceholderData } = useBookings(view, page)
 
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-semibold">Your bookings</h2>
       <ViewTabs
+        idPrefix="my-bookings"
         label="Booking views"
         items={TABS}
         value={view}
@@ -64,7 +67,7 @@ export function MyBookingsPage() {
         }}
       />
 
-      <div role="tabpanel" aria-label={TABS.find((t) => t.value === view)?.label} className="space-y-4">
+      <div role="tabpanel" id={panelId('my-bookings', view)} aria-labelledby={tabId('my-bookings', view)} className="space-y-4">
         {isPending ? (
           <div className="flex justify-center py-12">
             <Spinner className="h-8 w-8 text-brand-600" />
@@ -80,7 +83,7 @@ export function MyBookingsPage() {
           </div>
         ) : (
           <>
-            <div className="space-y-3">
+            <div className={clsx('space-y-3 transition-opacity', isPlaceholderData && 'opacity-60')} aria-busy={isPlaceholderData}>
               {data.content.map((b) => (
                 <BookingCard key={b.id} booking={b} />
               ))}
