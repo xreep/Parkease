@@ -22,8 +22,11 @@ import { DriverHomePage } from './pages/driver/DriverHomePage'
 import { DriverLayout } from './pages/driver/DriverLayout'
 import { VehiclesPage } from './pages/driver/VehiclesPage'
 import { AdminHomePage } from './pages/admin/AdminHomePage'
+import { AdminAuditPage } from './pages/admin/AdminAuditPage'
 import { AdminLayout } from './pages/admin/AdminLayout'
 import { AdminListingReviewPage } from './pages/admin/AdminListingReviewPage'
+import { AdminReportsPage } from './pages/admin/AdminReportsPage'
+import { AdminSettingsPage } from './pages/admin/AdminSettingsPage'
 import { ListingQueuePage } from './pages/admin/ListingQueuePage'
 import { OwnerQueuePage } from './pages/admin/OwnerQueuePage'
 import { ListingBlocksPage } from './pages/owner/ListingBlocksPage'
@@ -78,6 +81,9 @@ export default function App() {
           <Route path="owners" element={<OwnerQueuePage />} />
           <Route path="listings" element={<ListingQueuePage />} />
           <Route path="listings/:id" element={<AdminListingReviewPage />} />
+          <Route path="reports" element={<AdminReportsPage />} />
+          <Route path="settings" element={<AdminSettingsPage />} />
+          <Route path="audit" element={<AdminAuditPage />} />
         </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Route>
