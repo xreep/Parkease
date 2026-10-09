@@ -15,7 +15,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-/** A driver's rating of a completed booking, with the owner's single public reply. Immutable once posted. */
+/** A driver's rating of a completed booking, with the owner's single public reply. Only admin moderation changes it. */
 @Getter
 @Setter
 @NoArgsConstructor
@@ -43,4 +43,13 @@ public class Review extends BaseEntity {
     private String ownerReply;
 
     private Instant ownerRepliedAt;
+
+    /** Set while an admin has hidden the review: it then leaves the public list and the rating aggregates. */
+    private Instant hiddenAt;
+
+    private String hiddenReason;
+
+    public boolean isHidden() {
+        return hiddenAt != null;
+    }
 }

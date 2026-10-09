@@ -42,6 +42,17 @@ public class AdminListingController {
         return service.approveListing(admin, id);
     }
 
+    @PostMapping("/{id}/suspend")
+    public AdminListingDetailDto suspend(@AuthenticationPrincipal AuthUser admin, @PathVariable Long id,
+                                         @Valid @RequestBody ReasonRequest request) {
+        return service.suspendListing(admin, id, request.reason());
+    }
+
+    @PostMapping("/{id}/reinstate")
+    public AdminListingDetailDto reinstate(@AuthenticationPrincipal AuthUser admin, @PathVariable Long id) {
+        return service.reinstateListing(admin, id);
+    }
+
     @PostMapping("/{id}/reject")
     public AdminListingDetailDto reject(@AuthenticationPrincipal AuthUser admin, @PathVariable Long id,
                                         @Valid @RequestBody ReasonRequest request) {

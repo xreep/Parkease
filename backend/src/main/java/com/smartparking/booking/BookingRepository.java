@@ -61,6 +61,14 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     Optional<Booking> findByIdAndDriverId(Long id, Long driverId);
 
+    /** Rows of {driverId, count} of the bookings that were ever confirmed or at least paid for (not lapsed holds). */
+    @Query("""
+            select b.driver.id, count(b) from Booking b
+            where b.driver.id in :ids and b.status not in (com.smartparking.booking.BookingStatus.PENDING_PAYMENT,
+                                                           com.smartparking.booking.BookingStatus.EXPIRED)
+            group by b.driver.id""")
+    List<Object[]> countByDrivers(@Param("ids") Collection<Long> ids);
+
     /** Row-locks the booking so status checks and transitions cannot interleave with the stale-hold sweep. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select b from Booking b where b.id = :id")

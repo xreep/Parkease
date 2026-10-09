@@ -25,6 +25,7 @@ import com.smartparking.settings.PlatformSettings;
 import com.smartparking.pricing.TimeWindow;
 import com.smartparking.slot.ParkingSlot;
 import com.smartparking.slot.ParkingSlotRepository;
+import com.smartparking.user.UserStatus;
 import com.smartparking.vehicle.Vehicle;
 import com.smartparking.vehicle.VehicleRepository;
 import java.time.Clock;
@@ -152,7 +153,7 @@ public class BookingService {
     private Prepared prepare(Long driverId, CreateBookingRequest request, TimeWindow window) {
         ParkingListing listing = listings.findById(request.listingId())
                 .orElseThrow(() -> ApiException.notFound("Listing not found"));
-        if (listing.getStatus() != ListingStatus.APPROVED) {
+        if (listing.getStatus() != ListingStatus.APPROVED || listing.getOwner().getStatus() != UserStatus.ACTIVE) {
             throw ApiException.conflict("LISTING_UNAVAILABLE", "This listing is not available for booking");
         }
         Vehicle vehicle = vehicles.findByIdAndUserId(request.vehicleId(), driverId)
