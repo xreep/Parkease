@@ -104,12 +104,12 @@ public class PaymentService {
     }
 
     /**
-     * Mock provider only: mints the ids and signature a real checkout would hand back, so the frontend's mock dialog
+     * Mock provider only (and only while {@code app.payments.mock-enabled}): mints the ids and signature a real checkout would hand back, so the frontend's mock dialog
      * can call {@code /payments/verify} exactly like Razorpay's handler. Not found when a real provider is active.
      */
     @Transactional(readOnly = true)
     public MockPayResponse mockPay(Long driverId, Long bookingId) {
-        if (!(provider instanceof MockPaymentProvider mock)) {
+        if (!paymentProperties.mockEnabled() || !(provider instanceof MockPaymentProvider mock)) {
             throw ApiException.notFound("Not found");
         }
         if (!bookings.existsByIdAndDriverId(bookingId, driverId)) {
