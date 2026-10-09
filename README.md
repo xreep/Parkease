@@ -14,7 +14,7 @@ A web platform where private parking owners rent out unused slots and drivers fi
 | 2 | Owner verification, listings wizard, slots, opening hours, blocked times, photo/document uploads, admin approval queues, demo listings in every state | ✅ |
 | 3 | Parking search with map and filters, availability + live price quotes, public listing pages, city pages | ✅ |
 | 4 | Booking, pricing, Razorpay payments, invoices | ✅ |
-| 5 | Lifecycle jobs, cancellations/refunds, notifications | ⏳ |
+| 5 | Booking lifecycle (active → completed), cancellations with policy refunds, in-app notifications, reminders | ✅ |
 | 6 | Owner dashboard, earnings, reviews | ⏳ |
 | 7 | Admin panel, reports, disputes, payouts | ⏳ |
 | 8 | Full seed data, polish, deployment | ⏳ |
@@ -84,6 +84,25 @@ Reserve signs you in. To book, add a vehicle under **My parking → Vehicles** (
 
 - **Drivers** get a booking page with a QR code to show at the entrance (`/driver/bookings`), a downloadable PDF receipt, and a status timeline. Listings that need approval show "Waiting for owner" until the owner responds; if they don't, the driver is refunded in full.
 - **Owners** see requests under **Owner dashboard → Bookings**, where they can approve or decline (with a reason), and see upcoming and past bookings with what they earn.
+
+### Try it: cancellations, lifecycle and notifications
+
+- **Lifecycle:** a confirmed booking becomes **Active** when its start time arrives and **Completed** when it ends (background jobs, on a one-minute cycle). Drivers get a "starting soon" reminder when their parking is within the hour of starting, and owners are warned when a request is within 30 minutes of lapsing.
+- **Driver cancellations:** open a booking and press **Cancel booking**. The dialog shows what you get back before you confirm. An unpaid booking costs nothing, and a request the owner has not accepted yet is refunded in full. A confirmed booking follows the listing's cancellation policy (below); when a driver cancels a confirmed booking, the platform fee and GST are not refunded. Bookings that have started cannot be cancelled.
+- **Owner cancellations:** under **Owner dashboard → Bookings → Upcoming**, an owner can cancel a confirmed booking that has not started. A reason is required (it is sent to the driver) and the driver is refunded in full.
+- **Notifications:** the bell in the navigation bar shows unread notifications for every signed-in user (drivers, owners and admins); open it for the latest ten, or go to `/notifications` for the full list. Each important event also sends an email.
+
+#### Cancellation policy
+
+When a driver cancels a confirmed booking, the refund is a share of the **parking charge**; the platform fee and GST are not refunded. (A request the owner has not accepted yet is refunded in full, fee and GST included.) Each listing has one policy, shown on the listing page and at checkout.
+
+| Policy | Full refund | Half refund | No refund |
+|---|---|---|---|
+| Flexible | Up to 1 hour before the start | Within 1 hour of the start | n/a |
+| Moderate | Up to 24 hours before the start | 2 to 24 hours before the start | Within 2 hours of the start |
+| Strict | n/a | Up to 48 hours before the start | Within 48 hours of the start |
+
+Owner cancellations and requests that expire or are declined always refund the driver in full.
 
 ### Payments
 

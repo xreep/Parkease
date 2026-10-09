@@ -24,22 +24,26 @@ import com.smartparking.listing.ListingPhotoRepository;
 import com.smartparking.location.CityRepository;
 import com.smartparking.owner.OwnerProfileRepository;
 import com.smartparking.support.AuthTestSupport;
-import com.smartparking.support.IntegrationTest;
+import com.smartparking.support.CommittedIntegrationTest;
+import com.smartparking.support.DatabaseCleaner;
 import com.smartparking.support.RecordingEmailSender;
 import com.smartparking.support.TestUsers;
 import com.smartparking.user.Role;
 import com.smartparking.user.User;
 import com.smartparking.user.UserRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
-@IntegrationTest
+/** Committed (not rolled back): the notifier sends its emails only after the transaction commits. */
+@CommittedIntegrationTest
 class AdminReviewControllerTest {
 
     @Autowired MockMvc mvc;
@@ -49,11 +53,13 @@ class AdminReviewControllerTest {
     @Autowired ListingPhotoRepository photoRepository;
     @Autowired PasswordEncoder passwordEncoder;
     @Autowired RecordingEmailSender emails;
+    @Autowired JdbcTemplate jdbc;
 
     String admin;
 
     @BeforeEach
     void setUp() throws Exception {
+        DatabaseCleaner.clean(jdbc);
         emails.clear();
         User user = TestUsers.newUser("admin-t@example.com", Role.ADMIN);
         user.setEmailVerified(true);
@@ -64,6 +70,17 @@ class AdminReviewControllerTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         admin = AuthTestSupport.bearer(AuthTestSupport.accessToken(body));
+    }
+
+    @AfterEach
+    void tearDown() {
+        DatabaseCleaner.clean(jdbc);
+    }
+
+    /** "TYPE link" of every notification the user has, oldest first. */
+    private java.util.List<String> notificationsOf(String email) {
+        return jdbc.queryForList("select n.type || ' ' || n.link from notifications n join users u on u.id = n.user_id "
+                + "where u.email = ? order by n.id", String.class, email);
     }
 
     private ResultActions adminGet(String path) throws Exception {
@@ -103,6 +120,7 @@ class AdminReviewControllerTest {
                 .andExpect(jsonPath("$.verificationStatus").value("VERIFIED"))
                 .andExpect(jsonPath("$.verifiedAt").isNotEmpty());
         assertThat(emails.lastTo("pending-owner@example.com").subject()).containsIgnoringCase("verified");
+        assertThat(notificationsOf("pending-owner@example.com")).containsExactly("OWNER_VERIFIED /owner/verification");
 
         mvc.perform(get("/api/v1/owner/profile").header(HttpHeaders.AUTHORIZATION, owner))
                 .andExpect(status().isOk())
@@ -129,6 +147,7 @@ class AdminReviewControllerTest {
                 .andExpect(jsonPath("$.rejectionReason").value("Photo is blurry"));
 
         EmailMessage mail = emails.lastTo("reject-owner@example.com");
+        assertThat(notificationsOf("reject-owner@example.com")).containsExactly("OWNER_REJECTED /owner/verification");
         assertThat(mail.textBody()).contains("Photo is blurry");
         assertThat(mail.subject()).contains("Verification needs attention");
         adminPostJson("/api/v1/admin/owners/" + userId + "/reject", "{\"reason\":\"Again\"}")
@@ -169,6 +188,7 @@ class AdminReviewControllerTest {
                 .andExpect(jsonPath("$.listing.status").value("APPROVED"))
                 .andExpect(jsonPath("$.listing.approvedAt", not(emptyOrNullString())));
         assertThat(emails.lastTo("listing-owner@example.com").subject()).contains("live");
+        assertThat(notificationsOf("listing-owner@example.com")).contains("LISTING_APPROVED /owner/listings");
         adminGet("/api/v1/admin/queues").andExpect(jsonPath("$.pendingListings").value(0));
         adminPost("/api/v1/admin/listings/" + id + "/approve")
                 .andExpect(status().isConflict())
@@ -204,6 +224,7 @@ class AdminReviewControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.listing.status").value("REJECTED"));
         EmailMessage mail = emails.lastTo("resubmit-owner@example.com");
+        assertThat(notificationsOf("resubmit-owner@example.com")).containsExactly("LISTING_REJECTED /owner/listings");
         assertThat(mail.subject()).contains("needs changes");
         assertThat(mail.textBody()).contains("Add a clearer entrance photo").contains("/owner/listings/" + id + "/edit");
 

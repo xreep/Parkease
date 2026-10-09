@@ -3,17 +3,22 @@ package com.smartparking.booking;
 import com.smartparking.booking.dto.OwnerBookingDto;
 import com.smartparking.common.config.AppProperties;
 import com.smartparking.common.error.ApiException;
-import com.smartparking.common.util.AfterCommit;
 import com.smartparking.common.web.PageResponse;
-import com.smartparking.email.EmailMessage;
-import com.smartparking.email.EmailSender;
+import com.smartparking.earning.EarningStatus;
+import com.smartparking.earning.OwnerEarning;
+import com.smartparking.earning.OwnerEarningRepository;
 import com.smartparking.email.EmailTemplates;
 import com.smartparking.listing.ParkingListing;
+import com.smartparking.notification.NotificationType;
+import com.smartparking.notification.Notifier;
 import com.smartparking.payment.RefundService;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -31,6 +36,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class OwnerBookingService {
 
+    static final String START_PASSED_REASON = "The booking start time passed before the owner responded";
+
     private static final List<BookingStatus> HIDDEN_FROM_OWNERS = List.of(BookingStatus.PENDING_PAYMENT,
             BookingStatus.EXPIRED);
 
@@ -38,7 +45,8 @@ public class OwnerBookingService {
     private final BookingLocks locks;
     private final BookingEvents events;
     private final RefundService refunds;
-    private final EmailSender emailSender;
+    private final OwnerEarningRepository earnings;
+    private final Notifier notifier;
     private final AppProperties app;
     private final BookingProperties properties;
     private final Clock clock;
@@ -76,7 +84,8 @@ public class OwnerBookingService {
                         PageRequest.of(pageNumber, pageSize, Sort.by(Sort.Order.desc("startTime"), Sort.Order.desc("id"))));
             };
         }
-        return PageResponse.from(result.map(OwnerBookingService::toDto));
+        Map<Long, BigDecimal> nets = ownerNets(result.getContent().stream().map(Booking::getId).toList());
+        return PageResponse.from(result.map(b -> toDto(b, nets.get(b.getId()))));
     }
 
     private enum View { REQUESTS, UPCOMING, PAST }
@@ -104,13 +113,19 @@ public class OwnerBookingService {
                 || booking.getApprovalDeadline() == null || !booking.getApprovalDeadline().isAfter(now)) {
             throw invalidStatus("approved", booking);
         }
+        if (!booking.getStartTime().isAfter(now)) {
+            throw ApiException.conflict("INVALID_STATUS", "This booking's start time has passed");
+        }
         booking.setStatus(BookingStatus.CONFIRMED);
         booking.setConfirmedAt(now);
         booking.setApprovalDeadline(null);
         events.record(booking, BookingStatus.AWAITING_APPROVAL, BookingStatus.CONFIRMED, BookingActor.OWNER,
                 "Approved by owner");
-        send(EmailTemplates.bookingApproved(booking.getDriver(), booking, driverLink(booking)));
-        return toDto(booking);
+        notifier.notify(booking.getDriver(), NotificationType.BOOKING_APPROVED, "Booking approved",
+                "Your booking " + booking.getBookingCode() + " at " + booking.getListing().getTitle()
+                        + " was approved.", BookingPaths.driver(booking),
+                EmailTemplates.bookingApproved(booking.getDriver(), booking, driverLink(booking)));
+        return toDto(booking, ownerNet(booking.getId()));
     }
 
     /** Declines a request and refunds the driver in full. */
@@ -122,8 +137,11 @@ public class OwnerBookingService {
             throw invalidStatus("declined", booking);
         }
         unwind(booking, BookingActor.OWNER, reason);
-        send(EmailTemplates.bookingRejected(booking.getDriver(), booking, reason, driverLink(booking)));
-        return toDto(booking);
+        notifier.notify(booking.getDriver(), NotificationType.BOOKING_DECLINED, "Booking request declined",
+                "Your request " + booking.getBookingCode() + " at " + booking.getListing().getTitle()
+                        + " was declined. You will be refunded in full.", BookingPaths.driver(booking),
+                EmailTemplates.bookingRejected(booking.getDriver(), booking, reason, driverLink(booking)));
+        return toDto(booking, ownerNet(booking.getId()));
     }
 
     /**
@@ -134,16 +152,27 @@ public class OwnerBookingService {
     public boolean autoRejectIfOverdue(Long bookingId) {
         Booking booking = locks.lock(bookingId);
         Instant now = clock.instant();
-        if (booking.getStatus() != BookingStatus.AWAITING_APPROVAL
-                || booking.getApprovalDeadline() == null || booking.getApprovalDeadline().isAfter(now)) {
+        Instant deadline = booking.getApprovalDeadline();
+        boolean overdue = (deadline != null && !deadline.isAfter(now)) || !booking.getStartTime().isAfter(now);
+        if (booking.getStatus() != BookingStatus.AWAITING_APPROVAL || !overdue) {
             return false;
         }
-        unwind(booking, BookingActor.SYSTEM, autoRejectReason());
-        send(EmailTemplates.bookingAutoRejected(booking.getDriver(), booking, driverLink(booking)));
+        unwind(booking, BookingActor.SYSTEM, autoRejectReason(booking));
+        notifier.notify(booking.getDriver(), NotificationType.BOOKING_EXPIRED_REQUEST, "Booking request expired",
+                "Your request " + booking.getBookingCode() + " at " + booking.getListing().getTitle()
+                        + " expired without an answer. You will be refunded in full.", BookingPaths.driver(booking),
+                EmailTemplates.bookingAutoRejected(booking.getDriver(), booking, driverLink(booking)));
         return true;
     }
 
-    String autoRejectReason() {
+    /**
+     * A deadline at (or, for requests older than the cap, after) the start time means the start, not the response
+     * window, ran out; an earlier deadline is a plain timeout even if the start has passed since.
+     */
+    String autoRejectReason(Booking booking) {
+        if (booking.getApprovalDeadline() == null || !booking.getApprovalDeadline().isBefore(booking.getStartTime())) {
+            return START_PASSED_REASON;
+        }
         int hours = properties.approvalHours();
         return "The owner didn't respond within " + hours + (hours == 1 ? " hour" : " hours");
     }
@@ -176,18 +205,32 @@ public class OwnerBookingService {
     }
 
     private String driverLink(Booking booking) {
-        return app.frontendUrl() + "/driver/bookings/" + booking.getId();
+        return app.frontendUrl() + BookingPaths.driver(booking);
     }
 
-    private void send(EmailMessage message) {
-        AfterCommit.run(() -> emailSender.send(message));
+    /** What the owner still earns from each booking (see {@link #net}); bookings without an earning are left out. */
+    private Map<Long, BigDecimal> ownerNets(List<Long> bookingIds) {
+        Map<Long, BigDecimal> nets = new HashMap<>();
+        if (!bookingIds.isEmpty()) {
+            earnings.findByBookingIdIn(bookingIds).forEach(e -> nets.put(e.getBooking().getId(), net(e)));
+        }
+        return nets;
     }
 
-    static OwnerBookingDto toDto(Booking b) {
+    private BigDecimal ownerNet(Long bookingId) {
+        return earnings.findByBookingId(bookingId).map(OwnerBookingService::net).orElse(null);
+    }
+
+    /** A reversed earning (refunded away) is worth nothing, whatever its net column still says. */
+    static BigDecimal net(OwnerEarning earning) {
+        return earning.getStatus() == EarningStatus.REVERSED ? BigDecimal.ZERO.setScale(2) : earning.getNet();
+    }
+
+    static OwnerBookingDto toDto(Booking b, BigDecimal ownerNet) {
         ParkingListing listing = b.getListing();
         return new OwnerBookingDto(b.getId(), b.getBookingCode(), b.getStatus(), listing.getId(), listing.getTitle(),
                 b.getSlot().getLabel(), b.getStartTime(), b.getEndTime(), b.getVehicleType(), b.getPlateNumber(),
-                BookingMapper.firstName(b.getDriver().getName()), b.getBaseAmount(), b.getApprovalDeadline(),
+                BookingMapper.firstName(b.getDriver().getName()), b.getBaseAmount(), ownerNet, b.getApprovalDeadline(),
                 b.getCreatedAt());
     }
 }

@@ -16,7 +16,7 @@ import {
   type VerifyBody,
 } from '../../lib/bookings'
 import { errorMessage, toProblem } from '../../lib/errors'
-import { CANCELLATION_POLICIES, formatINR, VEHICLE_TYPE_LABELS } from '../../lib/format'
+import { CANCELLATION_POLICIES, REFUND_NOTE, formatINR, VEHICLE_TYPE_LABELS } from '../../lib/format'
 import { loadRazorpay, openRazorpay } from '../../lib/razorpay'
 import { listingHref, usePublicListing } from '../../lib/search'
 import { durationLabel, formatWindow } from '../../lib/time'
@@ -261,6 +261,7 @@ function CheckoutView({ checkout }: { checkout: CheckoutDto }) {
                   {`: ${policy.help}`}
                 </p>
               )}
+              {policy && <p className="text-sm text-slate-600 dark:text-slate-400">{REFUND_NOTE}</p>}
             </div>
           </section>
 

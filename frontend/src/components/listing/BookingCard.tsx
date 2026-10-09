@@ -226,6 +226,7 @@ export function BookingCard({ listing }: { listing: PublicListingDto }) {
           onChange={(e) => change({ end: e.target.value })}
         />
         {!browserIsIst() && <p className="-mt-1 text-xs text-slate-500">{IST_HINT}</p>}
+        {!listing.autoApprove && <p className="-mt-1 text-xs text-slate-500">Needs at least 30 minutes' notice</p>}
         <Select
           label={isDriver ? 'Vehicle type' : 'Vehicle'}
           value={selection.vehicle}

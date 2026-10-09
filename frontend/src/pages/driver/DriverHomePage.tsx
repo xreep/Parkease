@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthProvider'
 import { FormError } from '../../components/AuthCard'
 import { Spinner } from '../../components/ui/Spinner'
+import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useBookings } from '../../lib/bookings'
 import { errorMessage } from '../../lib/errors'
 import { VEHICLE_TYPE_LABELS } from '../../lib/format'
@@ -32,9 +33,15 @@ function NextBookingCard() {
       ) : next ? (
         <>
           <div className="space-y-1">
-            <p className="font-mono text-sm font-semibold">{next.bookingCode}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-mono text-sm font-semibold">{next.bookingCode}</p>
+              <StatusBadge kind="booking" status={next.status} />
+            </div>
             <p className="font-semibold">{next.listingTitle}</p>
             <p className="text-sm text-slate-600 dark:text-slate-400">{formatWindow(next.startTime, next.endTime)}</p>
+            {next.status === 'ACTIVE' && (
+              <p className="text-sm font-medium text-sky-700 dark:text-sky-400">Your parking time is active.</p>
+            )}
           </div>
           <Link to={`/driver/bookings/${next.id}`} className={primaryLink}>View booking</Link>
         </>

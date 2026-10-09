@@ -5,6 +5,7 @@ import clsx from 'clsx'
 import { useAuth } from '../../auth/AuthProvider'
 import { homeFor } from '../../auth/types'
 import { Logo } from './Logo'
+import { NotificationBell } from './NotificationBell'
 import { ThemeToggle } from './ThemeToggle'
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
@@ -65,18 +66,16 @@ export function Navbar() {
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/85 backdrop-blur dark:border-slate-800 dark:bg-slate-950/85">
       <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
         <Logo />
-        <div className="hidden items-center gap-1 md:flex">
-          {links}
-          <ThemeToggle />
-        </div>
-        <div className="flex items-center gap-1 md:hidden">
+        <div className="flex items-center gap-1">
+          <div className="hidden items-center gap-1 md:flex">{links}</div>
+          {user && <NotificationBell />}
           <ThemeToggle />
           <button
             type="button"
             aria-label={open ? 'Close menu' : 'Open menu'}
             aria-expanded={open}
             onClick={() => setOpen((o) => !o)}
-            className="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="rounded-lg p-2 hover:bg-slate-100 md:hidden dark:hover:bg-slate-800"
           >
             {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>

@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { QueryClient } from '@tanstack/react-query'
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import MockAdapter from 'axios-mock-adapter'
 import { toast } from 'sonner'
@@ -19,7 +19,7 @@ function ownerBooking(overrides: Partial<OwnerBookingDto> = {}): OwnerBookingDto
   return {
     id: 5, bookingCode: 'PE-REQ001', status: 'AWAITING_APPROVAL', listingId: 7, listingTitle: 'FC Road Parking', slotLabel: 'A-3',
     startTime: '2026-10-12T04:30:00Z', endTime: '2026-10-12T06:30:00Z', vehicleType: 'FOUR_WHEELER', plateNumber: 'MH12AB1234',
-    driverFirstName: 'Rahul', baseAmount: 240, approvalDeadline: new Date(Date.now() + 5 * 3_600_000).toISOString(),
+    driverFirstName: 'Rahul', baseAmount: 240, ownerNet: 240, approvalDeadline: new Date(Date.now() + 5 * 3_600_000).toISOString(),
     createdAt: '2026-10-09T08:00:00Z', ...overrides,
   }
 }
@@ -59,6 +59,24 @@ describe('owner bookings', () => {
     expect(respondBy.className).not.toMatch(/red/)
     expect(listCalls()[0].params).toEqual({ view: 'requests', page: 0, size: 20 })
     expect(screen.getByRole('tab', { name: 'Requests' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('shows what the owner still earns from cancelled, declined and partly refunded bookings', async () => {
+    mock.onGet('/owner/bookings').reply(200, page([
+      ownerBooking({ id: 6, bookingCode: 'PE-CAN001', status: 'CANCELLED', ownerNet: 0 }),
+      ownerBooking({ id: 7, bookingCode: 'PE-REJ001', status: 'REJECTED', ownerNet: 0 }),
+      ownerBooking({ id: 8, bookingCode: 'PE-PAR001', status: 'CANCELLED', ownerNet: 120 }),
+      ownerBooking({ id: 9, bookingCode: 'PE-NON001', status: 'COMPLETED', ownerNet: null }),
+    ]))
+    renderApp('/owner/bookings')
+
+    const cancelled = await screen.findByRole('article', { name: 'PE-CAN001' })
+    expect(within(cancelled).getByText('No earnings — refunded')).toBeInTheDocument()
+    expect(within(cancelled).queryByText(/You earn/)).not.toBeInTheDocument()
+    expect(within(screen.getByRole('article', { name: 'PE-REJ001' })).getByText('No earnings — refunded')).toBeInTheDocument()
+    expect(within(screen.getByRole('article', { name: 'PE-PAR001' })).getByText('You earn ₹120')).toBeInTheDocument()
+    // No earning recorded: fall back to the booking's own share.
+    expect(within(screen.getByRole('article', { name: 'PE-NON001' })).getByText('You earn ₹240')).toBeInTheDocument()
   })
 
   it('highlights a deadline less than 30 minutes away', async () => {
@@ -140,6 +158,93 @@ describe('owner bookings', () => {
 
     expect(await within(dialog).findByText('Please give a reason')).toBeInTheDocument()
     expect(mock.history.post).toHaveLength(0)
+  })
+
+  describe('cancelling an upcoming booking', () => {
+    const upcoming = (overrides: Partial<OwnerBookingDto> = {}) =>
+      ownerBooking({
+        id: 6, bookingCode: 'PE-UP0001', status: 'CONFIRMED', approvalDeadline: null,
+        startTime: new Date(Date.now() + 30 * 3_600_000).toISOString(), endTime: new Date(Date.now() + 32 * 3_600_000).toISOString(), ...overrides,
+      })
+
+    async function openUpcoming(user: ReturnType<typeof userEvent.setup>) {
+      await user.click(await screen.findByRole('tab', { name: 'Upcoming' }))
+      const card = await screen.findByRole('article', { name: 'PE-UP0001' })
+      await user.click(within(card).getByRole('button', { name: 'Cancel booking' }))
+      return screen.findByRole('dialog', { name: 'Cancel this booking?' })
+    }
+
+    beforeEach(() => {
+      mock.onGet('/owner/bookings', { params: { view: 'requests', page: 0, size: 20 } }).reply(200, page([]))
+    })
+
+    it('only offers it on confirmed bookings that have not started', async () => {
+      mock.onGet('/owner/bookings', { params: { view: 'upcoming', page: 0, size: 20 } }).reply(200, page([
+        upcoming(),
+        upcoming({ id: 8, bookingCode: 'PE-ACT001', status: 'ACTIVE' }),
+        upcoming({ id: 9, bookingCode: 'PE-GONE01', startTime: new Date(Date.now() - 600_000).toISOString() }),
+      ]))
+      const user = userEvent.setup()
+      renderApp('/owner/bookings')
+
+      await user.click(await screen.findByRole('tab', { name: 'Upcoming' }))
+      expect(within(await screen.findByRole('article', { name: 'PE-UP0001' })).getByRole('button', { name: 'Cancel booking' })).toBeInTheDocument()
+      expect(within(screen.getByRole('article', { name: 'PE-ACT001' })).queryByRole('button', { name: 'Cancel booking' })).not.toBeInTheDocument()
+      expect(within(screen.getByRole('article', { name: 'PE-GONE01' })).queryByRole('button', { name: 'Cancel booking' })).not.toBeInTheDocument()
+    })
+
+    it('requires a reason, then cancels and refreshes', async () => {
+      mock.onGet('/owner/bookings', { params: { view: 'upcoming', page: 0, size: 20 } }).reply(200, page([upcoming()]))
+      mock.onPost('/owner/bookings/6/cancel').reply(200, upcoming({ status: 'CANCELLED' }))
+      const user = userEvent.setup()
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+      renderApp('/owner/bookings', queryClient)
+
+      const dialog = await openUpcoming(user)
+      expect(within(dialog).getByText('The driver will be refunded in full.')).toBeInTheDocument()
+      await user.click(within(dialog).getByRole('button', { name: 'Cancel booking' }))
+      expect(await within(dialog).findByText('Please give a reason')).toBeInTheDocument()
+      expect(mock.history.post).toHaveLength(0)
+
+      await user.type(within(dialog).getByLabelText('Reason'), 'Space flooded')
+      await user.click(within(dialog).getByRole('button', { name: 'Cancel booking' }))
+
+      await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Booking cancelled — the driver will be refunded'))
+      expect(JSON.parse(mock.history.post[0].data)).toEqual({ reason: 'Space flooded' })
+      expect(mock.history.post[0].url).toBe('/owner/bookings/6/cancel')
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      await waitFor(() => expect(invalidate.mock.calls.map(([f]) => (f as { queryKey: unknown[] }).queryKey[0])).toEqual(expect.arrayContaining(['owner', 'booking', 'bookings'])))
+    })
+
+    it('limits the reason to 300 characters', async () => {
+      mock.onGet('/owner/bookings', { params: { view: 'upcoming', page: 0, size: 20 } }).reply(200, page([upcoming()]))
+      const user = userEvent.setup()
+      renderApp('/owner/bookings')
+
+      const dialog = await openUpcoming(user)
+      fireEvent.change(within(dialog).getByLabelText('Reason'), { target: { value: 'x'.repeat(301) } })
+      await user.click(within(dialog).getByRole('button', { name: 'Cancel booking' }))
+
+      expect(await within(dialog).findByText('Use at most 300 characters')).toBeInTheDocument()
+      expect(mock.history.post).toHaveLength(0)
+    })
+
+    it('shows the server message when it is too late', async () => {
+      mock.onGet('/owner/bookings', { params: { view: 'upcoming', page: 0, size: 20 } }).reply(200, page([upcoming()]))
+      mock.onPost('/owner/bookings/6/cancel').reply(409, { code: 'NOT_CANCELLABLE', detail: "Bookings can't be cancelled once they've started" })
+      const user = userEvent.setup()
+      renderApp('/owner/bookings')
+
+      const dialog = await openUpcoming(user)
+      await user.type(within(dialog).getByLabelText('Reason'), 'Closed')
+      await user.click(within(dialog).getByRole('button', { name: 'Cancel booking' }))
+
+      expect(await within(dialog).findByText("Bookings can't be cancelled once they've started")).toBeInTheDocument()
+      expect(toast.success).not.toHaveBeenCalled()
+      // The refresh can unmount the dialog, so the message must also survive as a toast.
+      expect(toast.error).toHaveBeenCalledWith("Bookings can't be cancelled once they've started")
+    })
   })
 
   it('reports a request that can no longer be approved and refreshes the list', async () => {

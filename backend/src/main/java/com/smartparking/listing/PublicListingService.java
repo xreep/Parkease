@@ -6,6 +6,7 @@ import com.smartparking.availability.AvailabilityEvaluator;
 import com.smartparking.availability.AvailabilityEvaluator.ListingAvailabilityInput;
 import com.smartparking.availability.AvailabilityRule;
 import com.smartparking.availability.AvailabilityRuleRepository;
+import com.smartparking.booking.BookingProperties;
 import com.smartparking.booking.BookingRepository;
 import com.smartparking.common.error.ApiException;
 import com.smartparking.common.model.VehicleType;
@@ -38,6 +39,7 @@ public class PublicListingService {
     private final PricingService pricing;
     private final ListingMapper mapper;
     private final BookingRepository bookings;
+    private final BookingProperties bookingProperties;
     private final Clock clock;
 
     @Transactional(readOnly = true)
@@ -63,6 +65,7 @@ public class PublicListingService {
     public ListingQuoteResponse quote(Long id, Instant start, Instant end, VehicleType vehicleType) {
         TimeWindow window = TimeWindow.of(start, end, clock);
         ParkingListing l = requireApproved(id);
+        bookingProperties.requireNoticeForRequest(l.isAutoApprove(), window.start(), clock.instant());
         List<AvailabilityRule> listingRules = l.isOpen24x7() ? List.of() : rules.findByListingIdOrderByDayOfWeekAsc(id);
         List<AvailabilityBlock> overlapping = blocks.findOverlapping(List.of(id), window.start(), window.end());
         var bookedSlotIds = new HashSet<>(

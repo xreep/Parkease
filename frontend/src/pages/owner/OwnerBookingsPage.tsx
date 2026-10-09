@@ -14,6 +14,7 @@ import {
   approveBooking,
   invalidateBookingQueries,
   invalidateOwnerBookings,
+  ownerCancelBooking,
   rejectBooking,
   useOwnerBookings,
   type OwnerBookingDto,
@@ -99,8 +100,53 @@ function RequestActions({ booking, onChanged }: { booking: OwnerBookingDto; onCh
   )
 }
 
+function UpcomingActions({ booking, onChanged }: { booking: OwnerBookingDto; onChanged: () => Promise<unknown> }) {
+  const [cancelling, setCancelling] = useState(false)
+
+  async function cancel(reason: string) {
+    try {
+      await ownerCancelBooking(booking.id, reason)
+    } catch (error) {
+      // Usually the booking already started or was cancelled: the refresh can unmount this card (and the dialog
+      // with it), so the message also goes out as a toast; the dialog shows it too while it is still open.
+      toast.error(errorMessage(error))
+      await onChanged()
+      throw error
+    }
+    toast.success('Booking cancelled — the driver will be refunded')
+    setCancelling(false)
+    await onChanged()
+  }
+
+  return (
+    <>
+      <Button type="button" variant="secondary" className="px-3 py-1.5" onClick={() => setCancelling(true)}>
+        Cancel booking
+      </Button>
+      <ReasonDialog
+        open={cancelling}
+        title="Cancel this booking?"
+        confirmLabel="Cancel booking"
+        helper="The driver will be refunded in full."
+        maxLength={300}
+        onConfirm={cancel}
+        onClose={() => setCancelling(false)}
+      />
+    </>
+  )
+}
+
+/** What the owner earns from the booking: the net of their earning (zero once it was refunded away), else their share. */
+function earningsLine(booking: OwnerBookingDto): string {
+  const refundedAway = booking.status === 'CANCELLED' || booking.status === 'REJECTED'
+  const net = booking.ownerNet ?? (refundedAway ? 0 : booking.baseAmount)
+  return net > 0 ? `You earn ${formatINR(net)}` : 'No earnings — refunded'
+}
+
 function BookingCard({ booking, view, onChanged }: { booking: OwnerBookingDto; view: OwnerBookingView; onChanged: () => Promise<unknown> }) {
   const isRequest = view === 'requests' && booking.status === 'AWAITING_APPROVAL'
+  const now = useNow(view === 'upcoming', 30_000)
+  const canCancel = view === 'upcoming' && booking.status === 'CONFIRMED' && new Date(booking.startTime).getTime() > now
   return (
     <article
       aria-label={booking.bookingCode}
@@ -120,8 +166,9 @@ function BookingCard({ booking, view, onChanged }: { booking: OwnerBookingDto; v
         {isRequest && booking.approvalDeadline && <RespondBy deadline={booking.approvalDeadline} />}
       </div>
       <div className="flex flex-col gap-3 sm:items-end">
-        <p className="text-lg font-bold">{`You earn ${formatINR(booking.baseAmount)}`}</p>
+        <p className="text-lg font-bold">{earningsLine(booking)}</p>
         {isRequest && <RequestActions booking={booking} onChanged={onChanged} />}
+        {canCancel && <UpcomingActions booking={booking} onChanged={onChanged} />}
       </div>
     </article>
   )

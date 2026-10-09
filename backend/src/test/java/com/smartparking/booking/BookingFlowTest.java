@@ -217,6 +217,35 @@ class BookingFlowTest {
         assertThat(earnings.findByBookingId(id)).isPresent();
     }
 
+    private static Instant quarterAtLeast(long minutesFromNow) {
+        long quarter = 15 * 60;
+        long seconds = Instant.now().plusSeconds(minutesFromNow * 60).getEpochSecond();
+        return Instant.ofEpochSecond(Math.floorDiv(seconds + quarter - 1, quarter) * quarter);
+    }
+
+    @Test
+    void aRequestToBookListingCannotBeReservedLessThanThirtyMinutesAhead() throws Exception {
+        ParkingListing listing = listings.findById(listingId).orElseThrow();
+        listing.setAutoApprove(false);
+        listings.saveAndFlush(listing);
+        Instant soon = quarterAtLeast(10); // 10-25 minutes from now
+        Instant enough = quarterAtLeast(31); // 31-46 minutes from now
+
+        reserve(mvc, driver.auth(), listingId, driver.vehicleId(), soon, soon.plusSeconds(7200))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_TIME_RANGE"))
+                .andExpect(jsonPath("$.detail").value("Request-to-book listings need at least 30 minutes' notice"));
+        assertThat(count("select count(*) from bookings")).isZero();
+        long held = bookingId(reserveOk(mvc, driver.auth(), listingId, driver.vehicleId(), enough,
+                enough.plusSeconds(7200)));
+        mvc.perform(post("/api/v1/bookings/" + held + "/cancel").header(HttpHeaders.AUTHORIZATION, driver.auth()))
+                .andExpect(status().isOk()); // frees the only slot again
+
+        listing.setAutoApprove(true); // instant booking has no owner to wait for
+        listings.saveAndFlush(listing);
+        reserveOk(mvc, other.auth(), listingId, other.vehicleId(), soon, soon.plusSeconds(7200));
+    }
+
     @Test
     void badSignatureOrWrongOrderIsRejected() throws Exception {
         Instant start = tomorrowAt(10);

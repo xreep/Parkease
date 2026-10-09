@@ -123,18 +123,28 @@ public class RazorpayPaymentProvider implements PaymentProvider {
         return refund(paymentId, amountPaise, reason, null, null);
     }
 
+    @Override
+    public ProviderRefund refund(String paymentId, long amountPaise, String reason, String idempotencyKey,
+                                 String receipt) {
+        return refund(paymentId, amountPaise, reason, idempotencyKey, receipt, Map.of());
+    }
+
     /**
      * Razorpay's idempotency header ({@code X-Refund-Idempotency}) is not exposed by the Java SDK (it cannot add
      * request headers), so the refund call is made directly: {@code POST /v1/payments/{id}/refund} with basic auth.
      */
     @Override
     public ProviderRefund refund(String paymentId, long amountPaise, String reason, String idempotencyKey,
-                                 String receipt) {
+                                 String receipt, Map<String, String> extraNotes) {
         if (paymentId == null || !PROVIDER_ID.matcher(paymentId).matches()) {
             throw providerError("refund payment", new IllegalArgumentException("Invalid payment id"));
         }
         try {
-            JSONObject notes = new JSONObject().put("reason", reason == null ? "" : reason);
+            JSONObject notes = new JSONObject();
+            for (Map.Entry<String, String> note : extraNotes.entrySet()) {
+                notes.put(note.getKey(), note.getValue());
+            }
+            notes.put("reason", reason == null ? "" : reason);
             JSONObject payload = new JSONObject().put("amount", amountPaise);
             if (receipt != null) {
                 payload.put("receipt", receipt);

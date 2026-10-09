@@ -54,6 +54,7 @@ app:
     hold-minutes: 10
     approval-hours: 2
     max-active-holds: 3
+    request-min-lead-minutes: 30
   jobs:
     enabled: true
 

@@ -9,6 +9,7 @@ import type { BookingDetailDto, CheckoutDto } from '../../lib/bookings'
 import { RazorpayDismissedError, RazorpayFailedError, loadRazorpay, openRazorpay } from '../../lib/razorpay'
 import type { PublicListingDto } from '../../lib/search'
 import { tokenStore } from '../../lib/tokenStore'
+import { REFUND_NOTE } from '../../lib/format'
 import { renderApp } from '../../test/renderApp'
 
 vi.mock('../../lib/razorpay', async (importOriginal) => ({
@@ -70,6 +71,13 @@ describe('checkout', () => {
   afterEach(() => mock.restore())
 
   const verifyCalls = () => mock.history.post.filter((r) => r.url === '/payments/verify')
+
+  it('shows the cancellation policy with the refund note', async () => {
+    mock.onGet('/bookings/91/checkout').reply(200, checkout('MOCK'))
+    renderApp('/checkout/91')
+    expect(await screen.findByText(/Full refund up to 24 hours before start/)).toBeInTheDocument()
+    expect(screen.getByText(REFUND_NOTE)).toBeInTheDocument()
+  })
 
   it('summarises the reservation with a countdown and the total to pay', async () => {
     mock.onGet('/bookings/91/checkout').reply(200, checkout('MOCK'))

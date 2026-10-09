@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -84,10 +84,12 @@ export function Dialog({ open, title, onClose, children, busy = false, wide = fa
   )
 }
 
-const reasonSchema = z.object({
-  reason: z.string().trim().min(1, 'Please give a reason').max(500, 'Use at most 500 characters'),
-})
-type ReasonValues = z.infer<typeof reasonSchema>
+const DEFAULT_REASON_MAX = 500
+const makeReasonSchema = (max: number) =>
+  z.object({
+    reason: z.string().trim().min(1, 'Please give a reason').max(max, `Use at most ${max} characters`),
+  })
+type ReasonValues = z.infer<ReturnType<typeof makeReasonSchema>>
 
 export type ReasonDialogProps = {
   open: boolean
@@ -95,14 +97,19 @@ export type ReasonDialogProps = {
   confirmLabel: string
   onConfirm: (reason: string) => void | Promise<void>
   onClose: () => void
+  /** Shown under the reason field. */
+  helper?: string
+  /** Longest reason accepted (default 500). */
+  maxLength?: number
 }
 
 type ReasonFormProps = Omit<ReasonDialogProps, 'open' | 'title'> & { onBusyChange: (busy: boolean) => void }
 
-function ReasonForm({ confirmLabel, onConfirm, onClose, onBusyChange }: ReasonFormProps) {
+function ReasonForm({ confirmLabel, onConfirm, onClose, onBusyChange, helper, maxLength = DEFAULT_REASON_MAX }: ReasonFormProps) {
   const [formError, setFormError] = useState<string | null>(null)
+  const schema = useMemo(() => makeReasonSchema(maxLength), [maxLength])
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<ReasonValues>({
-    resolver: zodResolver(reasonSchema),
+    resolver: zodResolver(schema),
     defaultValues: { reason: '' },
   })
 
@@ -121,7 +128,7 @@ function ReasonForm({ confirmLabel, onConfirm, onClose, onBusyChange }: ReasonFo
   return (
     <form onSubmit={handleSubmit(submit)} noValidate className="space-y-4">
       <FormError message={formError} />
-      <TextArea label="Reason" rows={4} error={errors.reason?.message} {...register('reason')} />
+      <TextArea label="Reason" rows={4} hint={helper} error={errors.reason?.message} {...register('reason')} />
       <div className="flex justify-end gap-2">
         <Button type="button" variant="secondary" disabled={isSubmitting} onClick={onClose}>Cancel</Button>
         <Button type="submit" variant="danger" loading={isSubmitting}>{confirmLabel}</Button>
@@ -130,12 +137,12 @@ function ReasonForm({ confirmLabel, onConfirm, onClose, onBusyChange }: ReasonFo
   )
 }
 
-/** Asks for a required reason (max 500 chars). The form remounts on each open, so it starts empty. */
-export function ReasonDialog({ open, title, confirmLabel, onConfirm, onClose }: ReasonDialogProps) {
+/** Asks for a required reason (max 500 chars unless `maxLength`). The form remounts on each open, so it starts empty. */
+export function ReasonDialog({ open, title, confirmLabel, onConfirm, onClose, helper, maxLength }: ReasonDialogProps) {
   const [busy, setBusy] = useState(false)
   return (
     <Dialog open={open} title={title} onClose={onClose} busy={busy}>
-      <ReasonForm confirmLabel={confirmLabel} onConfirm={onConfirm} onClose={onClose} onBusyChange={setBusy} />
+      <ReasonForm confirmLabel={confirmLabel} onConfirm={onConfirm} onClose={onClose} onBusyChange={setBusy} helper={helper} maxLength={maxLength} />
     </Dialog>
   )
 }
