@@ -107,7 +107,9 @@ function UpcomingActions({ booking, onChanged }: { booking: OwnerBookingDto; onC
     try {
       await ownerCancelBooking(booking.id, reason)
     } catch (error) {
-      // Usually the booking already started or was cancelled: refresh the list, and let the dialog show why.
+      // Usually the booking already started or was cancelled: the refresh can unmount this card (and the dialog
+      // with it), so the message also goes out as a toast; the dialog shows it too while it is still open.
+      toast.error(errorMessage(error))
       await onChanged()
       throw error
     }

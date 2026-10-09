@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../lib/api'
 import type { BookingDetailDto, CancellationPreview } from '../../lib/bookings'
+import { REFUND_NOTE } from '../../lib/format'
 import { tokenStore } from '../../lib/tokenStore'
 import { renderApp } from '../../test/renderApp'
 
@@ -106,7 +107,8 @@ describe('driver cancellation', () => {
     const dialog = await openDialog(user)
     expect(await within(dialog).findByText("You'll get ₹80 back (100%)")).toBeInTheDocument()
     expect(within(dialog).getByText('Non-refundable: ₹9.44 (platform fee and GST are not refunded)')).toBeInTheDocument()
-    expect(within(dialog).getByText(/Moderate policy: full refund of the parking charge up to 24 hours/)).toBeInTheDocument()
+    expect(within(dialog).getByText('Moderate policy: Full refund up to 24 hours before start, 50% from 24 to 2 hours before, none within 2 hours')).toBeInTheDocument()
+    expect(within(dialog).getByText(REFUND_NOTE)).toBeInTheDocument()
   })
 
   it('shows a half refund', async () => {
@@ -129,13 +131,13 @@ describe('driver cancellation', () => {
     const dialog = await openDialog(user)
     expect(await within(dialog).findByText('No refund applies — Strict policy')).toBeInTheDocument()
     expect(within(dialog).getByText('Non-refundable: ₹89.44 (platform fee and GST are not refunded)')).toBeInTheDocument()
-    expect(within(dialog).getByText(/Strict policy: 50% refund/)).toBeInTheDocument()
+    expect(within(dialog).getByText('Strict policy: 50% refund up to 48 hours before start, none after')).toBeInTheDocument()
   })
 
   it('cancels with the optional reason, announces the refund and refreshes', async () => {
     mock.onGet('/bookings/91').reply(200, booking())
     mock.onGet('/bookings/91/cancellation-preview').reply(200, preview())
-    mock.onPost('/bookings/91/cancel').reply(200, booking({ status: 'CANCELLED', cancelledBy: 'DRIVER' }))
+    mock.onPost('/bookings/91/cancel').reply(200, booking({ status: 'CANCELLED', cancelledBy: 'DRIVER', refundAmount: 80 }))
     const user = userEvent.setup()
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
@@ -166,6 +168,67 @@ describe('driver cancellation', () => {
 
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Booking cancelled'))
     expect(JSON.parse(mock.history.post[0].data)).toEqual({})
+  })
+
+  it('announces the refund the server actually made, and says when it differs from the preview', async () => {
+    mock.onGet('/bookings/91').reply(200, booking())
+    mock.onGet('/bookings/91/cancellation-preview').reply(200, preview())
+    mock.onPost('/bookings/91/cancel').reply(200, booking({ status: 'CANCELLED', cancelledBy: 'DRIVER', refundAmount: 40 }))
+    const user = userEvent.setup()
+    renderApp('/driver/bookings/91')
+
+    const dialog = await openDialog(user)
+    await within(dialog).findByText("You'll get ₹80 back (100%)")
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel booking' }))
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Booking cancelled — ₹40 will be refunded (the preview showed ₹80)'))
+  })
+
+  it('says nothing was charged from the preview, not from the status the page last saw', async () => {
+    mock.onGet('/bookings/91').reply(200, booking({ status: 'CONFIRMED' }))
+    mock.onGet('/bookings/91/cancellation-preview').reply(200, preview({ policy: null, refundAmount: 0, nonRefundableAmount: 0 }))
+    const user = userEvent.setup()
+    renderApp('/driver/bookings/91')
+
+    const dialog = await openDialog(user)
+    expect(await within(dialog).findByText('Nothing has been charged yet.')).toBeInTheDocument()
+  })
+
+  it('keeps showing the refund, and the confirm button, when refreshing the preview fails', async () => {
+    mock.onGet('/bookings/91').reply(200, booking())
+    mock.onGet('/bookings/91/cancellation-preview').replyOnce(200, preview())
+    mock.onGet('/bookings/91/cancellation-preview').reply(500, { code: 'INTERNAL', detail: 'Boom' })
+    mock.onPost('/bookings/91/cancel').reply(409, { code: 'NOT_CANCELLABLE', detail: 'Try again in a moment' })
+    const user = userEvent.setup()
+    renderApp('/driver/bookings/91')
+
+    const dialog = await openDialog(user)
+    await within(dialog).findByText("You'll get ₹80 back (100%)")
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel booking' }))
+
+    expect(await within(dialog).findByText('Try again in a moment')).toBeInTheDocument()
+    await waitFor(() => expect(mock.history.get.filter((r) => r.url === '/bookings/91/cancellation-preview')).toHaveLength(2))
+    expect(within(dialog).getByText("You'll get ₹80 back (100%)")).toBeInTheDocument()
+    expect(within(dialog).queryByText('Boom')).not.toBeInTheDocument()
+  })
+
+  it('swaps the confirm button for the reason when the refreshed preview says it is no longer cancellable', async () => {
+    const reason = "Bookings can't be cancelled once they've started"
+    mock.onGet('/bookings/91').reply(200, booking())
+    mock.onGet('/bookings/91/cancellation-preview').replyOnce(200, preview())
+    mock.onGet('/bookings/91/cancellation-preview').reply(200, preview({ cancellable: false, reason, policy: null, refundPercent: 0, refundAmount: 0, nonRefundableAmount: 0 }))
+    mock.onPost('/bookings/91/cancel').reply(409, { code: 'NOT_CANCELLABLE', detail: reason })
+    const user = userEvent.setup()
+    renderApp('/driver/bookings/91')
+
+    const dialog = await openDialog(user)
+    await within(dialog).findByText("You'll get ₹80 back (100%)")
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel booking' }))
+
+    await waitFor(() => expect(within(dialog).queryByRole('button', { name: 'Cancel booking' })).not.toBeInTheDocument())
+    expect(within(dialog).getAllByText(reason)).toHaveLength(1)
+    expect(within(dialog).queryByText(/You'll get/)).not.toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Close' })).toBeInTheDocument()
   })
 
   it('keeps the booking when the driver changes their mind', async () => {
