@@ -242,13 +242,148 @@ describe('ListingPage', () => {
     expect(screen.getByTestId('loc')).toHaveTextContent('%26vehicle%3DFOUR_WHEELER')
   })
 
-  it('tells a signed-in driver that online booking is coming', async () => {
-    tokenStore.set('a', 'r')
-    mock.onGet('/me').reply(200, driver)
-    renderApp(URL_7)
+  describe('reserving as a driver', () => {
+    const car = { id: 11, type: 'FOUR_WHEELER', plateNumber: 'MH12AB1234', makeModel: 'Honda City', isDefault: true }
+    const car2 = { id: 13, type: 'FOUR_WHEELER', plateNumber: 'MH14CD5678', makeModel: null, isDefault: false }
+    const bike = { id: 12, type: 'TWO_WHEELER', plateNumber: 'MH12XY9876', makeModel: null, isDefault: false }
 
-    expect(await screen.findByText('Online booking opens in the next update.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Reserve' })).toBeDisabled()
+    const checkoutDto = {
+      booking: { id: 91, listingId: 7, holdExpiresAt: new Date(Date.now() + 10 * 60_000).toISOString() },
+      payment: { provider: 'MOCK', orderId: 'order_1', amount: 8944, currency: 'INR', keyId: null, name: 'ParkEase', description: 'Parking', prefill: { name: 'R', email: 'r@x.in', contact: null } },
+    }
+
+    beforeEach(() => {
+      tokenStore.set('a', 'r')
+      mock.onGet('/me').reply(200, driver)
+      // The checkout page renders after a successful reservation; its content is not under test here.
+      mock.onGet('/bookings/91/checkout').reply(410, { code: 'HOLD_EXPIRED', detail: 'Your reservation expired' })
+      mock.onGet('/bookings/91').reply(404, { code: 'NOT_FOUND', detail: 'Booking not found' })
+    })
+
+    const bookingPosts = () => mock.history.post.filter((r) => r.url === '/bookings')
+
+    it('reserves with the default vehicle and goes to checkout', async () => {
+      mock.onGet('/me/vehicles').reply(200, [bike, car, car2])
+      mock.onPost('/bookings').reply(201, checkoutDto)
+      renderApp(URL_7, undefined, <LocationProbe />)
+      await screen.findByText('3 slots free')
+
+      const select = await screen.findByLabelText('Vehicle')
+      expect(select).toHaveValue('11')
+      expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['MH12AB1234 · Honda City', 'MH14CD5678'])
+      await userEvent.click(screen.getByRole('button', { name: 'Reserve' }))
+
+      await waitFor(() => expect(screen.getByTestId('loc')).toHaveTextContent('/checkout/91'))
+      expect(JSON.parse(bookingPosts()[0].data)).toEqual({ listingId: 7, vehicleId: 11, start, end })
+    })
+
+    it('reserves the vehicle the driver picks', async () => {
+      mock.onGet('/me/vehicles').reply(200, [car, car2])
+      mock.onPost('/bookings').reply(201, checkoutDto)
+      renderApp(URL_7)
+      await screen.findByText('3 slots free')
+
+      await userEvent.selectOptions(await screen.findByLabelText('Vehicle'), '13')
+      await userEvent.click(screen.getByRole('button', { name: 'Reserve' }))
+
+      await waitFor(() => expect(bookingPosts()).toHaveLength(1))
+      expect(JSON.parse(bookingPosts()[0].data).vehicleId).toBe(13)
+    })
+
+    it('lists the vehicles of the chosen type and re-selects its default when the type changes', async () => {
+      mock.onGet('/me/vehicles').reply(200, [car, bike])
+      mock.onPost('/bookings').reply(201, checkoutDto)
+      renderApp(URL_7)
+      await screen.findByText('3 slots free')
+      expect(await screen.findByLabelText('Vehicle')).toHaveValue('11')
+
+      await userEvent.selectOptions(screen.getByLabelText('Vehicle type'), 'TWO_WHEELER')
+
+      await waitFor(() => expect(screen.getByLabelText('Vehicle')).toHaveValue('12'))
+      expect(screen.getAllByRole('option', { name: /MH12/ })).toHaveLength(1)
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Reserve' })).toBeEnabled())
+      await userEvent.click(screen.getByRole('button', { name: 'Reserve' }))
+      await waitFor(() => expect(bookingPosts()).toHaveLength(1))
+      expect(JSON.parse(bookingPosts()[0].data).vehicleId).toBe(12)
+    })
+
+    it('asks a driver without vehicles to add one, then continues to checkout', async () => {
+      mock.onGet('/me/vehicles').reply(200, [])
+      mock.onPost('/me/vehicles').reply(201, car)
+      mock.onPost('/bookings').reply(201, checkoutDto)
+      renderApp(URL_7, undefined, <LocationProbe />)
+      await screen.findByText('3 slots free')
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Reserve' })).toBeEnabled())
+
+      await userEvent.click(screen.getByRole('button', { name: 'Reserve' }))
+
+      const dialog = within(screen.getByRole('dialog', { name: 'Add your vehicle' }))
+      expect(bookingPosts()).toHaveLength(0)
+      expect(dialog.getByLabelText('Vehicle type')).toHaveValue('FOUR_WHEELER')
+      expect(dialog.queryByLabelText('Use as default')).not.toBeInTheDocument()
+      await userEvent.type(dialog.getByLabelText('Number plate'), 'mh 12 ab 1234')
+      await userEvent.click(dialog.getByRole('button', { name: 'Add vehicle' }))
+
+      await waitFor(() => expect(screen.getByTestId('loc')).toHaveTextContent('/checkout/91'))
+      expect(JSON.parse(mock.history.post.find((r) => r.url === '/me/vehicles')!.data)).toMatchObject({ type: 'FOUR_WHEELER', plateNumber: 'MH12AB1234' })
+      expect(JSON.parse(bookingPosts()[0].data).vehicleId).toBe(11)
+    })
+
+    it('asks for a vehicle of the chosen type when the driver only has the other type', async () => {
+      mock.onGet('/me/vehicles').reply(200, [bike])
+      renderApp(URL_7)
+      await screen.findByText('3 slots free')
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Reserve' })).toBeEnabled())
+      expect(screen.queryByLabelText('Vehicle')).not.toBeInTheDocument()
+
+      await userEvent.click(screen.getByRole('button', { name: 'Reserve' }))
+
+      expect(within(screen.getByRole('dialog', { name: 'Add your vehicle' })).getByLabelText('Vehicle type')).toHaveValue('FOUR_WHEELER')
+      expect(bookingPosts()).toHaveLength(0)
+    })
+
+    it('closes the add-vehicle dialog without reserving when cancelled', async () => {
+      mock.onGet('/me/vehicles').reply(200, [])
+      renderApp(URL_7)
+      await screen.findByText('3 slots free')
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Reserve' })).toBeEnabled())
+      await userEvent.click(screen.getByRole('button', { name: 'Reserve' }))
+
+      await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }))
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(bookingPosts()).toHaveLength(0)
+    })
+
+    it.each([
+      ['SLOT_UNAVAILABLE', 409, 'Sorry, that slot was just taken. Try different times.'],
+      ['TOO_MANY_HOLDS', 409, 'You have unpaid reservations. Complete or wait for them to expire.'],
+      ['LISTING_UNAVAILABLE', 409, 'This listing is not available for booking'],
+    ])('explains %s', async (code, status, message) => {
+      mock.onGet('/me/vehicles').reply(200, [car])
+      mock.onPost('/bookings').reply(status, { code, detail: 'This listing is not available for booking' })
+      renderApp(URL_7, undefined, <LocationProbe />)
+      await screen.findByText('3 slots free')
+      await screen.findByLabelText('Vehicle')
+
+      await userEvent.click(screen.getByRole('button', { name: 'Reserve' }))
+
+      expect(await screen.findByText(message)).toBeInTheDocument()
+      expect(screen.getByTestId('loc')).not.toHaveTextContent('/checkout')
+      expect(screen.getByRole('button', { name: 'Reserve' })).toBeEnabled()
+    })
+
+    it('does not reserve while the times are still being re-quoted', async () => {
+      mock.onGet('/me/vehicles').reply(200, [car])
+      renderApp(URL_7)
+      await screen.findByText('3 slots free')
+      await screen.findByLabelText('Vehicle')
+
+      const from = screen.getByLabelText('From')
+      await userEvent.clear(from)
+
+      expect(screen.getByRole('button', { name: 'Reserve' })).toBeDisabled()
+    })
   })
 
   it('asks owners to sign in as a driver', async () => {
