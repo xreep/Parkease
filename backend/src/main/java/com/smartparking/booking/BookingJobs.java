@@ -1,16 +1,26 @@
 package com.smartparking.booking;
 
+import com.smartparking.common.config.AppProperties;
+import com.smartparking.common.util.Ist;
+import com.smartparking.earning.EarningStatus;
+import com.smartparking.earning.OwnerEarningRepository;
+import com.smartparking.email.EmailTemplates;
+import com.smartparking.notification.NotificationType;
+import com.smartparking.notification.Notifier;
 import com.smartparking.payment.Payment;
 import com.smartparking.payment.PaymentProviderType;
 import com.smartparking.payment.PaymentRepository;
 import com.smartparking.payment.PaymentService;
 import com.smartparking.payment.PaymentStatus;
 import com.smartparking.payment.RefundService;
+import com.smartparking.user.User;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Limit;
@@ -40,6 +50,17 @@ public class BookingJobs {
     private static final Duration RECENT = Duration.ofMinutes(RECENT_MINUTES);
     private static final Duration RECONCILE_WINDOW = Duration.ofHours(24);
 
+    /** Lifecycle and reminder batch; the next run (a minute later) picks up the rest. */
+    private static final int LIFECYCLE_BATCH = 500;
+    private static final Duration REMINDER_LEAD = Duration.ofMinutes(60);
+    private static final Duration NUDGE_LEAD = Duration.ofMinutes(30);
+    /** Bookings that ended longer ago than this are completed without a notification. */
+    private static final Duration STALE_COMPLETION = Duration.ofHours(24);
+
+    private static final String OWNER_PATH = "/owner/bookings";
+
+    static final String STARTED_NOTE = "Parking time started";
+    static final String COMPLETED_NOTE = "Parking time ended";
     static final String EXPIRED_NOTE = "Payment window expired";
     static final String HOLD_EXPIRED_REASON = "Hold expired";
 
@@ -51,12 +72,16 @@ public class BookingJobs {
     private final RefundService refunds;
     private final PaymentService paymentService;
     private final BookingEventRepository eventRows;
+    private final OwnerEarningRepository earnings;
+    private final Notifier notifier;
+    private final AppProperties app;
     private final Clock clock;
     private final TransactionTemplate tx;
 
     public BookingJobs(BookingRepository bookings, PaymentRepository payments, BookingLocks locks,
                        BookingEvents events, OwnerBookingService ownerBookings, RefundService refunds,
-                       PaymentService paymentService, BookingEventRepository eventRows, Clock clock,
+                       PaymentService paymentService, BookingEventRepository eventRows,
+                       OwnerEarningRepository earnings, Notifier notifier, AppProperties app, Clock clock,
                        PlatformTransactionManager txManager) {
         this.bookings = bookings;
         this.payments = payments;
@@ -66,6 +91,9 @@ public class BookingJobs {
         this.refunds = refunds;
         this.paymentService = paymentService;
         this.eventRows = eventRows;
+        this.earnings = earnings;
+        this.notifier = notifier;
+        this.app = app;
         this.clock = clock;
         this.tx = new TransactionTemplate(txManager);
     }
@@ -136,6 +164,138 @@ public class BookingJobs {
         }
     }
 
+    // ---- lifecycle ------------------------------------------------------------------------------------------
+
+    /**
+     * Moves paid bookings along with the clock: CONFIRMED bookings whose parking time began become ACTIVE, and
+     * CONFIRMED/ACTIVE ones whose time is over become COMPLETED (a confirmed booking whose whole window passed while
+     * the job was down goes straight to COMPLETED). Requests that were never answered are handled by
+     * {@link #autoRejectOverdue()}: their deadline never lies after the start.
+     */
+    @Scheduled(fixedDelay = 60_000)
+    public void advanceLifecycle() {
+        Instant now = clock.instant();
+        int completed = sweep("complete", () -> bookings.findDueToCompleteIds(now, Limit.of(LIFECYCLE_BATCH)),
+                id -> completeOne(id, now));
+        int started = sweep("start", () -> bookings.findDueToStartIds(now, Limit.of(LIFECYCLE_BATCH)),
+                id -> startOne(id, now));
+        if (started > 0 || completed > 0) {
+            log.info("Lifecycle: {} bookings started, {} completed", started, completed);
+        }
+    }
+
+    /**
+     * One phase of a job: reads the due ids, then handles each in its own transaction. A failing query or a failing
+     * booking is logged and skipped, so it never stops the other bookings or the job's other phases. Returns how many
+     * bookings were actually changed.
+     */
+    private int sweep(String what, Supplier<List<Long>> dueIds, Predicate<Long> handle) {
+        List<Long> ids;
+        try {
+            ids = tx.execute(s -> dueIds.get());
+        } catch (RuntimeException e) {
+            log.error("Could not list the bookings to {}", what, e);
+            return 0;
+        }
+        int changed = 0;
+        for (Long id : ids) {
+            try {
+                if (Boolean.TRUE.equals(tx.execute(s -> handle.test(id)))) {
+                    changed++;
+                }
+            } catch (RuntimeException e) {
+                log.error("Could not {} booking {}", what, id, e);
+            }
+        }
+        return changed;
+    }
+
+    private boolean startOne(Long id, Instant now) {
+        Booking booking = locks.lock(id);
+        if (booking.getStatus() != BookingStatus.CONFIRMED || booking.getStartTime().isAfter(now)
+                || !booking.getEndTime().isAfter(now)) {
+            return false;
+        }
+        booking.setStatus(BookingStatus.ACTIVE);
+        events.record(booking, BookingStatus.CONFIRMED, BookingStatus.ACTIVE, BookingActor.SYSTEM, STARTED_NOTE);
+        return true;
+    }
+
+    private boolean completeOne(Long id, Instant now) {
+        Booking booking = locks.lock(id);
+        BookingStatus from = booking.getStatus();
+        if ((from != BookingStatus.CONFIRMED && from != BookingStatus.ACTIVE) || booking.getEndTime().isAfter(now)) {
+            return false;
+        }
+        booking.setStatus(BookingStatus.COMPLETED);
+        booking.setCompletedAt(now);
+        events.record(booking, from, BookingStatus.COMPLETED, BookingActor.SYSTEM, COMPLETED_NOTE);
+        // Only a held earning becomes payable; paid-out, reversed or already released ones are left alone.
+        // A held earning with nothing left (refunded away) is reversed instead.
+        earnings.findByBookingId(id).ifPresent(earning -> {
+            if (earning.getStatus() == EarningStatus.HELD) {
+                earning.setStatus(earning.getNet().signum() > 0 ? EarningStatus.PENDING_PAYOUT : EarningStatus.REVERSED);
+            }
+        });
+        if (booking.getEndTime().isBefore(now.minus(STALE_COMPLETION))) {
+            return true; // history swept up long after the fact (a first deploy): complete it, but don't announce it
+        }
+        String path = BookingPaths.driver(booking);
+        notifier.notify(booking.getDriver(), NotificationType.BOOKING_COMPLETED, "Booking completed",
+                "Thanks for parking with ParkEase. Your booking " + booking.getBookingCode() + " at "
+                        + booking.getListing().getTitle() + " is complete.", path, null);
+        return true;
+    }
+
+    // ---- reminders ------------------------------------------------------------------------------------------
+
+    /**
+     * Tells drivers their parking starts within the hour and owners that a request is about to lapse (deadline within
+     * 30 minutes). Each goes out once: the sent-at column is set in the transaction that creates the notification.
+     */
+    @Scheduled(fixedDelay = 60_000)
+    public void sendReminders() {
+        Instant now = clock.instant();
+        int reminded = sweep("send the start reminder of", () -> bookings.findDueForReminderIds(now,
+                now.plus(REMINDER_LEAD), Limit.of(LIFECYCLE_BATCH)), id -> remindDriver(id, now));
+        int nudged = sweep("send the approval reminder of", () -> bookings.findDueForApprovalNudgeIds(now,
+                now.plus(NUDGE_LEAD), Limit.of(LIFECYCLE_BATCH)), id -> nudgeOwner(id, now));
+        if (reminded > 0 || nudged > 0) {
+            log.info("Reminders: {} drivers, {} owners", reminded, nudged);
+        }
+    }
+
+    private boolean remindDriver(Long id, Instant now) {
+        Booking booking = locks.lock(id);
+        if (booking.getStatus() != BookingStatus.CONFIRMED || booking.getReminderSentAt() != null
+                || !booking.getStartTime().isAfter(now) || booking.getStartTime().isAfter(now.plus(REMINDER_LEAD))) {
+            return false;
+        }
+        booking.setReminderSentAt(now);
+        String path = BookingPaths.driver(booking);
+        notifier.notify(booking.getDriver(), NotificationType.BOOKING_STARTING_SOON, "Your parking starts soon",
+                "Your booking " + booking.getBookingCode() + " at " + booking.getListing().getTitle()
+                        + " starts at " + Ist.format(booking.getStartTime()) + ".", path,
+                EmailTemplates.startingSoon(booking.getDriver(), booking, app.frontendUrl() + path));
+        return true;
+    }
+
+    private boolean nudgeOwner(Long id, Instant now) {
+        Booking booking = locks.lock(id);
+        Instant deadline = booking.getApprovalDeadline();
+        if (booking.getStatus() != BookingStatus.AWAITING_APPROVAL || booking.getApprovalNudgeSentAt() != null
+                || deadline == null || !deadline.isAfter(now) || deadline.isAfter(now.plus(NUDGE_LEAD))) {
+            return false;
+        }
+        booking.setApprovalNudgeSentAt(now);
+        User owner = booking.getListing().getOwner();
+        notifier.notify(owner, NotificationType.OWNER_APPROVAL_REMINDER, "Respond to a booking request",
+                "Booking request " + booking.getBookingCode() + " for " + booking.getListing().getTitle()
+                        + " expires at " + Ist.format(deadline) + ". Approve or decline it before then.",
+                OWNER_PATH, EmailTemplates.approvalReminder(owner, booking, app.frontendUrl() + OWNER_PATH));
+        return true;
+    }
+
     /** Gives FAILED refunds another go (at most {@value RefundService#MAX_ATTEMPTS} provider tries in total). */
     @Scheduled(fixedDelay = 600_000)
     public void retryFailedRefunds() {
@@ -175,13 +335,15 @@ public class BookingJobs {
 
     /**
      * Asks the provider about up to {@code cap} unconfirmed Razorpay orders created in [newerThan, olderThan),
-     * newest first, and confirms what was captured. Orders whose booking is still waiting (or only just lapsed) count.
+     * newest first, and confirms what was captured. Orders whose booking is still waiting (or only just lapsed) count,
+     * and so do holds the driver cancelled before paying: money captured for those is refunded in full.
      * Errors per order are logged and skipped.
      */
     public void reconcileBand(Instant newerThan, Instant olderThan, int cap) {
         List<String> orderIds = tx.execute(s -> payments.findOrderIdsToReconcile(PaymentProviderType.RAZORPAY,
                 List.of(PaymentStatus.CREATED, PaymentStatus.FAILED),
-                List.of(BookingStatus.PENDING_PAYMENT, BookingStatus.EXPIRED), newerThan, olderThan, Limit.of(cap)));
+                List.of(BookingStatus.PENDING_PAYMENT, BookingStatus.EXPIRED), PaymentStatus.FAILED,
+                BookingStatus.CANCELLED, newerThan, olderThan, Limit.of(cap)));
         int recovered = 0;
         for (String orderId : orderIds) {
             try {

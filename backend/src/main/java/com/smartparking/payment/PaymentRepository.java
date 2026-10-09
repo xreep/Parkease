@@ -48,12 +48,17 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     /**
      * Order ids of unconfirmed payments of one provider whose booking could still be (or have been) paid, created in
      * [{@code from}, {@code to}); newest first, so a backlog never starves the orders customers are waiting on.
+     * Holds the driver cancelled before paying ({@code cancelled} booking, payment FAILED with no provider payment)
+     * count too: the checkout may have been completed anyway, and that money has to go back.
      */
-    @Query("select p.orderId from Payment p where p.provider = :provider and p.status in :paymentStatuses "
-            + "and p.booking.status in :bookingStatuses and p.createdAt >= :from and p.createdAt < :to "
+    @Query("select p.orderId from Payment p where p.provider = :provider and p.createdAt >= :from and p.createdAt < :to "
+            + "and ((p.status in :paymentStatuses and p.booking.status in :bookingStatuses) "
+            + "or (p.status = :failed and p.paymentId is null and p.booking.status = :cancelled)) "
             + "order by p.id desc")
     List<String> findOrderIdsToReconcile(@Param("provider") PaymentProviderType provider,
                                          @Param("paymentStatuses") Collection<PaymentStatus> paymentStatuses,
                                          @Param("bookingStatuses") Collection<BookingStatus> bookingStatuses,
+                                         @Param("failed") PaymentStatus failed,
+                                         @Param("cancelled") BookingStatus cancelled,
                                          @Param("from") Instant from, @Param("to") Instant to, Limit limit);
 }

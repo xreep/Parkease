@@ -8,6 +8,7 @@ import { toProblem } from '../lib/errors'
 import {
   AMENITY_LABELS,
   CANCELLATION_POLICIES,
+  REFUND_NOTE,
   DAY_NAMES,
   formatAddress,
   LISTING_TYPE_LABELS,
@@ -147,6 +148,7 @@ function ListingView({ id }: { id: string }) {
                 {`: ${policy.help}`}
               </p>
             )}
+            <p className="text-sm text-slate-600 dark:text-slate-400">{REFUND_NOTE}</p>
             <p className="text-sm text-slate-600 dark:text-slate-400">
               {listing.autoApprove ? 'Bookings are approved automatically.' : 'The owner approves each booking.'}
             </p>

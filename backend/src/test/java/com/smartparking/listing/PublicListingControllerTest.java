@@ -120,6 +120,31 @@ class PublicListingControllerTest {
                 .andExpect(jsonPath("$.quote.durationMinutes").value(180));
     }
 
+    private static Instant quarterAtLeast(long minutesFromNow) {
+        long quarter = 15 * 60;
+        long seconds = Instant.now().plusSeconds(minutesFromNow * 60).getEpochSecond();
+        return Instant.ofEpochSecond(Math.floorDiv(seconds + quarter - 1, quarter) * quarter);
+    }
+
+    @Test
+    void aRequestToBookListingNeedsThirtyMinutesNoticeToBeQuoted() throws Exception {
+        var listing = listings.findById(approvedId).orElseThrow();
+        listing.setAutoApprove(false);
+        listings.saveAndFlush(listing);
+        Instant soon = quarterAtLeast(10); // 10-25 minutes from now
+        Instant enough = quarterAtLeast(31); // 31-46 minutes from now
+
+        quote(approvedId, soon, soon.plusSeconds(7200), "")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_TIME_RANGE"))
+                .andExpect(jsonPath("$.detail").value("Request-to-book listings need at least 30 minutes' notice"));
+        quote(approvedId, enough, enough.plusSeconds(7200), "").andExpect(status().isOk());
+
+        listing.setAutoApprove(true); // instant-booking listings can be booked right away
+        listings.saveAndFlush(listing);
+        quote(approvedId, soon, soon.plusSeconds(7200), "").andExpect(status().isOk());
+    }
+
     @Test
     void quoteForVehicleTypeWithoutSlots() throws Exception {
         quote(approvedId, start, end, "&vehicleType=TWO_WHEELER")

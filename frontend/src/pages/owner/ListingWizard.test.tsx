@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../lib/api'
 import type { ListingDetail, Photo, Slot } from '../../lib/owner'
 import { tokenStore } from '../../lib/tokenStore'
+import { REFUND_NOTE } from '../../lib/format'
 import { renderApp } from '../../test/renderApp'
 import { toast } from 'sonner'
 
@@ -572,6 +573,15 @@ describe('listing wizard', () => {
 
       expect(await screen.findByText('Enter the hourly price')).toBeInTheDocument()
       expect(mock.history.put).toHaveLength(0)
+    })
+
+    it('describes each policy and the refund note', async () => {
+      renderApp('/owner/listings/7/edit?step=4')
+
+      await screen.findByLabelText('Price per hour (₹)')
+      expect(screen.getByText('50% refund up to 48 hours before start, none after')).toBeInTheDocument()
+      expect(screen.getByText('Full refund up to 1 hour before start, 50% after')).toBeInTheDocument()
+      expect(screen.getByText(REFUND_NOTE)).toBeInTheDocument()
     })
 
     it('saves pricing, policy, auto-approve and amenities, then goes to hours', async () => {

@@ -5,6 +5,7 @@ import com.smartparking.booking.BookingStatus;
 import com.smartparking.payment.RefundNotice;
 import com.smartparking.common.util.Ist;
 import com.smartparking.user.User;
+import java.math.BigDecimal;
 import java.time.Instant;
 import org.springframework.web.util.HtmlUtils;
 
@@ -101,12 +102,43 @@ public final class EmailTemplates {
                 "View booking", link);
     }
 
+    /** The driver cancelled; {@code refundLine} says what happens to the money (see the cancellation service). */
+    public static EmailMessage bookingCancelled(User driver, Booking booking, String refundLine, String link) {
+        return build(driver, "Booking cancelled – ParkEase",
+                "Your booking was cancelled.\n\n" + refundLine + "\n\n" + details(booking), "View booking", link);
+    }
+
+    /** Tells the owner that a driver cancelled a paid booking; the slot is free again. */
+    public static EmailMessage bookingCancelledByDriver(User owner, Booking booking, String reason, String link) {
+        return build(owner, "Booking cancelled by driver – ParkEase",
+                "The driver cancelled this booking, so the slot is free again."
+                        + (reason == null ? "" : "\nReason: " + reason) + "\n\n" + ownerDetails(booking),
+                "View bookings", link);
+    }
+
+    public static EmailMessage bookingCancelledByOwner(User driver, Booking booking, String reason,
+                                                       String refundLine, String link) {
+        return build(driver, "Your booking was cancelled by the owner – ParkEase",
+                "The owner had to cancel your booking. Reason: " + reason + "\n\n" + refundLine + "\n\n"
+                        + details(booking),
+                "View booking", link);
+    }
+
     /**
-     * Sent when a payment could not be turned into a booking. {@code pending}: the refund is accepted but still
-     * settling. For {@link RefundNotice#BOOKING_CLOSED} the wording follows the booking's status.
+     * Sent when a refund the driver was not told about yet has gone through. {@code pending}: the refund is accepted
+     * but still settling. For {@link RefundNotice#BOOKING_CLOSED} the wording follows the booking's status; for
+     * {@link RefundNotice#CANCELLATION} it names the {@code amount} refunded (which may be only part of the total).
      */
     public static EmailMessage paymentRefunded(User driver, Booking booking, String link, RefundNotice notice,
-                                               boolean pending) {
+                                               boolean pending, BigDecimal amount) {
+        if (notice == RefundNotice.CANCELLATION) {
+            return build(driver, pending ? "Refund initiated – ParkEase" : "Refund issued – ParkEase",
+                    "Your refund of ₹" + amount.toPlainString() + " for the cancelled booking "
+                            + booking.getBookingCode() + (pending
+                            ? " is being processed to your original payment method."
+                            : " has been issued to your original payment method.") + "\n\n" + details(booking),
+                    "View booking", link);
+        }
         String money = "your payment of ₹" + booking.getTotalAmount().toPlainString()
                 + (pending ? " is being refunded in full." : " has been refunded in full.");
         String lead = notice == RefundNotice.BOOKING_CLOSED
@@ -114,6 +146,23 @@ public final class EmailTemplates {
                 : "We couldn't hold your slot, so ";
         return build(driver, "Payment refunded – ParkEase", lead + money + "\n\n" + details(booking),
                 "View booking", link);
+    }
+
+    /** Reminder to the driver shortly before parking starts. */
+    public static EmailMessage startingSoon(User driver, Booking booking, String link) {
+        return build(driver, "Your parking starts soon – ParkEase",
+                "Your parking starts at " + formatTime(booking.getStartTime()) + " (IST).\n\n"
+                        + "Address: " + booking.getListing().getAddress() + "\n" + bookingLines(booking),
+                "View booking", link);
+    }
+
+    /** Nudge to the owner when a booking request is about to lapse unanswered. */
+    public static EmailMessage approvalReminder(User owner, Booking booking, String link) {
+        return build(owner, "Respond to a booking request – ParkEase",
+                "A booking request is still waiting for your answer. Please respond by "
+                        + formatTime(booking.getApprovalDeadline()) + " (IST), otherwise it is declined "
+                        + "automatically and the driver is refunded.\n\n" + ownerDetails(booking),
+                "Review request", link);
     }
 
     private static String closedWord(BookingStatus status) {

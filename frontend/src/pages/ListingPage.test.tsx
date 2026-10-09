@@ -7,6 +7,7 @@ import { api } from '../lib/api'
 import { tokenStore } from '../lib/tokenStore'
 import type { ListingQuoteResponse, PublicListingDto } from '../lib/search'
 import { nextQuarter } from '../lib/time'
+import { REFUND_NOTE } from '../lib/format'
 import { renderApp } from '../test/renderApp'
 
 vi.mock('../components/owner/LocationPicker', () => ({
@@ -100,6 +101,14 @@ describe('ListingPage', () => {
     expect(screen.getByText('No overnight parking.')).toBeInTheDocument()
     expect(screen.getByText(/full refund up to 24 hours before start/i)).toBeInTheDocument()
     expect(screen.getByText('Hosted by Priya')).toBeInTheDocument()
+  })
+
+  it('shows the cancellation policy with the refund note', async () => {
+    renderApp(URL_7)
+
+    await screen.findByRole('heading', { level: 1, name: 'Metro Hub Parking' })
+    expect(screen.getByText(/Full refund up to 24 hours before start, 50% from 24 to 2 hours before, none within 2 hours/)).toBeInTheDocument()
+    expect(screen.getByText(REFUND_NOTE)).toBeInTheDocument()
   })
 
   it('labels the opening hours as IST', async () => {
@@ -205,6 +214,29 @@ describe('ListingPage', () => {
     renderApp(URL_7)
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Minimum booking is 1 hour')
+    expect(screen.getByRole('button', { name: 'Reserve' })).toBeDisabled()
+  })
+
+  it('tells drivers a request-to-book listing needs 30 minutes\' notice', async () => {
+    mock.onGet('/listings/7').reply(200, { ...listing, autoApprove: false })
+    renderApp(URL_7)
+    expect(await screen.findByText("Needs at least 30 minutes' notice")).toBeInTheDocument()
+  })
+
+  it('shows no notice hint on a listing that approves bookings automatically', async () => {
+    renderApp(URL_7)
+    await screen.findByText('3 slots free')
+    expect(screen.queryByText("Needs at least 30 minutes' notice")).not.toBeInTheDocument()
+  })
+
+  it('shows the notice rule when the quote is refused for too short a lead time', async () => {
+    mock.onGet('/listings/7').reply(200, { ...listing, autoApprove: false })
+    mock.onGet('/listings/7/quote').reply(400, {
+      code: 'INVALID_TIME_RANGE', detail: "Request-to-book listings need at least 30 minutes' notice",
+    })
+    renderApp(URL_7)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("Request-to-book listings need at least 30 minutes' notice")
     expect(screen.getByRole('button', { name: 'Reserve' })).toBeDisabled()
   })
 
@@ -443,6 +475,22 @@ describe('ListingPage', () => {
 
       expect(await screen.findByText(message)).toBeInTheDocument()
       expect(screen.getByTestId('loc')).not.toHaveTextContent('/checkout')
+      expect(screen.getByRole('button', { name: 'Reserve' })).toBeEnabled()
+    })
+
+    it('shows the server\'s notice rule when the reservation is refused for too short a lead time', async () => {
+      mock.onGet('/listings/7').reply(200, { ...listing, autoApprove: false })
+      mock.onGet('/me/vehicles').reply(200, [car])
+      mock.onPost('/bookings').reply(400, {
+        code: 'INVALID_TIME_RANGE', detail: "Request-to-book listings need at least 30 minutes' notice",
+      })
+      renderApp(URL_7)
+      await screen.findByText('3 slots free')
+      await screen.findByLabelText('Vehicle')
+
+      await userEvent.click(screen.getByRole('button', { name: 'Reserve' }))
+
+      expect(await screen.findByText("Request-to-book listings need at least 30 minutes' notice")).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Reserve' })).toBeEnabled()
     })
 

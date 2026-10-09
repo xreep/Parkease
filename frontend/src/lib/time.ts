@@ -73,3 +73,21 @@ export function durationLabel(minutes: number): string {
   ]
   return parts.length ? parts.join(' ') : '0 minutes'
 }
+
+const MINUTE_MS = 60_000
+const RELATIVE_HOUR_MS = 60 * MINUTE_MS
+
+const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+
+/** "Just now", "5 min ago", "3 hr ago", "Yesterday", "3 days ago", then a plain date after a week. */
+export function formatRelativeTime(iso: string, now: number = Date.now()): string {
+  const then = new Date(iso)
+  const diff = Math.max(0, now - then.getTime())
+  if (diff < MINUTE_MS) return 'Just now'
+  if (diff < RELATIVE_HOUR_MS) return `${Math.floor(diff / MINUTE_MS)} min ago`
+  const days = Math.round((startOfDay(new Date(now)) - startOfDay(then)) / 86_400_000)
+  if (days === 1) return 'Yesterday'
+  if (days < 1) return `${Math.floor(diff / RELATIVE_HOUR_MS)} hr ago`
+  if (days < 7) return `${days} days ago`
+  return `${then.getDate()} ${MONTHS[then.getMonth()]} ${then.getFullYear()}`
+}

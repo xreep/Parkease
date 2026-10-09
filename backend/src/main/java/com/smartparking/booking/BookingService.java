@@ -156,6 +156,7 @@ public class BookingService {
                 .orElseThrow(() -> ApiException.notFound("Vehicle not found"));
 
         Instant now = clock.instant();
+        properties.requireNoticeForRequest(listing.isAutoApprove(), window.start(), now);
         long holds = bookings.countByDriverIdAndStatusAndHoldExpiresAtAfter(driverId, BookingStatus.PENDING_PAYMENT, now);
         if (holds >= properties.maxActiveHolds()) {
             throw ApiException.conflict("TOO_MANY_HOLDS",

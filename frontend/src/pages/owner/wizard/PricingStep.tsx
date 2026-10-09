@@ -6,7 +6,7 @@ import { FormError } from '../../../components/AuthCard'
 import { TextArea } from '../../../components/ui/TextArea'
 import { TextField } from '../../../components/ui/TextField'
 import { errorMessage, toProblem } from '../../../lib/errors'
-import { AMENITY_LABELS, CANCELLATION_POLICIES } from '../../../lib/format'
+import { AMENITY_LABELS, CANCELLATION_POLICIES, REFUND_NOTE } from '../../../lib/format'
 import { savePricing, type Amenity, type ListingDetail, type PricingBody } from '../../../lib/owner'
 import { StepFooter } from './StepFooter'
 import { isReadOnly, type StepProps } from './types'
@@ -135,6 +135,7 @@ export function PricingStep({ listing, onSaved }: StepProps) {
               </div>
             </div>
           ))}
+          <p className="text-sm text-slate-500">{REFUND_NOTE}</p>
         </fieldset>
 
         <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">

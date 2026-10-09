@@ -2,7 +2,8 @@ import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-quer
 import { isAxiosError } from 'axios'
 import { useCallback } from 'react'
 import { api } from './api'
-import type { Page, VehicleType } from './owner'
+import { invalidateNotifications } from './notifications'
+import type { CancellationPolicy, Page, VehicleType } from './owner'
 import type { PricingMode } from './search'
 
 export type BookingStatus =
@@ -76,7 +77,10 @@ export type BookingDetailDto = BookingSummaryDto & {
   events: BookingEventDto[]
 }
 
-/** A booking as the listing's owner sees it: their share (`baseAmount`) and the driver's first name only. */
+/**
+ * A booking as the listing's owner sees it: their share (`baseAmount`), what of it they still earn (`ownerNet`: null
+ * without an earning, 0 once the booking was refunded away) and the driver's first name only.
+ */
 export type OwnerBookingDto = {
   id: number
   bookingCode: string
@@ -90,6 +94,7 @@ export type OwnerBookingDto = {
   plateNumber: string
   driverFirstName: string
   baseAmount: number
+  ownerNet: number | null
   approvalDeadline: string | null
   createdAt: string
 }
@@ -128,6 +133,25 @@ export const approveBooking = async (id: number) =>
   (await api.post<OwnerBookingDto>(`/owner/bookings/${id}/approve`)).data
 export const rejectBooking = async (id: number, reason: string) =>
   (await api.post<OwnerBookingDto>(`/owner/bookings/${id}/reject`, { reason })).data
+/** Why not, or how much comes back: `reason` is set when `cancellable` is false, `policy` only when it decides the refund. */
+export type CancellationPreview = {
+  cancellable: boolean
+  reason: string | null
+  policy: CancellationPolicy | null
+  refundPercent: number
+  refundAmount: number
+  nonRefundableAmount: number
+  hoursBeforeStart: number
+}
+
+export const getCancellationPreview = async (id: number | string) =>
+  (await api.get<CancellationPreview>(`/bookings/${id}/cancellation-preview`)).data
+/** The reason is optional for a driver. */
+export const cancelBooking = async (id: number, reason?: string) =>
+  (await api.post<BookingDetailDto>(`/bookings/${id}/cancel`, reason ? { reason } : {})).data
+/** An owner may only cancel a confirmed booking that has not started; the reason is required. */
+export const ownerCancelBooking = async (id: number, reason: string) =>
+  (await api.post<OwnerBookingDto>(`/owner/bookings/${id}/cancel`, { reason })).data
 /** The receipt PDF. A failed blob request carries its problem as a Blob, so its detail is unwrapped here. */
 export async function downloadReceipt(id: number | string): Promise<Blob> {
   try {
@@ -155,9 +179,11 @@ export const mockPay = async (bookingId: number) =>
  * until it is paid or expires, and refetching it right after paying would only fail.
  */
 export function invalidateBookingQueries(queryClient: QueryClient) {
-  return Promise.all(
-    ['bookings', 'booking', 'quote', 'search'].map((key) => queryClient.invalidateQueries({ queryKey: [key] })),
-  ).then(() => undefined)
+  return Promise.all([
+    ...['bookings', 'booking', 'quote', 'search'].map((key) => queryClient.invalidateQueries({ queryKey: [key] })),
+    // Booking changes (a cancellation, an approval) leave a notification behind.
+    invalidateNotifications(queryClient),
+  ]).then(() => undefined)
 }
 
 export function useInvalidateBookings() {
@@ -200,6 +226,18 @@ export function useBooking(id: number | string | undefined, enabled = true, poll
     refetchInterval: poll
       ? (query) => (query.state.data && IN_FLIGHT.includes(query.state.data.status) ? BOOKING_REFRESH_MS : false)
       : false,
+  })
+}
+
+/** What cancelling would refund right now. Never cached: the answer changes as the start time nears. */
+export function useCancellationPreview(id: number | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ['booking', id, 'cancellation-preview'],
+    queryFn: () => getCancellationPreview(id!),
+    enabled: enabled && id !== undefined,
+    retry: false,
+    staleTime: 0,
+    gcTime: 0,
   })
 }
 

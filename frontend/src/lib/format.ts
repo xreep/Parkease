@@ -90,7 +90,10 @@ export function formatAddress(l: { address: string; cityName: string; stateName:
 }
 
 export const CANCELLATION_POLICIES: { value: CancellationPolicy; label: string; help: string }[] = [
-  { value: 'FLEXIBLE', label: 'Flexible', help: 'Full refund up to 1 hour before start' },
-  { value: 'MODERATE', label: 'Moderate', help: 'Full refund up to 24 hours before start, 50% after' },
-  { value: 'STRICT', label: 'Strict', help: '50% refund up to 48 hours before start' },
+  { value: 'FLEXIBLE', label: 'Flexible', help: 'Full refund up to 1 hour before start, 50% after' },
+  { value: 'MODERATE', label: 'Moderate', help: 'Full refund up to 24 hours before start, 50% from 24 to 2 hours before, none within 2 hours' },
+  { value: 'STRICT', label: 'Strict', help: '50% refund up to 48 hours before start, none after' },
 ]
+
+/** Shown wherever a cancellation policy is described. */
+export const REFUND_NOTE = "Refunds apply to the parking charge; platform fee and GST aren't refunded on driver cancellations."

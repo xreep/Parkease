@@ -5,6 +5,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { FormError } from '../../components/AuthCard'
 import { BookingQr } from '../../components/booking/BookingQr'
+import { CancelBookingDialog } from '../../components/booking/CancelBookingDialog'
 import { Button } from '../../components/ui/Button'
 import { Spinner } from '../../components/ui/Spinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -51,6 +52,30 @@ function SuccessBanner({ booking }: { booking: BookingDetailDto }) {
   if (!message) return null
   return (
     <p role="status" className="rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
+      {message}
+    </p>
+  )
+}
+
+/** What the booking is doing now, whatever way the driver arrived at the page. */
+function StatusNotice({ booking }: { booking: BookingDetailDto }) {
+  let message: string | null = null
+  let tone = 'bg-sky-50 text-sky-800 dark:bg-sky-950/50 dark:text-sky-300'
+  if (booking.status === 'ACTIVE') {
+    message = 'Your parking time is active — show your QR code at the entrance.'
+  } else if (booking.status === 'COMPLETED') {
+    message = 'Completed — thanks for parking with ParkEase.'
+    tone = 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+  } else if (booking.status === 'CANCELLED') {
+    tone = 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+    if (booking.cancelledBy === 'DRIVER') message = 'Cancelled by you'
+    else if (booking.cancelledBy === 'OWNER') {
+      message = booking.cancelReason ? `Cancelled by the owner: ${booking.cancelReason}` : 'Cancelled by the owner'
+    }
+  }
+  if (!message) return null
+  return (
+    <p role="status" className={clsx('rounded-xl px-4 py-3 text-sm font-medium', tone)}>
       {message}
     </p>
   )
@@ -117,14 +142,20 @@ function ReceiptButton({ booking }: { booking: BookingDetailDto }) {
 function BookingContent({ booking, isNew }: { booking: BookingDetailDto; isNew: boolean }) {
   const minutes = (new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / 60_000
   const showQr = booking.status === 'CONFIRMED' || booking.status === 'ACTIVE'
-  const now = useNow(booking.status === 'PENDING_PAYMENT', 5_000)
+  const [cancelling, setCancelling] = useState(false)
+  const now = useNow(booking.status === 'PENDING_PAYMENT' || booking.status === 'CONFIRMED', 5_000)
   const holdValid =
     booking.status === 'PENDING_PAYMENT' && booking.holdExpiresAt !== null && new Date(booking.holdExpiresAt).getTime() > now
+  const cancellable =
+    booking.status === 'PENDING_PAYMENT' ||
+    booking.status === 'AWAITING_APPROVAL' ||
+    (booking.status === 'CONFIRMED' && new Date(booking.startTime).getTime() > now)
   const cancelledBy = booking.cancelledBy ? ` (${booking.cancelledBy.toLowerCase()})` : ''
 
   return (
     <div className="space-y-6">
       {isNew && <SuccessBanner booking={booking} />}
+      <StatusNotice booking={booking} />
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 space-y-2">
@@ -140,6 +171,9 @@ function BookingContent({ booking, isNew }: { booking: BookingDetailDto; isNew: 
         <div className="flex flex-wrap gap-2">
           {holdValid && <Link to={`/checkout/${booking.id}`} className={primaryLink}>Complete payment</Link>}
           {booking.invoiceNumber && <ReceiptButton booking={booking} />}
+          {cancellable && (
+            <Button type="button" variant="secondary" onClick={() => setCancelling(true)}>Cancel booking</Button>
+          )}
         </div>
       </div>
 
@@ -184,7 +218,7 @@ function BookingContent({ booking, isNew }: { booking: BookingDetailDto; isNew: 
             {booking.refundAmount > 0 && (
               <p className="font-medium text-emerald-700 dark:text-emerald-400">{`Refunded ${formatINR(booking.refundAmount)}`}</p>
             )}
-            {booking.cancelReason && (
+            {booking.cancelReason && booking.cancelledBy !== 'OWNER' && (
               <p className="rounded-lg bg-slate-100 px-3 py-2 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
                 {`Reason${cancelledBy}: ${booking.cancelReason}`}
               </p>
@@ -206,6 +240,13 @@ function BookingContent({ booking, isNew }: { booking: BookingDetailDto; isNew: 
           </Panel>
         </div>
       </div>
+      {cancelling && (
+        <CancelBookingDialog
+          bookingId={booking.id}
+          fees={booking.platformFee + booking.gstAmount}
+          onClose={() => setCancelling(false)}
+        />
+      )}
     </div>
   )
 }

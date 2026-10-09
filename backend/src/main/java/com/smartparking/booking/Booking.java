@@ -95,6 +95,12 @@ public class Booking extends BaseEntity {
 
     private Instant completedAt;
 
+    /** When the "your parking starts soon" reminder went out; null until then (it is sent at most once). */
+    private Instant reminderSentAt;
+
+    /** When the owner was nudged about the approaching approval deadline; null until then (sent at most once). */
+    private Instant approvalNudgeSentAt;
+
     @Enumerated(EnumType.STRING)
     private BookingActor cancelledBy;
 
@@ -102,7 +108,8 @@ public class Booking extends BaseEntity {
 
     /**
      * Applies a received payment: auto-approve listings confirm immediately, others wait for the owner (until
-     * {@code now + approvalWindow}). The unpaid hold no longer applies.
+     * {@code min(now + approvalWindow, startTime)}: a request is never left open past the moment parking would start).
+     * The unpaid hold no longer applies.
      */
     public void acceptPayment(boolean autoApprove, Instant now, Duration approvalWindow) {
         holdExpiresAt = null;
@@ -112,7 +119,8 @@ public class Booking extends BaseEntity {
             approvalDeadline = null;
         } else {
             status = BookingStatus.AWAITING_APPROVAL;
-            approvalDeadline = now.plus(approvalWindow);
+            Instant deadline = now.plus(approvalWindow);
+            approvalDeadline = deadline.isAfter(startTime) ? startTime : deadline;
         }
     }
 

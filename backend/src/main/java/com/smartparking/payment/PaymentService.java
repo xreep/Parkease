@@ -11,16 +11,15 @@ import com.smartparking.booking.dto.BookingDetailDto;
 import com.smartparking.booking.dto.CheckoutDto;
 import com.smartparking.common.config.AppProperties;
 import com.smartparking.common.error.ApiException;
-import com.smartparking.common.util.AfterCommit;
 import com.smartparking.common.util.SqlStates;
 import com.smartparking.earning.EarningStatus;
 import com.smartparking.earning.OwnerEarning;
 import com.smartparking.earning.OwnerEarningRepository;
-import com.smartparking.email.EmailMessage;
-import com.smartparking.email.EmailSender;
 import com.smartparking.email.EmailTemplates;
 import com.smartparking.invoice.InvoiceService;
 import com.smartparking.listing.ParkingListing;
+import com.smartparking.notification.NotificationType;
+import com.smartparking.notification.Notifier;
 import com.smartparking.payment.dto.MockPayResponse;
 import com.smartparking.payment.dto.VerifyPaymentRequest;
 import com.smartparking.user.User;
@@ -62,7 +61,7 @@ public class PaymentService {
     private final OwnerEarningRepository earnings;
     private final InvoiceService invoices;
     private final RefundService refunds;
-    private final EmailSender emailSender;
+    private final Notifier notifier;
     private final AppProperties app;
     private final Clock clock;
     private final TransactionTemplate tx;
@@ -349,7 +348,7 @@ public class PaymentService {
                     note = LATE_PAYMENT_NOTE;
                 }
             }
-            default -> {
+            default -> { // CANCELLED included: a hold the driver gave up, then paid at the provider after all
                 refundUnpayable(booking, payment, from);
                 return bookingId;
             }
@@ -358,7 +357,7 @@ public class PaymentService {
         invoices.issue(booking, payment);
         saveEarning(booking, listing);
         events.record(booking, from, booking.getStatus(), actor, note);
-        queueEmails(booking, listing);
+        notifyParties(booking, listing);
         return bookingId;
     }
 
@@ -398,20 +397,31 @@ public class PaymentService {
         earnings.save(earning);
     }
 
-    /** Builds the emails now (lazy data) and sends them once the transaction has committed. */
-    private void queueEmails(Booking booking, ParkingListing listing) {
-        String driverLink = app.frontendUrl() + "/driver/bookings/" + booking.getId();
-        String ownerLink = app.frontendUrl() + "/owner/bookings";
+    /**
+     * Tells the driver and the owner about the booking: in-app notifications in this transaction, emails (built now,
+     * while the lazy data is readable) once it has committed.
+     */
+    private void notifyParties(Booking booking, ParkingListing listing) {
+        String driverPath = "/driver/bookings/" + booking.getId();
+        String ownerPath = "/owner/bookings";
         User driver = booking.getDriver();
         User owner = listing.getOwner();
-        List<EmailMessage> messages = new ArrayList<>();
+        String code = booking.getBookingCode();
+        String title = listing.getTitle();
         if (booking.getStatus() == BookingStatus.CONFIRMED) {
-            messages.add(EmailTemplates.bookingConfirmed(driver, booking, driverLink));
-            messages.add(EmailTemplates.newBookingForOwner(owner, booking, ownerLink));
+            notifier.notify(driver, NotificationType.BOOKING_CONFIRMED, "Booking confirmed",
+                    "Your booking " + code + " at " + title + " is confirmed.", driverPath,
+                    EmailTemplates.bookingConfirmed(driver, booking, app.frontendUrl() + driverPath));
+            notifier.notify(owner, NotificationType.OWNER_NEW_BOOKING, "New booking",
+                    "New booking " + code + " for " + title + ".", ownerPath,
+                    EmailTemplates.newBookingForOwner(owner, booking, app.frontendUrl() + ownerPath));
         } else {
-            messages.add(EmailTemplates.bookingRequested(driver, booking, driverLink));
-            messages.add(EmailTemplates.bookingApprovalNeeded(owner, booking, ownerLink));
+            notifier.notify(driver, NotificationType.BOOKING_REQUESTED, "Booking request sent",
+                    "Your request " + code + " at " + title + " is waiting for the owner's approval.", driverPath,
+                    EmailTemplates.bookingRequested(driver, booking, app.frontendUrl() + driverPath));
+            notifier.notify(owner, NotificationType.OWNER_APPROVAL_NEEDED, "New booking request",
+                    "Booking request " + code + " for " + title + " needs your approval.", ownerPath,
+                    EmailTemplates.bookingApprovalNeeded(owner, booking, app.frontendUrl() + ownerPath));
         }
-        AfterCommit.run(() -> messages.forEach(emailSender::send));
     }
 }

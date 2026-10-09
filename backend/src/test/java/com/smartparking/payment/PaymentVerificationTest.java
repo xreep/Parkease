@@ -570,6 +570,55 @@ class PaymentVerificationTest {
     }
 
     @Test
+    void reconciliationRefundsAHoldTheDriverCancelledButHadAlreadyPaidAtTheProvider() throws Exception {
+        Held held = hold(10);
+        asRazorpay(held);
+        // The checkout was closed before /verify; the driver then gave the hold up, which failed the open payment.
+        mvc.perform(post("/api/v1/bookings/" + held.bookingId() + "/cancel")
+                        .header(org.springframework.http.HttpHeaders.AUTHORIZATION, driver.auth()))
+                .andExpect(status().isOk());
+        assertThat(bookingStatus(held.bookingId())).isEqualTo("CANCELLED");
+        assertThat(paymentStatus(held.bookingId())).isEqualTo("FAILED");
+        providerHasCaptured(held, "pay_after_cancel");
+        emails.clear();
+
+        jobs.reconcileRecentPayments();
+
+        assertThat(bookingStatus(held.bookingId())).isEqualTo("CANCELLED");
+        assertThat(paymentStatus(held.bookingId())).isEqualTo("REFUNDED");
+        assertThat(provider.refundedPaymentIds).containsExactly("pay_after_cancel");
+        assertThat(jdbc.queryForMap("select amount, status from refunds"))
+                .containsEntry("status", "PROCESSED");
+        assertThat(jdbc.queryForObject("select amount from refunds", BigDecimal.class)).isEqualByComparingTo("67.08");
+        assertThat(jdbc.queryForObject("select refund_amount from bookings where id = ?", BigDecimal.class,
+                held.bookingId())).isEqualByComparingTo("67.08");
+        assertThat(count("select count(*) from invoices")).isZero();
+        assertThat(count("select count(*) from owner_earnings")).isZero();
+        assertThat(count("select count(*) from notifications n join users u on u.id = n.user_id "
+                + "where u.email = ? and n.type = 'BOOKING_REFUNDED'", DRIVER_EMAIL)).isEqualTo(1);
+
+        jobs.reconcileRecentPayments(); // settled now: nothing more to do
+        assertThat(provider.refundedPaymentIds).hasSize(1);
+        assertThat(count("select count(*) from refunds")).isEqualTo(1);
+    }
+
+    @Test
+    void reconciliationLeavesAHoldCancelledBeforeAnyPaymentWithNothingCapturedAlone() throws Exception {
+        Held held = hold(10);
+        asRazorpay(held);
+        mvc.perform(post("/api/v1/bookings/" + held.bookingId() + "/cancel")
+                        .header(org.springframework.http.HttpHeaders.AUTHORIZATION, driver.auth()))
+                .andExpect(status().isOk());
+        provider.orderPayments = order -> List.of(provided("pay_f", "failed", order, 6708L, "INR", "upi"));
+
+        jobs.reconcileRecentPayments();
+
+        assertThat(provider.orderFetches.get()).isEqualTo(1);
+        assertThat(count("select count(*) from refunds")).isZero();
+        assertThat(bookingStatus(held.bookingId())).isEqualTo("CANCELLED");
+    }
+
+    @Test
     void reconciliationLeavesMockOrdersOldOrdersAndSettledOnesAlone() throws Exception {
         Held mockOrder = hold(10);
         Held old = hold(14);
