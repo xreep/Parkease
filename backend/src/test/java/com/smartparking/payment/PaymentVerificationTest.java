@@ -67,6 +67,7 @@ class PaymentVerificationTest {
         final AtomicInteger orderFetches = new AtomicInteger();
         final List<String> captures = new CopyOnWriteArrayList<>();
         final List<String> refundedPaymentIds = new CopyOnWriteArrayList<>();
+        final AtomicInteger refundFailures = new AtomicInteger();
 
         StubProvider(String jwtSecret) {
             super(jwtSecret);
@@ -80,6 +81,7 @@ class PaymentVerificationTest {
             orderFetches.set(0);
             captures.clear();
             refundedPaymentIds.clear();
+            refundFailures.set(0);
         }
 
         @Override
@@ -107,6 +109,11 @@ class PaymentVerificationTest {
         @Override
         public ProviderRefund refund(String paymentId, long amountPaise, String reason) {
             refundedPaymentIds.add(paymentId);
+            if (refundFailures.get() > 0) {
+                refundFailures.decrementAndGet();
+                throw new com.smartparking.common.error.ApiException(org.springframework.http.HttpStatus.BAD_GATEWAY,
+                        "PAYMENT_PROVIDER_ERROR", "Provider is down");
+            }
             return super.refund(paymentId, amountPaise, reason);
         }
 
@@ -329,6 +336,70 @@ class PaymentVerificationTest {
         verifyPayment(held, pay).andExpect(status().isOk()); // replay: still one refund, one email
         assertThat(count("select count(*) from refunds")).isEqualTo(1);
         assertThat(emails.sentTo(DRIVER_EMAIL)).hasSize(1);
+    }
+
+    // ---- a second payment for an order that is already paid ------------------------------------------------------
+
+    private ResultActions capturedWebhook(Held held, String paymentId, String eventId) throws Exception {
+        String body = """
+                {"entity":"event","event":"payment.captured","payload":{"payment":{"entity":
+                {"id":"%s","order_id":"%s","method":"card","status":"captured"}}}}""".formatted(paymentId, held.orderId());
+        return mvc.perform(post("/api/v1/payments/webhook").contentType(MediaType.APPLICATION_JSON)
+                .content(body.getBytes(StandardCharsets.UTF_8))
+                .header("X-Razorpay-Signature", Signatures.hmacSha256Hex(SECRET, body))
+                .header("X-Razorpay-Event-Id", eventId));
+    }
+
+    private Held paidWithProviderEchoing() throws Exception {
+        Held held = hold(10);
+        String pay = mockPay(mvc, driver.auth(), held.bookingId());
+        provider.fetcher = id -> provided(id, "captured", held.orderId(), 6708L, "INR", "upi");
+        verifyPayment(held, pay).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CONFIRMED"));
+        provider.refundedPaymentIds.clear();
+        return held;
+    }
+
+    @Test
+    void aSecondCapturedPaymentOnAnAlreadyPaidOrderIsRefundedInFullAndTheBookingIsUntouched() throws Exception {
+        Held held = paidWithProviderEchoing();
+
+        capturedWebhook(held, "pay_dup_1", "evt_dup_1").andExpect(status().isOk()).andExpect(jsonPath("$.status").value("ok"));
+
+        assertThat(provider.refundedPaymentIds).containsExactly("pay_dup_1");
+        Map<String, Object> refund = jdbc.queryForMap(
+                "select r.status, r.amount, r.provider_payment_id from refunds r join payments p on p.id = r.payment_id "
+                        + "where p.booking_id = ?", held.bookingId());
+        assertThat(refund).containsEntry("status", "PROCESSED").containsEntry("provider_payment_id", "pay_dup_1");
+        assertThat((BigDecimal) refund.get("amount")).isEqualByComparingTo("67.08");
+        assertThat(paymentStatus(held.bookingId())).isEqualTo("CAPTURED");
+        assertThat(bookingStatus(held.bookingId())).isEqualTo("CONFIRMED");
+        assertThat(jdbc.queryForObject("select refund_amount from bookings where id = ?", BigDecimal.class,
+                held.bookingId())).isEqualByComparingTo("0");
+        assertThat(count("select count(*) from invoices")).isEqualTo(1);
+        assertThat(jdbc.queryForList("select note from booking_events where booking_id = ? and note like '%pay_dup_1%'",
+                String.class, held.bookingId())).hasSize(1);
+
+        capturedWebhook(held, "pay_dup_1", "evt_dup_2").andExpect(status().isOk()); // redelivered under another event id
+        assertThat(provider.refundedPaymentIds).containsExactly("pay_dup_1");
+        assertThat(count("select count(*) from refunds")).isEqualTo(1);
+    }
+
+    @Test
+    void aFailedRefundOfAnExtraPaymentIsRetriedAndNeverChangesTheBookingsPaymentState() throws Exception {
+        Held held = paidWithProviderEchoing();
+        provider.refundFailures.set(1);
+
+        capturedWebhook(held, "pay_dup_2", "evt_dup_3").andExpect(status().isOk());
+        assertThat(jdbc.queryForObject("select status from refunds", String.class)).isEqualTo("FAILED");
+
+        jobs.retryFailedRefunds();
+
+        assertThat(provider.refundedPaymentIds).containsExactly("pay_dup_2", "pay_dup_2");
+        assertThat(jdbc.queryForObject("select status from refunds", String.class)).isEqualTo("PROCESSED");
+        assertThat(paymentStatus(held.bookingId())).isEqualTo("CAPTURED");
+        assertThat(jdbc.queryForObject("select refund_amount from bookings where id = ?", BigDecimal.class,
+                held.bookingId())).isEqualByComparingTo("0");
+        assertThat(bookingStatus(held.bookingId())).isEqualTo("CONFIRMED");
     }
 
     // ---- reconciliation ------------------------------------------------------------------------------------------

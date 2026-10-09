@@ -268,7 +268,10 @@ public class PaymentService {
         if (payment.getPaymentId() != null && payment.getStatus() != PaymentStatus.CREATED
                 && payment.getStatus() != PaymentStatus.FAILED) {
             if (!payment.getPaymentId().equals(paymentId)) {
-                log.warn("Order {} is already paid by {}; ignoring payment {}", orderId, payment.getPaymentId(), paymentId);
+                // The customer paid the same order twice: the booking stays as it is and the extra money goes back.
+                log.error("Order {} is already paid by {}, but payment {} was captured as well; refunding the extra payment",
+                        orderId, payment.getPaymentId(), paymentId);
+                refunds.refundExtraPayment(booking, payment, paymentId);
             }
             return bookingId;
         }

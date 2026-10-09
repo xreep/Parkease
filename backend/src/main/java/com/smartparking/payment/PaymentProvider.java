@@ -24,6 +24,17 @@ public interface PaymentProvider {
 
     ProviderRefund refund(String paymentId, long amountPaise, String reason);
 
+    /**
+     * Like {@link #refund(String, long, String)}, but retrying the same {@code idempotencyKey} must not refund twice.
+     * Providers without such a mechanism just refund.
+     */
+    default ProviderRefund refund(String paymentId, long amountPaise, String reason, String idempotencyKey) {
+        return refund(paymentId, amountPaise, reason);
+    }
+
+    /** Every refund the provider has for the payment (any status). */
+    List<ProviderRefund> fetchRefunds(String paymentId);
+
     /** True when {@code signature} matches the raw webhook body; false if no webhook secret is configured. */
     boolean verifyWebhook(String rawBody, String signature);
 }

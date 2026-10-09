@@ -287,6 +287,11 @@ class WebhookControllerTest {
                 .isEqualTo(RefundStatus.PROCESSED);
         assertThat(refunds.findByProviderRefundId("rfnd_wh_2").orElseThrow().getStatus())
                 .isEqualTo(RefundStatus.FAILED);
+        // The payment's state follows the refunds that still count (10.00 of 67.08 here).
+        assertThat(jdbc.queryForObject("select status from payments where id = ?", String.class, payment.getId()))
+                .isEqualTo("PARTIALLY_REFUNDED");
+        assertThat(jdbc.queryForObject("select refund_amount from bookings where id = ?", BigDecimal.class,
+                p.bookingId())).isEqualByComparingTo("10.00");
     }
 
     private static String refundBody(String event, String refundId) {

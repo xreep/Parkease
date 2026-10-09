@@ -3,8 +3,17 @@ package com.smartparking.payment;
 import com.razorpay.RazorpayClient;
 import com.razorpay.RazorpayException;
 import com.smartparking.common.error.ApiException;
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -16,13 +25,24 @@ public class RazorpayPaymentProvider implements PaymentProvider {
 
     private static final Logger log = LoggerFactory.getLogger(RazorpayPaymentProvider.class);
 
+    /** Razorpay ids are letters, digits and underscores; anything else must never be put into a URL path. */
+    private static final Pattern PROVIDER_ID = Pattern.compile("[A-Za-z0-9_]{1,64}");
+
     private final String keyId;
     private final String keySecret;
     private final String webhookSecret;
     private final RazorpayClient client;
+    private final String apiBase;
+    private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
     /** Creating the SDK client does not contact Razorpay. */
     public RazorpayPaymentProvider(String keyId, String keySecret, String webhookSecret) {
+        this(keyId, keySecret, webhookSecret, "https://api.razorpay.com/v1");
+    }
+
+    /** {@code apiBase} lets tests point the refund call at a local server. */
+    RazorpayPaymentProvider(String keyId, String keySecret, String webhookSecret, String apiBase) {
+        this.apiBase = apiBase;
         this.keyId = keyId;
         this.keySecret = keySecret;
         this.webhookSecret = webhookSecret;
@@ -101,17 +121,58 @@ public class RazorpayPaymentProvider implements PaymentProvider {
 
     @Override
     public ProviderRefund refund(String paymentId, long amountPaise, String reason) {
+        return refund(paymentId, amountPaise, reason, null);
+    }
+
+    /**
+     * Razorpay's idempotency header ({@code X-Refund-Idempotency}) is not exposed by the Java SDK (it cannot add
+     * request headers), so the refund call is made directly: {@code POST /v1/payments/{id}/refund} with basic auth.
+     */
+    @Override
+    public ProviderRefund refund(String paymentId, long amountPaise, String reason, String idempotencyKey) {
+        if (paymentId == null || !PROVIDER_ID.matcher(paymentId).matches()) {
+            throw providerError("refund payment", new IllegalArgumentException("Invalid payment id"));
+        }
         try {
-            JSONObject request = new JSONObject()
+            String body = new JSONObject()
                     .put("amount", amountPaise)
-                    .put("notes", new JSONObject().put("reason", reason == null ? "" : reason));
-            JSONObject refund = client.payments.refund(paymentId, request).toJson();
-            RefundStatus status = "processed".equals(refund.optString("status")) ? RefundStatus.PROCESSED
-                    : RefundStatus.PENDING;
-            return new ProviderRefund(refund.getString("id"), status);
-        } catch (RazorpayException | JSONException e) {
+                    .put("notes", new JSONObject().put("reason", reason == null ? "" : reason))
+                    .toString();
+            HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(apiBase + "/payments/" + paymentId + "/refund"))
+                    .timeout(Duration.ofSeconds(30))
+                    .header("Authorization", "Basic " + Base64.getEncoder()
+                            .encodeToString((keyId + ":" + keySecret).getBytes(StandardCharsets.UTF_8)))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body));
+            if (idempotencyKey != null) {
+                request.header("X-Refund-Idempotency", idempotencyKey);
+            }
+            HttpResponse<String> response = http.send(request.build(), HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() / 100 != 2) {
+                throw new IOException("Razorpay answered " + response.statusCode() + ": " + response.body());
+            }
+            return toProviderRefund(new JSONObject(response.body()));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw providerError("refund payment", e);
+        } catch (IOException | JSONException e) {
             throw providerError("refund payment", e);
         }
+    }
+
+    @Override
+    public List<ProviderRefund> fetchRefunds(String paymentId) {
+        try {
+            return client.payments.fetchAllRefunds(paymentId).stream().map(r -> toProviderRefund(r.toJson())).toList();
+        } catch (RazorpayException | JSONException e) {
+            throw providerError("fetch the refunds of a payment", e);
+        }
+    }
+
+    static ProviderRefund toProviderRefund(JSONObject refund) {
+        String status = refund.optString("status");
+        return new ProviderRefund(refund.getString("id"), "processed".equals(status) ? RefundStatus.PROCESSED
+                : "failed".equals(status) ? RefundStatus.FAILED : RefundStatus.PENDING);
     }
 
     @Override
