@@ -91,7 +91,7 @@ public class CancellationService {
         releaseRetainedEarning(booking);
 
         String refundLine = driverRefundLine(from, outcome);
-        String driverPath = driverPath(booking);
+        String driverPath = BookingPaths.driver(booking);
         ParkingListing listing = booking.getListing();
         notifier.notify(booking.getDriver(), NotificationType.BOOKING_CANCELLED, "Booking cancelled",
                 "Your booking " + booking.getBookingCode() + " at " + listing.getTitle() + " was cancelled. "
@@ -195,7 +195,7 @@ public class CancellationService {
         refunds.refund(booking, payment, payment.getAmount(), BookingActor.OWNER, "Booking cancelled by owner", null);
 
         String refundLine = "A full refund of ₹" + payment.getAmount().toPlainString() + " is on its way.";
-        String driverPath = driverPath(booking);
+        String driverPath = BookingPaths.driver(booking);
         notifier.notify(booking.getDriver(), NotificationType.BOOKING_CANCELLED, "Booking cancelled by the owner",
                 "Your booking " + booking.getBookingCode() + " at " + booking.getListing().getTitle()
                         + " was cancelled by the owner. " + refundLine, driverPath,
@@ -216,10 +216,6 @@ public class CancellationService {
 
     private static BigDecimal money(BigDecimal value) {
         return value.setScale(2, RoundingMode.HALF_UP);
-    }
-
-    private static String driverPath(Booking booking) {
-        return "/driver/bookings/" + booking.getId();
     }
 
     private String link(String path) {

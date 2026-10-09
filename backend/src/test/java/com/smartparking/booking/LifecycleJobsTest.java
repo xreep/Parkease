@@ -6,6 +6,14 @@ import static com.smartparking.support.BookingApiSupport.payOk;
 import static com.smartparking.support.BookingApiSupport.reserveOk;
 import static com.smartparking.support.BookingApiSupport.tomorrowAt;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.smartparking.earning.EarningStatus;
 import com.smartparking.earning.OwnerEarningRepository;
@@ -19,6 +27,8 @@ import com.smartparking.support.CommittedIntegrationTest;
 import com.smartparking.support.DatabaseCleaner;
 import com.smartparking.support.ListingTestSupport;
 import com.smartparking.support.MutableClock;
+import com.smartparking.notification.NotificationType;
+import com.smartparking.notification.Notifier;
 import com.smartparking.support.RecordingEmailSender;
 import java.sql.Timestamp;
 import java.time.Duration;
@@ -33,7 +43,9 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
+import org.springframework.http.HttpHeaders;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @CommittedIntegrationTest
@@ -60,7 +72,10 @@ class LifecycleJobsTest {
     @Autowired RecordingEmailSender emails;
     @Autowired BookingJobs jobs;
     @Autowired MutableClock clock;
+    @MockitoSpyBean Notifier notifier;
+    @MockitoSpyBean BookingRepository bookingRepository;
 
+    private String ownerAuth;
     private Long listingId;
     private Driver driver;
 
@@ -68,7 +83,7 @@ class LifecycleJobsTest {
     void setUp() throws Exception {
         DatabaseCleaner.clean(jdbc);
         clock.reset();
-        String ownerAuth = AuthTestSupport.bearer(AuthTestSupport.accessToken(
+        ownerAuth = AuthTestSupport.bearer(AuthTestSupport.accessToken(
                 AuthTestSupport.register(mvc, OWNER_EMAIL, "OWNER")));
         listingId = ListingTestSupport.approvedListingAt(mvc, ownerAuth, listings,
                 ListingTestSupport.puneCityId(cities), "Lifecycle Spot", 18.5204, 73.8567, 30);
@@ -367,5 +382,124 @@ class LifecycleJobsTest {
 
         assertThat(notificationCount(OWNER_EMAIL, "OWNER_APPROVAL_REMINDER")).isZero();
         assertThat(booking(late).get("approval_nudge_sent_at")).isNull();
+    }
+
+    // ---- legacy requests that outlive their start ------------------------------------------------------------
+
+    /** A request created before the cap existed: its deadline is later than its start, and the start has passed. */
+    private long legacyRequestPastItsStart() throws Exception {
+        long id = awaitingApproval(tomorrowAt(10));
+        jdbc.update("update bookings set start_time = now() - interval '10 minutes', "
+                + "end_time = now() + interval '110 minutes', approval_deadline = now() + interval '1 hour' "
+                + "where id = ?", id);
+        return id;
+    }
+
+    @Test
+    void ownerCannotApproveARequestWhoseStartHasPassedEvenBeforeItsDeadline() throws Exception {
+        long id = legacyRequestPastItsStart();
+
+        mvc.perform(post("/api/v1/owner/bookings/" + id + "/approve").header(HttpHeaders.AUTHORIZATION, ownerAuth))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("INVALID_STATUS"))
+                .andExpect(jsonPath("$.detail").value("This booking's start time has passed"));
+
+        assertThat(booking(id)).containsEntry("status", "AWAITING_APPROVAL");
+    }
+
+    @Test
+    void legacyRequestPastItsStartIsAutoRejectedAndRefundedInFull() throws Exception {
+        long id = legacyRequestPastItsStart();
+
+        jobs.autoRejectOverdue();
+
+        assertThat(booking(id)).containsEntry("status", "REJECTED").containsEntry("cancelled_by", "SYSTEM")
+                .containsEntry("cancel_reason", "The booking start time passed before the owner responded");
+        assertThat(jdbc.queryForObject("select status from payments where booking_id = ?", String.class, id))
+                .isEqualTo("REFUNDED");
+        assertThat(jdbc.queryForObject("select r.status from refunds r join payments p on p.id = r.payment_id "
+                + "where p.booking_id = ?", String.class, id)).isEqualTo("PROCESSED");
+        assertThat(earnings.findByBookingId(id).orElseThrow().getStatus()).isEqualTo(EarningStatus.REVERSED);
+    }
+
+    @Test
+    void requestPastBothItsDeadlineAndItsStartKeepsTheTimeoutReason() throws Exception {
+        long id = awaitingApproval(tomorrowAt(10));
+        clock.set(tomorrowAt(10).plusSeconds(1)); // job was down: the 2 h window ended long before the start passed
+
+        jobs.autoRejectOverdue();
+
+        assertThat(booking(id)).containsEntry("status", "REJECTED")
+                .containsEntry("cancel_reason", "The owner didn't respond within 2 hours");
+    }
+
+    // ---- earnings and failure isolation ----------------------------------------------------------------------
+
+    @Test
+    void heldEarningWithNothingLeftIsReversedNotReleasedOnCompletion() throws Exception {
+        long id = confirmed(10);
+        jdbc.update("update owner_earnings set net = 0 where booking_id = ?", id);
+        clock.set(tomorrowAt(13));
+
+        jobs.advanceLifecycle();
+
+        assertThat(booking(id)).containsEntry("status", "COMPLETED");
+        assertThat(earnings.findByBookingId(id).orElseThrow().getStatus()).isEqualTo(EarningStatus.REVERSED);
+    }
+
+    @Test
+    void oneBookingFailingDoesNotStopTheOthersInTheBatch() throws Exception {
+        long bad = confirmed(10);
+        long good = confirmed(14);
+        String badCode = (String) booking(bad).get("booking_code");
+        doAnswer(invocation -> {
+            if (((String) invocation.getArgument(3)).contains(badCode)) {
+                throw new IllegalStateException("boom");
+            }
+            return invocation.callRealMethod();
+        }).when(notifier).notify(any(), eq(NotificationType.BOOKING_COMPLETED), anyString(), anyString(), any(), any());
+        clock.set(tomorrowAt(18));
+
+        jobs.advanceLifecycle();
+
+        assertThat(booking(bad)).containsEntry("status", "CONFIRMED"); // rolled back, retried on the next run
+        assertThat(booking(good)).containsEntry("status", "COMPLETED");
+        assertThat(earnings.findByBookingId(bad).orElseThrow().getStatus()).isEqualTo(EarningStatus.HELD);
+        assertThat(earnings.findByBookingId(good).orElseThrow().getStatus()).isEqualTo(EarningStatus.PENDING_PAYOUT);
+    }
+
+    @Test
+    void aFailingCompletePhaseDoesNotSkipTheStartPhase() throws Exception {
+        long id = confirmed(10);
+        doThrow(new IllegalStateException("db hiccup")).when(bookingRepository).findDueToCompleteIds(any(), any());
+        clock.set(tomorrowAt(10).plusSeconds(60));
+
+        jobs.advanceLifecycle(); // must not throw
+
+        assertThat(booking(id)).containsEntry("status", "ACTIVE");
+    }
+
+    @Test
+    void aFailingReminderPhaseDoesNotSkipTheOwnerNudge() throws Exception {
+        long id = awaitingApproval(tomorrowAt(10));
+        Instant deadline = instant(booking(id).get("approval_deadline"));
+        doThrow(new IllegalStateException("db hiccup")).when(bookingRepository)
+                .findDueForReminderIds(any(), any(), any());
+        clock.set(deadline.minus(Duration.ofMinutes(10)));
+
+        jobs.sendReminders(); // must not throw
+
+        assertThat(notificationCount(OWNER_EMAIL, "OWNER_APPROVAL_REMINDER")).isEqualTo(1);
+    }
+
+    @Test
+    void aFailingStartPhaseDoesNotSkipTheCompletionsThatRanBeforeIt() throws Exception {
+        long ended = confirmed(10);
+        doThrow(new IllegalStateException("db hiccup")).when(bookingRepository).findDueToStartIds(any(), any());
+        clock.set(tomorrowAt(13));
+
+        jobs.advanceLifecycle(); // must not throw
+
+        assertThat(booking(ended)).containsEntry("status", "COMPLETED");
     }
 }
