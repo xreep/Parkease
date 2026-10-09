@@ -165,6 +165,18 @@ public final class EmailTemplates {
                 "Review request", link);
     }
 
+    /** Tells the owner a driver reviewed their listing. */
+    public static EmailMessage ownerNewReview(User owner, String listingTitle, int rating, String comment,
+                                              String link) {
+        String body = "A driver left a " + rating + "★ review for " + listingTitle + ".";
+        if (comment != null && !comment.isBlank()) {
+            body += "\n\n\"" + comment + "\"";
+        }
+        body += "\n\nYou can reply to it publicly once.";
+        return build(owner, "New " + rating + "★ review for " + listingTitle + " – ParkEase", body,
+                "View reviews", link);
+    }
+
     private static String closedWord(BookingStatus status) {
         return switch (status) {
             case CANCELLED -> "cancelled";

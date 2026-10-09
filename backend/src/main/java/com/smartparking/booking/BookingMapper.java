@@ -10,6 +10,12 @@ import com.smartparking.listing.ListingPhotoRepository;
 import com.smartparking.listing.ParkingListing;
 import com.smartparking.payment.Payment;
 import com.smartparking.payment.PaymentRepository;
+import com.smartparking.review.Review;
+import com.smartparking.review.ReviewMapper;
+import com.smartparking.review.ReviewPolicy;
+import com.smartparking.review.ReviewRepository;
+import com.smartparking.review.dto.ReviewDto;
+import java.time.Clock;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -27,6 +33,9 @@ public class BookingMapper {
     private final PaymentRepository payments;
     private final InvoiceRepository invoices;
     private final BookingEventRepository events;
+    private final ReviewRepository reviews;
+    private final ReviewMapper reviewMapper;
+    private final Clock clock;
 
     public BookingSummaryDto toSummary(Booking b) {
         return summary(b, coverUrls(List.of(b.getListing().getId())));
@@ -46,6 +55,9 @@ public class BookingMapper {
                 .map(e -> new BookingDetailDto.Event(e.getFromStatus(), e.getToStatus(), e.getActor(), e.getNote(),
                         e.getCreatedAt()))
                 .toList();
+        Review posted = reviews.findByBookingId(b.getId()).orElse(null);
+        boolean reviewable = posted == null && ReviewPolicy.notReviewableReason(b, clock.instant()) == null;
+        ReviewDto review = posted == null ? null : reviewMapper.toDto(posted);
         return new BookingDetailDto(
                 b.getId(), b.getBookingCode(), b.getStatus(), l.getId(), l.getTitle(), l.getCity().getName(),
                 coverUrls(List.of(l.getId())).get(l.getId()), b.getStartTime(), b.getEndTime(), b.getVehicleType(),
@@ -54,7 +66,7 @@ public class BookingMapper {
                 b.getPricingBreakdown(), b.getBaseAmount(), b.getPlatformFee(), b.getGstAmount(), b.getRefundAmount(),
                 b.getHoldExpiresAt(), b.getApprovalDeadline(), b.getConfirmedAt(), b.getCancelReason(),
                 b.getCancelledBy(), payment == null ? null : payment.getStatus(), invoiceNumber, l.isAutoApprove(),
-                firstName(l.getOwner().getName()), history);
+                firstName(l.getOwner().getName()), history, reviewable, review);
     }
 
     private BookingSummaryDto summary(Booking b, Map<Long, String> covers) {

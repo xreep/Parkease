@@ -1,0 +1,171 @@
+package com.smartparking.review;
+
+import com.smartparking.booking.Booking;
+import com.smartparking.booking.BookingLocks;
+import com.smartparking.booking.BookingRepository;
+import com.smartparking.booking.BookingStatus;
+import com.smartparking.common.config.AppProperties;
+import com.smartparking.common.error.ApiException;
+import com.smartparking.common.util.SqlStates;
+import com.smartparking.common.web.PageResponse;
+import com.smartparking.email.EmailTemplates;
+import com.smartparking.listing.ListingStatus;
+import com.smartparking.listing.ParkingListing;
+import com.smartparking.listing.ParkingListingRepository;
+import com.smartparking.notification.NotificationType;
+import com.smartparking.notification.Notifier;
+import com.smartparking.review.dto.ListingReviewsDto;
+import com.smartparking.review.dto.OwnerReviewDto;
+import com.smartparking.review.dto.ReviewDto;
+import com.smartparking.review.dto.ReviewSummaryDto;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.Clock;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * Reviews of completed bookings. Posting locks payment, then booking (the shared lock order), then the listing row, so
+ * concurrent reviews of one booking cannot both pass the duplicate check and the listing's rating aggregate is always
+ * recomputed from a consistent set of reviews.
+ */
+@Service
+@RequiredArgsConstructor
+public class ReviewService {
+
+    static final String OWNER_PATH = "/owner/reviews";
+
+    private final ReviewRepository reviews;
+    private final BookingRepository bookings;
+    private final BookingLocks locks;
+    private final ParkingListingRepository listings;
+    private final ReviewMapper mapper;
+    private final Notifier notifier;
+    private final AppProperties app;
+    private final Clock clock;
+
+    // ---- driver ---------------------------------------------------------------------------------------------
+
+    @Transactional
+    public ReviewDto create(Long driverId, Long bookingId, int rating, String rawComment) {
+        bookings.findByIdAndDriverId(bookingId, driverId).orElseThrow(() -> ApiException.notFound("Booking not found"));
+        Booking booking = locks.lock(bookingId);
+        if (booking.getStatus() == BookingStatus.COMPLETED && reviews.existsByBookingId(bookingId)) {
+            throw alreadyReviewed();
+        }
+        String reason = ReviewPolicy.notReviewableReason(booking, clock.instant());
+        if (reason != null) {
+            throw ApiException.conflict("NOT_REVIEWABLE", reason);
+        }
+        ParkingListing listing = listings.findByIdForUpdate(booking.getListing().getId()).orElseThrow();
+
+        String comment = rawComment == null || rawComment.isBlank() ? null : rawComment.trim();
+        Review review = new Review();
+        review.setBooking(booking);
+        review.setListing(listing);
+        review.setDriver(booking.getDriver());
+        review.setRating((short) rating);
+        review.setComment(comment);
+        try {
+            reviews.saveAndFlush(review);
+        } catch (DataIntegrityViolationException e) {
+            if (SqlStates.UNIQUE_VIOLATION.equals(SqlStates.of(e))) {
+                throw alreadyReviewed();
+            }
+            throw e;
+        }
+
+        ReviewSummaryDto summary = summarize(listing.getId());
+        listing.setAvgRating(summary.avgRating());
+        listing.setReviewCount(summary.reviewCount());
+
+        String link = app.frontendUrl() + OWNER_PATH;
+        notifier.notify(listing.getOwner(), NotificationType.OWNER_NEW_REVIEW,
+                "New " + rating + "★ review for " + listing.getTitle(),
+                comment != null ? comment : "A driver rated " + listing.getTitle() + " " + rating + " out of 5.",
+                OWNER_PATH, EmailTemplates.ownerNewReview(listing.getOwner(), listing.getTitle(), rating, comment, link));
+        return mapper.toDto(review);
+    }
+
+    private static ApiException alreadyReviewed() {
+        return ApiException.conflict("ALREADY_REVIEWED", "You have already reviewed this booking");
+    }
+
+    // ---- public ---------------------------------------------------------------------------------------------
+
+    @Transactional(readOnly = true)
+    public ListingReviewsDto listForListing(Long listingId, int page, int size) {
+        ParkingListing listing = listings.findById(listingId)
+                .filter(l -> l.getStatus() == ListingStatus.APPROVED || l.getStatus() == ListingStatus.PAUSED)
+                .orElseThrow(() -> ApiException.notFound("Listing not found"));
+        Page<Review> result = reviews.findByListingId(listing.getId(), paged(page, size));
+        return new ListingReviewsDto(summarize(listing.getId()), new PageResponse<>(
+                result.getContent().stream().map(mapper::toDto).toList(), result.getNumber(), result.getSize(),
+                result.getTotalElements(), result.getTotalPages()));
+    }
+
+    // ---- owner ----------------------------------------------------------------------------------------------
+
+    @Transactional(readOnly = true)
+    public PageResponse<OwnerReviewDto> listForOwner(Long ownerId, Long listingId, int page, int size) {
+        Pageable pageable = paged(page, size);
+        Page<Review> result;
+        if (listingId == null) {
+            result = reviews.findByListingOwnerId(ownerId, pageable);
+        } else {
+            listings.findByIdAndOwnerId(listingId, ownerId).orElseThrow(() -> ApiException.notFound("Listing not found"));
+            result = reviews.findByListingOwnerIdAndListingId(ownerId, listingId, pageable);
+        }
+        return new PageResponse<>(result.getContent().stream().map(mapper::toOwnerDto).toList(), result.getNumber(),
+                result.getSize(), result.getTotalElements(), result.getTotalPages());
+    }
+
+    @Transactional
+    public ReviewDto reply(Long ownerId, Long reviewId, String rawReply) {
+        reviews.findByIdAndListingOwnerId(reviewId, ownerId).orElseThrow(() -> ApiException.notFound("Review not found"));
+        Review review = reviews.findByIdForUpdate(reviewId).orElseThrow(() -> ApiException.notFound("Review not found"));
+        if (review.getOwnerReply() != null) {
+            throw ApiException.conflict("ALREADY_REPLIED", "You have already replied to this review");
+        }
+        review.setOwnerReply(rawReply.trim());
+        review.setOwnerRepliedAt(clock.instant());
+        return mapper.toDto(review);
+    }
+
+    // ---- shared ---------------------------------------------------------------------------------------------
+
+    /** Average (one decimal, HALF_UP), count and per-star distribution computed from the listing's review rows. */
+    private ReviewSummaryDto summarize(Long listingId) {
+        Map<String, Integer> distribution = new LinkedHashMap<>();
+        for (int star = 1; star <= 5; star++) {
+            distribution.put(String.valueOf(star), 0);
+        }
+        long total = 0;
+        int count = 0;
+        List<Object[]> rows = reviews.countByRating(listingId);
+        for (Object[] row : rows) {
+            int star = ((Number) row[0]).intValue();
+            int n = ((Number) row[1]).intValue();
+            distribution.put(String.valueOf(star), n);
+            total += (long) star * n;
+            count += n;
+        }
+        BigDecimal avg = count == 0 ? BigDecimal.ZERO.setScale(1)
+                : BigDecimal.valueOf(total).divide(BigDecimal.valueOf(count), 1, RoundingMode.HALF_UP);
+        return new ReviewSummaryDto(avg, count, distribution);
+    }
+
+    private static Pageable paged(int page, int size) {
+        return PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100),
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
+    }
+}
