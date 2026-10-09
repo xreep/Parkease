@@ -6,6 +6,8 @@ import com.smartparking.booking.dto.CancellationPreview;
 import com.smartparking.booking.dto.OwnerBookingDto;
 import com.smartparking.common.config.AppProperties;
 import com.smartparking.common.error.ApiException;
+import com.smartparking.earning.EarningStatus;
+import com.smartparking.earning.OwnerEarningRepository;
 import com.smartparking.email.EmailTemplates;
 import com.smartparking.listing.CancellationPolicy;
 import com.smartparking.listing.ParkingListing;
@@ -18,7 +20,6 @@ import com.smartparking.payment.RefundService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
@@ -40,13 +41,13 @@ public class CancellationService {
     static final String STARTED = "Bookings can't be cancelled once they've started";
     private static final String OWNER_PATH = "/owner/bookings";
     private static final String DRIVER_REASON = "Cancelled by driver";
-    private static final BigDecimal MINUTES_PER_HOUR = BigDecimal.valueOf(60);
 
     private final BookingRepository bookings;
     private final PaymentRepository payments;
     private final BookingLocks locks;
     private final BookingEvents events;
     private final RefundService refunds;
+    private final OwnerEarningRepository earnings;
     private final BookingMapper mapper;
     private final Notifier notifier;
     private final AppProperties app;
@@ -87,6 +88,8 @@ public class CancellationService {
                     null);
         }
 
+        releaseRetainedEarning(booking);
+
         String refundLine = driverRefundLine(from, outcome);
         String driverPath = driverPath(booking);
         ParkingListing listing = booking.getListing();
@@ -104,13 +107,26 @@ public class CancellationService {
     }
 
     /**
+     * A driver cancellation is final: whatever the refunds left of the owner's earning (the share the policy keeps) is
+     * payable now. Nothing else would ever move it on, as the lifecycle job only completes confirmed bookings. Earnings
+     * with nothing left stay reversed, and paid-out or reversed ones are never touched.
+     */
+    private void releaseRetainedEarning(Booking booking) {
+        earnings.findByBookingId(booking.getId()).ifPresent(earning -> {
+            if (earning.getStatus() == EarningStatus.HELD && earning.getNet().signum() > 0) {
+                earning.setStatus(EarningStatus.PENDING_PAYOUT);
+            }
+        });
+    }
+
+    /**
      * The driver's options at {@code now}: unpaid holds and requests nobody accepted are given up freely (the latter
      * refunded in full), a confirmed booking that has not started follows the listing's policy, anything else
      * can't be cancelled.
      */
     private CancellationPreview driverOutcome(Booking booking, Instant now) {
         BigDecimal zero = money(BigDecimal.ZERO);
-        BigDecimal hours = hoursBefore(booking.getStartTime(), now);
+        BigDecimal hours = CancellationPolicyCalculator.hoursBefore(booking.getStartTime(), now);
         return switch (booking.getStatus()) {
             case PENDING_PAYMENT -> new CancellationPreview(true, null, null, 100, zero, zero, hours);
             case AWAITING_APPROVAL -> new CancellationPreview(true, null, null, 100, booking.getTotalAmount(), zero,
@@ -171,7 +187,8 @@ public class CancellationService {
         if (booking.getStatus() != BookingStatus.CONFIRMED || !booking.getStartTime().isAfter(clock.instant())) {
             throw ApiException.conflict(NOT_CANCELLABLE, booking.getStatus() == BookingStatus.CONFIRMED
                     || booking.getStatus() == BookingStatus.ACTIVE ? STARTED
-                    : "Only confirmed bookings that haven't started can be cancelled (" + booking.getStatus() + ")");
+                    : "Only confirmed bookings that haven't started can be cancelled (this one is "
+                    + statusLabel(booking.getStatus()) + ")");
         }
         cancel(booking, BookingActor.OWNER, reason, reason);
         Payment payment = payments.findByBookingId(bookingId).orElseThrow();
@@ -195,12 +212,6 @@ public class CancellationService {
         booking.setCancelledBy(actor);
         booking.setCancelReason(reason);
         events.record(booking, from, BookingStatus.CANCELLED, actor, note);
-    }
-
-    /** Hours until the start with one decimal; never negative. */
-    private static BigDecimal hoursBefore(Instant start, Instant now) {
-        long minutes = Math.max(Duration.between(now, start).toMinutes(), 0);
-        return BigDecimal.valueOf(minutes).divide(MINUTES_PER_HOUR, 1, RoundingMode.HALF_UP);
     }
 
     private static BigDecimal money(BigDecimal value) {

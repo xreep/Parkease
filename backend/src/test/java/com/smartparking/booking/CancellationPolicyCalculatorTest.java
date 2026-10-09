@@ -73,9 +73,16 @@ class CancellationPolicyCalculatorTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"180, 3.0", "90, 1.5", "100, 1.7", "125, 2.1", "0, 0.0", "1440, 24.0"})
-    void hoursBeforeStartIsRoundedToOneDecimal(long minutes, String hours) {
+    @CsvSource({"180, 3.0", "90, 1.5", "100, 1.6", "125, 2.0", "0, 0.0", "1440, 24.0", "1439, 23.9", "59, 0.9", "119, 1.9"})
+    void hoursBeforeStartIsCutToOneDecimalSoItNeverContradictsThePercent(long minutes, String hours) {
         assertThat(at(CancellationPolicy.FLEXIBLE, minutes, BASE).hoursBeforeStart()).isEqualByComparingTo(hours);
         assertThat(at(CancellationPolicy.FLEXIBLE, minutes, BASE).hoursBeforeStart().scale()).isEqualTo(1);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"-30, 0.0", "0, 0.0"})
+    void hoursBeforeStartIsNeverNegative(long minutes, String hours) {
+        Instant start = NOW.plus(Duration.ofMinutes(minutes));
+        assertThat(CancellationPolicyCalculator.hoursBefore(start, NOW)).isEqualByComparingTo(hours);
     }
 }

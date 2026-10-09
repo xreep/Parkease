@@ -39,7 +39,15 @@ public final class CancellationPolicyCalculator {
             case STRICT -> minutes >= 2880 ? 50 : 0;
         };
         BigDecimal refund = base.multiply(BigDecimal.valueOf(percent)).divide(HUNDRED, 2, RoundingMode.HALF_UP);
-        BigDecimal hours = BigDecimal.valueOf(minutes).divide(MINUTES_PER_HOUR, 1, RoundingMode.HALF_UP);
-        return new Result(percent, refund, hours);
+        return new Result(percent, refund, hoursBefore(start, now));
+    }
+
+    /**
+     * Whole hours and a tenth until {@code start}, cut (never rounded up) so the figure cannot contradict the tier it
+     * falls in: 59 minutes is 0.9 hours, not 1.0. Never negative.
+     */
+    public static BigDecimal hoursBefore(Instant start, Instant now) {
+        long minutes = Math.max(Duration.between(now, start).toMinutes(), 0);
+        return BigDecimal.valueOf(minutes).divide(MINUTES_PER_HOUR, 1, RoundingMode.DOWN);
     }
 }

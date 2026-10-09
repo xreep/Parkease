@@ -343,16 +343,31 @@ class PartialRefundTest {
     }
 
     @Test
-    void aWebhookThatCompletesTheLastPartMakesThePaymentRefunded() throws Exception {
+    void aFailedWebhookForTheLastPartTakesThePaymentBackToPartiallyRefunded() throws Exception {
         provider.pendingRefunds = true;
         long first = refund("50.00");
         long second = refund("17.08");
         assertThat(paymentStatus()).isEqualTo("REFUNDED");
 
         webhook("refund.failed", providerRefundId(second)).andExpect(status().isOk());
+
         assertThat(paymentStatus()).isEqualTo("PARTIALLY_REFUNDED");
         assertThat(bookingRefund()).isEqualByComparingTo("50.00");
-
         assertThat(refundStatus(first)).isEqualTo("PENDING");
+    }
+
+    @Test
+    void processedWebhooksForTwoPartsThatCoverThePaymentLeaveItRefundedWithTheFullAmount() throws Exception {
+        provider.pendingRefunds = true;
+        long first = refund("50.00");
+        long second = refund("17.08");
+
+        webhook("refund.processed", providerRefundId(first)).andExpect(status().isOk());
+        webhook("refund.processed", providerRefundId(second)).andExpect(status().isOk());
+
+        assertThat(refundStatus(first)).isEqualTo("PROCESSED");
+        assertThat(refundStatus(second)).isEqualTo("PROCESSED");
+        assertThat(paymentStatus()).isEqualTo("REFUNDED");
+        assertThat(bookingRefund()).isEqualByComparingTo("67.08");
     }
 }
