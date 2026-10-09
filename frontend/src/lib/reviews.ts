@@ -74,4 +74,4 @@ export function useInvalidateReviews() {
 }
 
 /** "4" for 4, "4.5" for 4.5. */
-export const ratingText = (value: number) => String(Number(value.toFixed(1)))
+export const ratingText = (value: number) => value.toFixed(1)

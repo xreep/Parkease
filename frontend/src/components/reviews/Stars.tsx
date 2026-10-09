@@ -15,7 +15,7 @@ export function Stars({ value, className }: { value: number; className?: string 
     </span>
   )
   return (
-    <span role="img" aria-label={`${ratingText(value)} out of 5 stars`} className={clsx('relative inline-flex', className)}>
+    <span role="img" aria-label={`${Number.isInteger(value) ? value : ratingText(value)} out of 5 stars`} className={clsx('relative inline-flex', className)}>
       {row('text-slate-300 dark:text-slate-700')}
       <span className="absolute inset-y-0 left-0 overflow-hidden" style={{ width: `${filled}%` }}>
         {row('text-amber-500')}
