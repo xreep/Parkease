@@ -5,6 +5,7 @@ const tabs = [
   { to: '/owner', label: 'Overview', end: true },
   { to: '/owner/listings', label: 'Listings' },
   { to: '/owner/bookings', label: 'Bookings' },
+  { to: '/owner/reviews', label: 'Reviews' },
   { to: '/owner/verification', label: 'Verification' },
 ]
 
