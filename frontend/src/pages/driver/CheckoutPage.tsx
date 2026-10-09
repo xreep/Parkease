@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { FormError } from '../../components/AuthCard'
@@ -53,9 +53,12 @@ function razorpayOutcome(error: unknown): { kind: 'dismissed' } | { kind: 'faile
 
 function ExpiredView({ booking }: { booking: BookingDetailDto | undefined }) {
   const href = booking ? listingHref(booking.listingId, booking.startTime, booking.endTime, booking.vehicleType) : '/search'
+  const heading = useRef<HTMLHeadingElement>(null)
+  // The view replaces the page the driver was on: move focus (and so the screen reader) to it.
+  useEffect(() => heading.current?.focus(), [])
   return (
     <section className="mx-auto max-w-lg space-y-4 px-4 py-16 text-center">
-      <h1 className="text-2xl font-bold tracking-tight">Your reservation expired</h1>
+      <h1 ref={heading} tabIndex={-1} className="text-2xl font-bold tracking-tight outline-none">Your reservation expired</h1>
       <p className="text-slate-600 dark:text-slate-400">
         We held the slot for a few minutes but didn't receive a payment. The slot is free for others again.
       </p>
@@ -87,8 +90,12 @@ function CheckoutView({ checkout }: { checkout: CheckoutDto }) {
   const [mockError, setMockError] = useState<string | null>(null)
   /** A payment the provider accepted but whose confirmation with our server failed. */
   const [unverified, setUnverified] = useState<VerifyBody | null>(null)
+  /** The server said the hold is gone (410) while confirming. */
+  const [lapsed, setLapsed] = useState(false)
+  /** Guards against a double click starting two payments before the busy state renders. */
+  const inFlight = useRef(false)
 
-  if (secondsLeft === 0) return <ExpiredView booking={booking} />
+  if (secondsLeft === 0 || lapsed) return <ExpiredView booking={booking} />
 
   const total = formatINR(booking.totalAmount)
   const policy = CANCELLATION_POLICIES.find((p) => p.value === listing?.cancellationPolicy)
@@ -96,7 +103,7 @@ function CheckoutView({ checkout }: { checkout: CheckoutDto }) {
 
   async function confirmWith(body: VerifyBody) {
     const confirmed = await verifyPayment(body)
-    queryClient.setQueryData(['booking', booking.id], confirmed)
+    queryClient.setQueryData(['booking', String(booking.id)], confirmed)
     void invalidateBookingQueries(queryClient)
     navigate(`/driver/bookings/${booking.id}?new=1`, { replace: true })
   }
@@ -106,12 +113,24 @@ function CheckoutView({ checkout }: { checkout: CheckoutDto }) {
       await confirmWith(body)
       setUnverified(null)
     } catch (error) {
-      setUnverified(body)
-      onError(errorMessage(error))
+      const problem = toProblem(error)
+      if (problem.status === 410 || problem.code === 'HOLD_EXPIRED') {
+        setUnverified(null)
+        setMockOpen(false)
+        setLapsed(true)
+        return
+      }
+      // Only a network error or a server fault leaves the outcome unknown (the payment may have
+      // gone through), so only then keep the signed response to re-send. Any other 4xx is a clear
+      // "no": show why and let the driver pay again.
+      setUnverified(problem.status === 0 || problem.status >= 500 ? body : null)
+      onError(problem.detail)
     }
   }
 
   async function payWithRazorpay() {
+    if (inFlight.current) return
+    inFlight.current = true
     setNotice(null)
     setBusy(true)
     try {
@@ -147,11 +166,14 @@ function CheckoutView({ checkout }: { checkout: CheckoutDto }) {
         (text) => setNotice({ kind: 'error', text }),
       )
     } finally {
+      inFlight.current = false
       setBusy(false)
     }
   }
 
   async function payWithMock() {
+    if (inFlight.current) return
+    inFlight.current = true
     setMockError(null)
     setBusy(true)
     try {
@@ -164,6 +186,7 @@ function CheckoutView({ checkout }: { checkout: CheckoutDto }) {
       }
       await verify({ bookingId: booking.id, ...signed }, setMockError)
     } finally {
+      inFlight.current = false
       setBusy(false)
     }
   }
@@ -180,16 +203,24 @@ function CheckoutView({ checkout }: { checkout: CheckoutDto }) {
 
   function closeMock() {
     setMockOpen(false)
-    if (!unverified) setNotice({ kind: 'info', text: 'Payment cancelled. You can try again while your slot is held.' })
+    // Keep whatever went wrong visible once the dialog is gone.
+    setNotice(
+      mockError
+        ? { kind: 'error', text: mockError }
+        : { kind: 'info', text: 'Payment cancelled. You can try again while your slot is held.' },
+    )
+    setMockError(null)
   }
 
   async function retryConfirmation() {
-    if (!unverified) return
+    if (!unverified || inFlight.current) return
+    inFlight.current = true
     setNotice(null)
     setBusy(true)
     try {
       await verify(unverified, (text) => setNotice({ kind: 'error', text }))
     } finally {
+      inFlight.current = false
       setBusy(false)
     }
   }
@@ -246,11 +277,14 @@ function CheckoutView({ checkout }: { checkout: CheckoutDto }) {
             {secondsLeft !== null && (
               <p
                 role="timer"
-                className={secondsLeft < RED_UNDER_SECONDS ? 'text-sm font-semibold text-red-600 dark:text-red-400' : 'text-sm font-medium text-slate-700 dark:text-slate-300'}
+                className={secondsLeft <= RED_UNDER_SECONDS ? 'text-sm font-semibold text-red-600 dark:text-red-400' : 'text-sm font-medium text-slate-700 dark:text-slate-300'}
               >
                 {`Slot held for ${clock(secondsLeft)}`}
               </p>
             )}
+            <p role="status" className="sr-only">
+              {secondsLeft !== null && secondsLeft <= RED_UNDER_SECONDS ? 'Two minutes left to pay.' : ''}
+            </p>
             {notice?.kind === 'error' && <FormError message={notice.text} />}
             {notice?.kind === 'info' && <p role="status" className="text-sm text-amber-700 dark:text-amber-400">{notice.text}</p>}
             {unverified ? (

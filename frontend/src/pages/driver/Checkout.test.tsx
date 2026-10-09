@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import MockAdapter from 'axios-mock-adapter'
 import { useLocation } from 'react-router-dom'
@@ -96,14 +96,31 @@ describe('checkout', () => {
     expect(await screen.findByText(/^Slot held for 01:(29|30)$/)).toHaveClass('text-red-600')
   })
 
-  it('shows the expired state when the countdown reaches zero', async () => {
-    mock.onGet('/bookings/91/checkout').reply(200, checkout('MOCK', 2_000))
-    renderApp('/checkout/91')
+  it('announces two minutes left, then shows the expired state and focuses its heading at zero', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] })
+    try {
+      mock.onGet('/bookings/91/checkout').reply(200, checkout('MOCK', 125_000))
+      renderApp('/checkout/91')
 
-    expect(await screen.findByText(/^Slot held for 00:0[12]$/)).toBeInTheDocument()
-    expect(await screen.findByRole('heading', { name: 'Your reservation expired' }, { timeout: 5000 })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^Pay/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Search again' }).getAttribute('href')).toMatch(/^\/listings\/7\?start=/)
+      expect(await screen.findByText(/^Slot held for 02:0[45]$/)).toBeInTheDocument()
+      expect(screen.queryByText('Two minutes left to pay.')).not.toBeInTheDocument()
+
+      await act(async () => {
+        vi.advanceTimersByTime(6_000)
+      })
+      expect(screen.getByText('Two minutes left to pay.')).toBeInTheDocument()
+      expect(screen.getByRole('status', { name: '' })).toBeInTheDocument()
+
+      await act(async () => {
+        vi.advanceTimersByTime(125_000)
+      })
+      const heading = screen.getByRole('heading', { name: 'Your reservation expired' })
+      expect(heading).toHaveFocus()
+      expect(screen.queryByRole('button', { name: /^Pay/ })).not.toBeInTheDocument()
+      expect(screen.getByRole('link', { name: 'Search again' }).getAttribute('href')).toMatch(/^\/listings\/7\?start=/)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('pays with the test payment dialog: mock/pay, then verify with the returned signature', async () => {
@@ -215,6 +232,136 @@ describe('checkout', () => {
     await waitFor(() => expect(screen.getByTestId('loc')).toHaveTextContent('/driver/bookings/91?new=1'))
     expect(openRazorpay).toHaveBeenCalledTimes(1)
     expect(verifyCalls()).toHaveLength(2)
+  })
+
+  it('keeps Pay available and shows the server detail after a 400 verification failure (Razorpay)', async () => {
+    mock.onGet('/bookings/91/checkout').reply(200, checkout('RAZORPAY'))
+    mock.onPost('/payments/verify').reply(400, { code: 'PAYMENT_VERIFICATION_FAILED', detail: 'Payment verification failed' })
+    vi.mocked(openRazorpay).mockResolvedValue({ razorpay_order_id: 'order_1', razorpay_payment_id: 'pay_1', razorpay_signature: 'bad' })
+    renderApp('/checkout/91')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Pay ₹89.44' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Payment verification failed')
+    expect(screen.getByRole('button', { name: 'Pay ₹89.44' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Confirm my payment' })).not.toBeInTheDocument()
+  })
+
+  it('keeps Pay available after a 409 verification response too', async () => {
+    mock.onGet('/bookings/91/checkout').reply(200, checkout('RAZORPAY'))
+    mock.onPost('/payments/verify').reply(409, { code: 'INVALID_STATUS', detail: 'This booking can no longer be paid for' })
+    vi.mocked(openRazorpay).mockResolvedValue({ razorpay_order_id: 'order_1', razorpay_payment_id: 'pay_1', razorpay_signature: 's' })
+    renderApp('/checkout/91')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Pay ₹89.44' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('This booking can no longer be paid for')
+    expect(screen.getByRole('button', { name: 'Pay ₹89.44' })).toBeEnabled()
+  })
+
+  it('shows the expired view when verifying answers 410', async () => {
+    mock.onGet('/bookings/91/checkout').reply(200, checkout('RAZORPAY'))
+    mock.onPost('/payments/verify').reply(410, { code: 'HOLD_EXPIRED', detail: 'Your reservation expired' })
+    vi.mocked(openRazorpay).mockResolvedValue({ razorpay_order_id: 'order_1', razorpay_payment_id: 'pay_1', razorpay_signature: 's' })
+    renderApp('/checkout/91')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Pay ₹89.44' }))
+
+    expect(await screen.findByRole('heading', { name: 'Your reservation expired' })).toHaveFocus()
+    expect(screen.queryByRole('button', { name: /^Pay/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Confirm my payment' })).not.toBeInTheDocument()
+  })
+
+  it('offers only the confirmation retry after a 503 (the outcome is unknown)', async () => {
+    mock.onGet('/bookings/91/checkout').reply(200, checkout('RAZORPAY'))
+    mock.onPost('/payments/verify').reply(503, { code: 'UNAVAILABLE', detail: 'Service unavailable' })
+    vi.mocked(openRazorpay).mockResolvedValue({ razorpay_order_id: 'order_1', razorpay_payment_id: 'pay_1', razorpay_signature: 's' })
+    renderApp('/checkout/91')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Pay ₹89.44' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Service unavailable')
+    expect(screen.getByRole('button', { name: 'Confirm my payment' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Pay ₹89.44' })).not.toBeInTheDocument()
+  })
+
+  it('offers the confirmation retry after a network error too', async () => {
+    mock.onGet('/bookings/91/checkout').reply(200, checkout('RAZORPAY'))
+    mock.onPost('/payments/verify').networkError()
+    vi.mocked(openRazorpay).mockResolvedValue({ razorpay_order_id: 'order_1', razorpay_payment_id: 'pay_1', razorpay_signature: 's' })
+    renderApp('/checkout/91')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Pay ₹89.44' }))
+
+    expect(await screen.findByRole('button', { name: 'Confirm my payment' })).toBeEnabled()
+  })
+
+  it('shows the expired view when a test-payment verify answers 410', async () => {
+    mock.onGet('/bookings/91/checkout').reply(200, checkout('MOCK'))
+    mock.onPost('/payments/mock/pay').reply(200, signed)
+    mock.onPost('/payments/verify').reply(410, { code: 'HOLD_EXPIRED', detail: 'Your reservation expired' })
+    renderApp('/checkout/91')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Pay ₹89.44' }))
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Pay ₹89.44' }))
+
+    expect(await screen.findByRole('heading', { name: 'Your reservation expired' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('surfaces a test-payment verification error on the page once the dialog is closed', async () => {
+    mock.onGet('/bookings/91/checkout').reply(200, checkout('MOCK'))
+    mock.onPost('/payments/mock/pay').reply(200, signed)
+    mock.onPost('/payments/verify').reply(400, { code: 'PAYMENT_VERIFICATION_FAILED', detail: 'Payment verification failed' })
+    renderApp('/checkout/91')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Pay ₹89.44' }))
+    const dialog = within(screen.getByRole('dialog'))
+    await userEvent.click(dialog.getByRole('button', { name: 'Pay ₹89.44' }))
+    await dialog.findByRole('alert')
+    await userEvent.click(dialog.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Payment verification failed')
+    expect(screen.getByRole('button', { name: 'Pay ₹89.44' })).toBeEnabled()
+  })
+
+  it('returns to the page with Pay available when the test dialog is cancelled', async () => {
+    mock.onGet('/bookings/91/checkout').reply(200, checkout('MOCK'))
+    renderApp('/checkout/91')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Pay ₹89.44' }))
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByText('Payment cancelled. You can try again while your slot is held.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pay ₹89.44' })).toBeEnabled()
+    expect(mock.history.post).toHaveLength(0)
+  })
+
+  it('opens Razorpay once when Pay is double-clicked', async () => {
+    mock.onGet('/bookings/91/checkout').reply(200, checkout('RAZORPAY'))
+    vi.mocked(openRazorpay).mockReturnValue(new Promise(() => {}))
+    renderApp('/checkout/91')
+
+    await userEvent.dblClick(await screen.findByRole('button', { name: 'Pay ₹89.44' }))
+
+    await waitFor(() => expect(openRazorpay).toHaveBeenCalledTimes(1))
+    expect(loadRazorpay).toHaveBeenCalledTimes(1)
+  })
+
+  it('sends one test payment when Pay is double-clicked in the dialog', async () => {
+    mock.onGet('/bookings/91/checkout').reply(200, checkout('MOCK'))
+    mock.onPost('/payments/mock/pay').reply(() => new Promise((resolve) => setTimeout(() => resolve([200, signed]), 50)))
+    mock.onPost('/payments/verify').reply(200, confirmed)
+    renderApp('/checkout/91', undefined, <LocationProbe />)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Pay ₹89.44' }))
+    await userEvent.dblClick(within(screen.getByRole('dialog')).getByRole('button', { name: 'Pay ₹89.44' }))
+
+    await waitFor(() => expect(screen.getByTestId('loc')).toHaveTextContent('/driver/bookings/91?new=1'))
+    expect(mock.history.post.filter((r) => r.url === '/payments/mock/pay')).toHaveLength(1)
+    expect(verifyCalls()).toHaveLength(1)
   })
 
   it('shows the expired state for an expired hold (410) and links back to the listing with the same times', async () => {
