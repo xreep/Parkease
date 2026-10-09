@@ -259,18 +259,48 @@ describe('checkout', () => {
     expect(screen.getByRole('button', { name: 'Pay ₹89.44' })).toBeEnabled()
   })
 
-  it('shows the expired view when verifying answers 410', async () => {
+  it('opens the booking page, not the success flow, when verify returns a CANCELLED booking (slot taken, refunded)', async () => {
     mock.onGet('/bookings/91/checkout').reply(200, checkout('RAZORPAY'))
-    mock.onPost('/payments/verify').reply(410, { code: 'HOLD_EXPIRED', detail: 'Your reservation expired' })
+    mock.onPost('/payments/verify').reply(200, { ...booking(), status: 'CANCELLED', refundAmount: 89.44 })
     vi.mocked(openRazorpay).mockResolvedValue({ razorpay_order_id: 'order_1', razorpay_payment_id: 'pay_1', razorpay_signature: 's' })
-    renderApp('/checkout/91')
+    renderApp('/checkout/91', undefined, <LocationProbe />)
 
     await userEvent.click(await screen.findByRole('button', { name: 'Pay ₹89.44' }))
 
-    expect(await screen.findByRole('heading', { name: 'Your reservation expired' })).toHaveFocus()
-    expect(screen.queryByRole('button', { name: /^Pay/ })).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('loc')).toHaveTextContent(/^\/driver\/bookings\/91$/))
     expect(screen.queryByRole('button', { name: 'Confirm my payment' })).not.toBeInTheDocument()
   })
+
+  it('keeps the page and the confirmation button when the hold lapses while a payment is unconfirmed', async () => {
+    mock.onGet('/bookings/91/checkout').reply(200, checkout('RAZORPAY', 1_500))
+    mock.onPost('/payments/verify').reply(503, { code: 'UNAVAILABLE', detail: 'Service unavailable' })
+    vi.mocked(openRazorpay).mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve({ razorpay_order_id: 'order_1', razorpay_payment_id: 'pay_1', razorpay_signature: 's' }), 2_200)),
+    )
+    renderApp('/checkout/91')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Pay ₹89.44' }))
+    // The hold lapses while the payment window is still open: the page stays.
+    await new Promise((r) => setTimeout(r, 1_800))
+    expect(screen.queryByRole('heading', { name: 'Your reservation expired' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Pay/ })).toBeDisabled()
+
+    expect(await screen.findByRole('button', { name: 'Confirm my payment' }, { timeout: 3_000 })).toBeEnabled()
+    expect(screen.getByText("Your payment is being confirmed. If it went through, we'll confirm or refund it automatically.")).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Your reservation expired' })).not.toBeInTheDocument()
+  }, 10_000)
+
+  it('shows the expired view once the in-flight payment ends without a signed payment', async () => {
+    mock.onGet('/bookings/91/checkout').reply(200, checkout('RAZORPAY', 1_200))
+    vi.mocked(openRazorpay).mockImplementation(() => new Promise((_, reject) => setTimeout(() => reject(new RazorpayDismissedError()), 1_800)))
+    renderApp('/checkout/91')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Pay ₹89.44' }))
+    await new Promise((r) => setTimeout(r, 1_500))
+    expect(screen.queryByRole('heading', { name: 'Your reservation expired' })).not.toBeInTheDocument()
+
+    expect(await screen.findByRole('heading', { name: 'Your reservation expired' }, { timeout: 3_000 })).toBeInTheDocument()
+  }, 10_000)
 
   it('offers only the confirmation retry after a 503 (the outcome is unknown)', async () => {
     mock.onGet('/bookings/91/checkout').reply(200, checkout('RAZORPAY'))
@@ -296,17 +326,32 @@ describe('checkout', () => {
     expect(await screen.findByRole('button', { name: 'Confirm my payment' })).toBeEnabled()
   })
 
-  it('shows the expired view when a test-payment verify answers 410', async () => {
+  it('opens the booking page when a test-payment verify returns a CANCELLED booking', async () => {
     mock.onGet('/bookings/91/checkout').reply(200, checkout('MOCK'))
     mock.onPost('/payments/mock/pay').reply(200, signed)
-    mock.onPost('/payments/verify').reply(410, { code: 'HOLD_EXPIRED', detail: 'Your reservation expired' })
-    renderApp('/checkout/91')
+    mock.onPost('/payments/verify').reply(200, { ...booking(), status: 'CANCELLED', refundAmount: 89.44 })
+    renderApp('/checkout/91', undefined, <LocationProbe />)
 
     await userEvent.click(await screen.findByRole('button', { name: 'Pay ₹89.44' }))
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Pay ₹89.44' }))
 
-    expect(await screen.findByRole('heading', { name: 'Your reservation expired' })).toBeInTheDocument()
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('loc')).toHaveTextContent(/^\/driver\/bookings\/91$/))
+  })
+
+  it('names Razorpay in the footer only for the Razorpay provider', async () => {
+    mock.onGet('/bookings/91/checkout').reply(200, checkout('RAZORPAY'))
+    renderApp('/checkout/91')
+
+    expect(await screen.findByText(/Payments are processed securely by Razorpay\./)).toBeInTheDocument()
+    expect(screen.queryByText(/Test mode/)).not.toBeInTheDocument()
+  })
+
+  it('says no real money is charged in the footer for the mock provider', async () => {
+    mock.onGet('/bookings/91/checkout').reply(200, checkout('MOCK'))
+    renderApp('/checkout/91')
+
+    expect(await screen.findByText(/Test mode — no real money is charged\./)).toBeInTheDocument()
+    expect(screen.queryByText(/Razorpay\./)).not.toBeInTheDocument()
   })
 
   it('surfaces a test-payment verification error on the page once the dialog is closed', async () => {

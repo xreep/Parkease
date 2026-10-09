@@ -90,22 +90,25 @@ function CheckoutView({ checkout }: { checkout: CheckoutDto }) {
   const [mockError, setMockError] = useState<string | null>(null)
   /** A payment the provider accepted but whose confirmation with our server failed. */
   const [unverified, setUnverified] = useState<VerifyBody | null>(null)
-  /** The server said the hold is gone (410) while confirming. */
-  const [lapsed, setLapsed] = useState(false)
   /** Guards against a double click starting two payments before the busy state renders. */
   const inFlight = useRef(false)
 
-  if (secondsLeft === 0 || lapsed) return <ExpiredView booking={booking} />
+  // Never swap the page away while a signed payment still awaits confirmation or one is in flight:
+  // the driver may have paid, and the server will confirm or refund it either way.
+  if (secondsLeft === 0 && !unverified && !busy) return <ExpiredView booking={booking} />
+  const holdLapsed = secondsLeft === 0
 
   const total = formatINR(booking.totalAmount)
   const policy = CANCELLATION_POLICIES.find((p) => p.value === listing?.cancellationPolicy)
   const minutes = (new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / 60_000
 
   async function confirmWith(body: VerifyBody) {
-    const confirmed = await verifyPayment(body)
-    queryClient.setQueryData(['booking', String(booking.id)], confirmed)
+    const result = await verifyPayment(body)
+    queryClient.setQueryData(['booking', String(booking.id)], result)
     void invalidateBookingQueries(queryClient)
-    navigate(`/driver/bookings/${booking.id}?new=1`, { replace: true })
+    // The slot was taken meanwhile: the server cancelled the booking and refunded the payment.
+    // The booking page shows the refund, so don't present it as a success.
+    navigate(`/driver/bookings/${booking.id}${result.status === 'CANCELLED' ? '' : '?new=1'}`, { replace: true })
   }
 
   async function verify(body: VerifyBody, onError: (message: string) => void) {
@@ -114,12 +117,6 @@ function CheckoutView({ checkout }: { checkout: CheckoutDto }) {
       setUnverified(null)
     } catch (error) {
       const problem = toProblem(error)
-      if (problem.status === 410 || problem.code === 'HOLD_EXPIRED') {
-        setUnverified(null)
-        setMockOpen(false)
-        setLapsed(true)
-        return
-      }
       // Only a network error or a server fault leaves the outcome unknown (the payment may have
       // gone through), so only then keep the signed response to re-send. Any other 4xx is a clear
       // "no": show why and let the driver pay again.
@@ -274,7 +271,7 @@ function CheckoutView({ checkout }: { checkout: CheckoutDto }) {
               <Row label="GST on fee" value={formatINR(booking.gstAmount)} />
               <Row label="Total" value={total} strong />
             </dl>
-            {secondsLeft !== null && (
+            {secondsLeft !== null && !holdLapsed && (
               <p
                 role="timer"
                 className={secondsLeft <= RED_UNDER_SECONDS ? 'text-sm font-semibold text-red-600 dark:text-red-400' : 'text-sm font-medium text-slate-700 dark:text-slate-300'}
@@ -285,6 +282,11 @@ function CheckoutView({ checkout }: { checkout: CheckoutDto }) {
             <p role="status" className="sr-only">
               {secondsLeft !== null && secondsLeft <= RED_UNDER_SECONDS ? 'Two minutes left to pay.' : ''}
             </p>
+            {holdLapsed && unverified && (
+              <p role="status" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Your payment is being confirmed. If it went through, we'll confirm or refund it automatically.
+              </p>
+            )}
             {notice?.kind === 'error' && <FormError message={notice.text} />}
             {notice?.kind === 'info' && <p role="status" className="text-sm text-amber-700 dark:text-amber-400">{notice.text}</p>}
             {unverified ? (
@@ -292,7 +294,10 @@ function CheckoutView({ checkout }: { checkout: CheckoutDto }) {
             ) : (
               <Button type="button" className="w-full" loading={busy && !mockOpen} disabled={busy} onClick={pay}>{`Pay ${total}`}</Button>
             )}
-            <p className="text-xs text-slate-500">Your slot is reserved until the timer runs out. Payments are processed securely by Razorpay.</p>
+            <p className="text-xs text-slate-500">
+              {'Your slot is reserved until the timer runs out. '}
+              {payment.provider === 'RAZORPAY' ? 'Payments are processed securely by Razorpay.' : 'Test mode — no real money is charged.'}
+            </p>
           </aside>
         </div>
       </div>
