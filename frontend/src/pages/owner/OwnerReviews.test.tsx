@@ -154,6 +154,20 @@ describe('owner reviews', () => {
     expect(within(card).queryByRole('button', { name: 'Post reply' })).not.toBeInTheDocument()
   })
 
+  it('shows other failures once, inline, without a toast', async () => {
+    mock.onGet('/owner/reviews').reply(200, page([review(1)]))
+    mock.onPost('/owner/reviews/1/reply').reply(500, { code: 'INTERNAL', detail: 'Could not save the reply' })
+    const user = userEvent.setup()
+    renderApp('/owner/reviews')
+
+    const card = await screen.findByRole('article', { name: 'Review PE-REV001' })
+    await user.type(within(card).getByLabelText('Your reply'), 'Hello')
+    await user.click(within(card).getByRole('button', { name: 'Post reply' }))
+
+    expect(await within(card).findByText('Could not save the reply')).toBeInTheDocument()
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
   it('explains ALREADY_REPLIED and refreshes the list', async () => {
     mock.onGet('/owner/reviews').replyOnce(200, page([review(1)]))
     mock.onGet('/owner/reviews').reply(200, page([review(1, { ownerReply: 'Answered elsewhere', ownerRepliedAt: '2026-10-06T10:00:00Z' })]))
@@ -168,5 +182,6 @@ describe('owner reviews', () => {
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("You've already replied to this review."))
     expect(await screen.findByText('Answered elsewhere')).toBeInTheDocument()
     expect(toast.success).not.toHaveBeenCalled()
+    expect(toast.error).toHaveBeenCalledTimes(1)
   })
 })

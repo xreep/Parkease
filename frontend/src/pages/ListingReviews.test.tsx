@@ -90,6 +90,18 @@ describe('listing reviews', () => {
     expect(within(second).getByText('Thanks for parking with us')).toBeInTheDocument()
   })
 
+  it('renders review text literally, never as HTML', async () => {
+    mock.onGet('/listings/7/reviews').reply(200, reviewsBody([
+      review(1, { comment: '<img src=x onerror=alert(1)> <b>bold</b>', authorName: '<i>Eve</i> S.', ownerReply: '<script>alert(2)</script>', ownerRepliedAt: '2026-10-06T10:00:00Z' }),
+    ], 0, 1, 1))
+    renderApp('/listings/7')
+
+    const card = await screen.findByRole('article', { name: 'Review by <i>Eve</i> S.' })
+    expect(within(card).getByText('<img src=x onerror=alert(1)> <b>bold</b>')).toBeInTheDocument()
+    expect(within(card).getByText('<script>alert(2)</script>')).toBeInTheDocument()
+    expect(card.querySelector('img, b, i, script')).toBeNull()
+  })
+
   it('loads the next page of reviews on "Show more" and hides the button on the last page', async () => {
     mock.onGet('/listings/7/reviews', { params: { page: 0, size: 10 } }).reply(200, reviewsBody([review(1), review(2)], 0, 2))
     mock.onGet('/listings/7/reviews', { params: { page: 1, size: 10 } }).reply(200, reviewsBody([review(3)], 1, 2))

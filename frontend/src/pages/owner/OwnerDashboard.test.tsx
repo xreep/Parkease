@@ -137,6 +137,23 @@ describe('owner overview', () => {
     expect(screen.getByText('Your listings')).toBeInTheDocument()
   })
 
+  it('does not show the verification card until the profile has loaded, so it never jumps', async () => {
+    let release: (value: [number, unknown]) => void = () => undefined
+    mock.onGet('/owner/profile').reply(() => new Promise((resolve) => { release = resolve }))
+    renderApp('/owner')
+
+    await screen.findByRole('group', { name: 'Earnings' })
+    expect(screen.queryByText('Identity verification')).not.toBeInTheDocument()
+    expect(screen.getByText('Your listings')).toBeInTheDocument()
+
+    release([200, { verificationStatus: 'UNSUBMITTED', documentType: null, rejectionReason: null }])
+    const heading = await screen.findByText('Identity verification')
+    expect(screen.getAllByText('Identity verification')).toHaveLength(1)
+    // It appears above the overview, where it stays.
+    const earnings = screen.getByRole('group', { name: 'Earnings' })
+    expect(heading.compareDocumentPosition(earnings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('keeps the verification prompt on top for an owner who is not verified', async () => {
     mock.onGet('/owner/profile').reply(200, { verificationStatus: 'UNSUBMITTED', documentType: null, rejectionReason: null })
     renderApp('/owner')

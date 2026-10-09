@@ -10,9 +10,8 @@ import { BOOKING_STATUS_LABELS, type BookingStatus } from '../../lib/bookings'
 import { errorMessage } from '../../lib/errors'
 import { useMyListings } from '../../lib/owner'
 import { useOwnerCalendar, type OwnerCalendarDto } from '../../lib/ownerDashboard'
-import { addDays, istDate, istInstant, MONTH_NAMES, weekdayOf } from '../../lib/time'
+import { addDays, DAY_MS, formatShortDate, istDate, istInstant, weekdayOf } from '../../lib/time'
 
-const DAY_MS = 24 * 60 * 60 * 1000
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 /** The API serves at most 14 days; a week is shown at a time. */
 const WEEK_DAYS = 7
@@ -31,8 +30,6 @@ const HATCHED =
 
 /** The Monday of the IST week holding `date`. */
 const mondayOf = (date: string) => addDays(date, -((weekdayOf(date) + 6) % 7))
-
-const shortDate = (date: string) => `${Number(date.slice(8))} ${MONTH_NAMES[Number(date.slice(5, 7)) - 1].slice(0, 3)}`
 
 type Segment = { left: number; width: number }
 
@@ -89,6 +86,7 @@ function DayCell({ day, slotId, calendar }: { day: string; slotId: number; calen
               )}
             >
               {b.bookingCode}
+              <span className="sr-only">{`, ${BOOKING_STATUS_LABELS[b.status]}, ${b.driverName}`}</span>
             </div>
           )
         })}
@@ -190,7 +188,7 @@ export function OwnerCalendarPage() {
                 <ChevronLeft aria-hidden className="h-4 w-4" />
               </Button>
               <p aria-live="polite" className="min-w-40 text-center text-sm font-medium">
-                {`${shortDate(weekStart)} – ${shortDate(weekEnd)} ${weekEnd.slice(0, 4)}`}
+                {`${formatShortDate(weekStart)} – ${formatShortDate(weekEnd)} ${weekEnd.slice(0, 4)}`}
               </p>
               <Button type="button" variant="secondary" className="px-2.5" aria-label="Next week" onClick={() => setWeekStart(addDays(weekStart, WEEK_DAYS))}>
                 <ChevronRight aria-hidden className="h-4 w-4" />

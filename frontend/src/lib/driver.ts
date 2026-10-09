@@ -23,6 +23,8 @@ export type DriverStatsDto = {
   amountSpent: number
   hoursParked: number
   pendingReviews: number
+  /** The newest completed booking still waiting for a review (its page has the form at `#review`), or null. */
+  reviewBookingId: number | null
 }
 
 export const PAYMENTS_PAGE_SIZE = 20

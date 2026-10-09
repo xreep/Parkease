@@ -110,6 +110,18 @@ describe('owner calendar', () => {
     expect(within(cell('A-2', 1)).queryByText('PE-CAL001')).not.toBeInTheDocument()
   })
 
+  it('gives each bar a text alternative with its status and driver, not only a tooltip', async () => {
+    renderApp('/owner/calendar')
+    await screen.findByRole('table', { name: 'Slots by day' })
+
+    const bar = within(cell('A-2', 2)).getByText('PE-CAL001').closest('[data-booking]') as HTMLElement
+    expect(within(bar).getByText('Confirmed, Rahul', { exact: false })).toHaveClass('sr-only')
+    const waiting = within(cell('A-1', 5)).getByText('PE-CAL002').closest('[data-booking]') as HTMLElement
+    expect(within(waiting).getByText('Waiting for owner, Asha', { exact: false })).toHaveClass('sr-only')
+    // The row's accessible name carries it too.
+    expect(screen.getByRole('row', { name: /A-2.*PE-CAL001.*Confirmed, Rahul/ })).toBeInTheDocument()
+  })
+
   it('splits a booking that crosses midnight over both days (in IST)', async () => {
     renderApp('/owner/calendar')
     await screen.findByRole('table', { name: 'Slots by day' })

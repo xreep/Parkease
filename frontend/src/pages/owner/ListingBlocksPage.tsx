@@ -12,7 +12,7 @@ import { Spinner } from '../../components/ui/Spinner'
 import { TextField } from '../../components/ui/TextField'
 import { errorMessage } from '../../lib/errors'
 import { formatDateTime } from '../../lib/format'
-import { addBlock, deleteBlock, useBlocks, useListing, type Block, type ListingDetail } from '../../lib/owner'
+import { addBlock, deleteBlock, invalidateBlocks, useBlocks, useListing, type Block, type ListingDetail } from '../../lib/owner'
 
 const schema = z
   .object({
@@ -128,7 +128,7 @@ function BlocksContent({ id }: { id: number }) {
   const queryClient = useQueryClient()
   const { data: listing, error, isPending } = useListing(id)
   const blocks = useBlocks(id)
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ['owner', 'blocks', id] })
+  const refresh = () => invalidateBlocks(queryClient, id)
 
   if (isPending) {
     return (

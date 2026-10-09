@@ -3,12 +3,15 @@ import { QueryClient } from '@tanstack/react-query'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import MockAdapter from 'axios-mock-adapter'
+import { toast } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../lib/api'
 import type { BookingDetailDto } from '../../lib/bookings'
 import type { ReviewDto } from '../../lib/reviews'
 import { tokenStore } from '../../lib/tokenStore'
 import { renderApp } from '../../test/renderApp'
+
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() }, Toaster: () => null }))
 
 const driver = { id: 1, name: 'Rahul Verma', email: 'driver@example.com', phone: null, role: 'DRIVER', emailVerified: true, avatarUrl: null }
 
@@ -39,6 +42,7 @@ describe('reviewing a booking', () => {
     tokenStore.set('a', 'r')
     mock = new MockAdapter(api)
     mock.onGet('/me').reply(200, driver)
+    vi.mocked(toast.error).mockClear()
   })
 
   afterEach(() => {
@@ -136,10 +140,13 @@ describe('reviewing a booking', () => {
 
     const done = await screen.findByRole('region', { name: 'Your review' })
     expect(within(done).getByText('Easy to find and safe')).toBeInTheDocument()
+    // The form (and its inline message) is gone by now; the toast keeps the explanation.
+    expect(toast.error).toHaveBeenCalledWith("You've already reviewed this booking.")
   })
 
-  it('shows the server message when the booking is no longer reviewable', async () => {
-    mock.onGet('/bookings/91').reply(200, booking())
+  it('shows the server message when the booking is no longer reviewable, even after the form goes away', async () => {
+    mock.onGet('/bookings/91').replyOnce(200, booking())
+    mock.onGet('/bookings/91').reply(200, booking({ reviewable: false }))
     mock.onPost('/bookings/91/review').reply(409, { code: 'NOT_REVIEWABLE', detail: 'Only completed bookings can be reviewed' })
     const user = userEvent.setup()
     renderApp('/driver/bookings/91')
@@ -147,8 +154,45 @@ describe('reviewing a booking', () => {
     await user.click(await screen.findByRole('radio', { name: '2 stars' }))
     await user.click(screen.getByRole('button', { name: 'Submit review' }))
 
-    expect(await screen.findByText('Only completed bookings can be reviewed')).toBeInTheDocument()
-    expect(screen.getByRole('radiogroup')).toBeInTheDocument()
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Only completed bookings can be reviewed'))
+    // The refetch says it can't be reviewed: the panel is replaced, the toast is what is left.
+    await waitFor(() => expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument())
+    expect(screen.queryByRole('region', { name: 'Rate your parking' })).not.toBeInTheDocument()
+  })
+
+  it('shows other failures inline without a toast', async () => {
+    mock.onGet('/bookings/91').reply(200, booking())
+    mock.onPost('/bookings/91/review').reply(500, { code: 'INTERNAL', detail: 'Try again later' })
+    const user = userEvent.setup()
+    renderApp('/driver/bookings/91')
+
+    await user.click(await screen.findByRole('radio', { name: '2 stars' }))
+    await user.click(screen.getByRole('button', { name: 'Submit review' }))
+
+    expect(await screen.findByText('Try again later')).toBeInTheDocument()
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('links the missing-rating message to the stars and announces it', async () => {
+    mock.onGet('/bookings/91').reply(200, booking())
+    const user = userEvent.setup()
+    renderApp('/driver/bookings/91')
+
+    await user.click(await screen.findByRole('button', { name: 'Submit review' }))
+
+    const alert = await screen.findByText('Choose a star rating')
+    expect(alert).toHaveAttribute('role', 'alert')
+    expect(screen.getByRole('radiogroup', { name: 'Your rating' })).toHaveAttribute('aria-describedby', alert.id)
+    expect(alert.id).not.toBe('')
+  })
+
+  it('gives each star a touch target of at least 44px', async () => {
+    mock.onGet('/bookings/91').reply(200, booking())
+    renderApp('/driver/bookings/91')
+
+    for (const radio of await screen.findAllByRole('radio')) {
+      expect(radio.closest('label')).toHaveClass('h-11', 'w-11')
+    }
   })
 
   it('shows an existing review read-only', async () => {
