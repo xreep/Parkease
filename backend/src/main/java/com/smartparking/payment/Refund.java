@@ -46,6 +46,9 @@ public class Refund extends BaseEntity {
 
     private String failureReason;
 
+    @Enumerated(EnumType.STRING)
+    private RefundNotice notice;
+
     /** Provider attempts so far; the first try counts. */
     @Column(nullable = false)
     private int attempts = 1;

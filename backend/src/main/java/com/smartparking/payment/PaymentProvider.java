@@ -25,10 +25,12 @@ public interface PaymentProvider {
     ProviderRefund refund(String paymentId, long amountPaise, String reason);
 
     /**
-     * Like {@link #refund(String, long, String)}, but retrying the same {@code idempotencyKey} must not refund twice.
-     * Providers without such a mechanism just refund.
+     * Like {@link #refund(String, long, String)}, but retrying the same {@code idempotencyKey} must not refund twice,
+     * and the refund is tagged with {@code receipt} so it can be recognised later (see {@link #fetchRefunds}).
+     * Providers without such mechanisms just refund.
      */
-    default ProviderRefund refund(String paymentId, long amountPaise, String reason, String idempotencyKey) {
+    default ProviderRefund refund(String paymentId, long amountPaise, String reason, String idempotencyKey,
+                                  String receipt) {
         return refund(paymentId, amountPaise, reason);
     }
 

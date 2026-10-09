@@ -18,7 +18,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.HttpStatus;
 import org.springframework.util.StringUtils;
 
 public class RazorpayPaymentProvider implements PaymentProvider {
@@ -111,7 +110,7 @@ public class RazorpayPaymentProvider implements PaymentProvider {
     static ProviderPayment toProviderPayment(JSONObject payment) {
         return new ProviderPayment(payment.getString("id"), payment.getString("status"),
                 optText(payment, "order_id"), payment.getLong("amount"), payment.getString("currency"),
-                optText(payment, "method"));
+                optText(payment, "method"), optText(payment, "error_description"));
     }
 
     /** The text of a field, or null when it is missing or JSON null (org.json would answer "null"). */
@@ -121,7 +120,7 @@ public class RazorpayPaymentProvider implements PaymentProvider {
 
     @Override
     public ProviderRefund refund(String paymentId, long amountPaise, String reason) {
-        return refund(paymentId, amountPaise, reason, null);
+        return refund(paymentId, amountPaise, reason, null, null);
     }
 
     /**
@@ -129,15 +128,19 @@ public class RazorpayPaymentProvider implements PaymentProvider {
      * request headers), so the refund call is made directly: {@code POST /v1/payments/{id}/refund} with basic auth.
      */
     @Override
-    public ProviderRefund refund(String paymentId, long amountPaise, String reason, String idempotencyKey) {
+    public ProviderRefund refund(String paymentId, long amountPaise, String reason, String idempotencyKey,
+                                 String receipt) {
         if (paymentId == null || !PROVIDER_ID.matcher(paymentId).matches()) {
             throw providerError("refund payment", new IllegalArgumentException("Invalid payment id"));
         }
         try {
-            String body = new JSONObject()
-                    .put("amount", amountPaise)
-                    .put("notes", new JSONObject().put("reason", reason == null ? "" : reason))
-                    .toString();
+            JSONObject notes = new JSONObject().put("reason", reason == null ? "" : reason);
+            JSONObject payload = new JSONObject().put("amount", amountPaise);
+            if (receipt != null) {
+                payload.put("receipt", receipt);
+                notes.put("parkeaseRefund", receipt); // echoed back in fetchRefunds, even where receipts are not
+            }
+            String body = payload.put("notes", notes).toString();
             HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(apiBase + "/payments/" + paymentId + "/refund"))
                     .timeout(Duration.ofSeconds(30))
                     .header("Authorization", "Basic " + Base64.getEncoder()
@@ -149,7 +152,8 @@ public class RazorpayPaymentProvider implements PaymentProvider {
             }
             HttpResponse<String> response = http.send(request.build(), HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() / 100 != 2) {
-                throw new IOException("Razorpay answered " + response.statusCode() + ": " + response.body());
+                throw providerError("refund payment", new IOException("Razorpay answered " + response.statusCode()),
+                        errorDescription(response.body()));
             }
             return toProviderRefund(new JSONObject(response.body()));
         } catch (InterruptedException e) {
@@ -171,8 +175,18 @@ public class RazorpayPaymentProvider implements PaymentProvider {
 
     static ProviderRefund toProviderRefund(JSONObject refund) {
         String status = refund.optString("status");
+        Map<String, String> notes = new java.util.HashMap<>();
+        JSONObject sent = refund.optJSONObject("notes"); // an empty array when the refund has none
+        if (sent != null) {
+            for (java.util.Iterator<String> keys = sent.keys(); keys.hasNext();) {
+                String key = keys.next();
+                notes.put(key, sent.optString(key));
+            }
+        }
         return new ProviderRefund(refund.getString("id"), "processed".equals(status) ? RefundStatus.PROCESSED
-                : "failed".equals(status) ? RefundStatus.FAILED : RefundStatus.PENDING);
+                : "failed".equals(status) ? RefundStatus.FAILED : RefundStatus.PENDING,
+                refund.has("amount") && !refund.isNull("amount") ? refund.getLong("amount") : null,
+                optText(refund, "receipt"), Map.copyOf(notes));
     }
 
     @Override
@@ -184,8 +198,24 @@ public class RazorpayPaymentProvider implements PaymentProvider {
     }
 
     private static ApiException providerError(String action, Exception e) {
-        log.error("Razorpay failed to {}", action, e);
-        return new ApiException(HttpStatus.BAD_GATEWAY, "PAYMENT_PROVIDER_ERROR",
-                "Payment provider is unavailable. Please try again.");
+        return providerError(action, e, e.getMessage());
+    }
+
+    private static ApiException providerError(String action, Exception e, String description) {
+        log.error("Razorpay failed to {}: {}", action, description, e);
+        return new PaymentProviderException(description);
+    }
+
+    /** {@code error.description} of a Razorpay error body, or the start of the body if it is not that shape. */
+    private static String errorDescription(String body) {
+        try {
+            JSONObject error = new JSONObject(body).optJSONObject("error");
+            if (error != null && !error.optString("description").isBlank()) {
+                return error.getString("description");
+            }
+        } catch (JSONException ignored) {
+            // not JSON: fall through
+        }
+        return body == null ? null : body.substring(0, Math.min(body.length(), 200));
     }
 }

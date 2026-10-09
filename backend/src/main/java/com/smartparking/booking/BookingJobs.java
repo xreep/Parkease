@@ -36,6 +36,8 @@ public class BookingJobs {
 
     /** Orders asked about per reconciliation run (each is a Razorpay API call) and how far back they may reach. */
     private static final int RECONCILE_BATCH = 100;
+    private static final int RECENT_MINUTES = 60;
+    private static final Duration RECENT = Duration.ofMinutes(RECENT_MINUTES);
     private static final Duration RECONCILE_WINDOW = Duration.ofHours(24);
 
     static final String EXPIRED_NOTE = "Payment window expired";
@@ -155,15 +157,31 @@ public class BookingJobs {
 
     /**
      * Picks up payments that were taken at Razorpay but never confirmed here (the browser closed before the verify
-     * call and the webhook was missed or is not configured): for every unconfirmed Razorpay order of the last 24
-     * hours whose booking is still waiting (or only just lapsed) it asks the provider and confirms what was captured.
+     * call and the webhook was missed or is not configured). Orders from the last {@value #RECENT_MINUTES} minutes are
+     * checked every five minutes: that is when a customer is waiting.
      */
     @Scheduled(fixedDelay = 300_000)
-    public void reconcileLostPayments() {
-        Instant since = clock.instant().minus(RECONCILE_WINDOW);
+    public void reconcileRecentPayments() {
+        Instant now = clock.instant();
+        reconcileBand(now.minus(RECENT), now.plus(Duration.ofDays(1)), RECONCILE_BATCH);
+    }
+
+    /** Orders between one and 24 hours old (abandoned holds mostly) are checked hourly, which is plenty. */
+    @Scheduled(fixedDelay = 3_600_000)
+    public void reconcileOlderPayments() {
+        Instant now = clock.instant();
+        reconcileBand(now.minus(RECONCILE_WINDOW), now.minus(RECENT), RECONCILE_BATCH);
+    }
+
+    /**
+     * Asks the provider about up to {@code cap} unconfirmed Razorpay orders created in [newerThan, olderThan),
+     * newest first, and confirms what was captured. Orders whose booking is still waiting (or only just lapsed) count.
+     * Errors per order are logged and skipped.
+     */
+    public void reconcileBand(Instant newerThan, Instant olderThan, int cap) {
         List<String> orderIds = tx.execute(s -> payments.findOrderIdsToReconcile(PaymentProviderType.RAZORPAY,
                 List.of(PaymentStatus.CREATED, PaymentStatus.FAILED),
-                List.of(BookingStatus.PENDING_PAYMENT, BookingStatus.EXPIRED), since, Limit.of(RECONCILE_BATCH)));
+                List.of(BookingStatus.PENDING_PAYMENT, BookingStatus.EXPIRED), newerThan, olderThan, Limit.of(cap)));
         int recovered = 0;
         for (String orderId : orderIds) {
             try {

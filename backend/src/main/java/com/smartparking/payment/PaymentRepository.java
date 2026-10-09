@@ -45,11 +45,15 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     List<Long> findExpiredBookingIdsWithoutExpiredEvent(
             @Param("paymentStatuses") Collection<PaymentStatus> paymentStatuses, Limit limit);
 
-    /** Order ids of unconfirmed payments of one provider whose booking could still be (or have been) paid. */
+    /**
+     * Order ids of unconfirmed payments of one provider whose booking could still be (or have been) paid, created in
+     * [{@code from}, {@code to}); newest first, so a backlog never starves the orders customers are waiting on.
+     */
     @Query("select p.orderId from Payment p where p.provider = :provider and p.status in :paymentStatuses "
-            + "and p.booking.status in :bookingStatuses and p.createdAt >= :since order by p.id")
+            + "and p.booking.status in :bookingStatuses and p.createdAt >= :from and p.createdAt < :to "
+            + "order by p.id desc")
     List<String> findOrderIdsToReconcile(@Param("provider") PaymentProviderType provider,
                                          @Param("paymentStatuses") Collection<PaymentStatus> paymentStatuses,
                                          @Param("bookingStatuses") Collection<BookingStatus> bookingStatuses,
-                                         @Param("since") Instant since, Limit limit);
+                                         @Param("from") Instant from, @Param("to") Instant to, Limit limit);
 }

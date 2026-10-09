@@ -88,18 +88,20 @@ class RazorpayPaymentProviderTest {
         AtomicReference<Seen> seen = new AtomicReference<>();
         HttpServer server = razorpayAnswering(200, "{\"id\":\"rfnd_1\",\"status\":\"processed\"}", seen);
         try {
-            ProviderRefund refund = providerAgainst(server).refund("pay_9", 6708L, "Hold lapsed", "parkease-refund-42");
+            ProviderRefund refund = providerAgainst(server).refund("pay_9", 6708L, "Hold lapsed", "parkease-refund-42-2", "parkease-refund-42");
 
             assertThat(refund).isEqualTo(new ProviderRefund("rfnd_1", RefundStatus.PROCESSED));
             Seen request = seen.get();
             assertThat(request.method()).isEqualTo("POST");
             assertThat(request.path()).isEqualTo("/v1/payments/pay_9/refund");
-            assertThat(request.idempotency()).isEqualTo("parkease-refund-42");
+            assertThat(request.idempotency()).isEqualTo("parkease-refund-42-2");
             assertThat(request.authorization()).isEqualTo("Basic "
                     + java.util.Base64.getEncoder().encodeToString("rzp_test_key:secret".getBytes(StandardCharsets.UTF_8)));
             org.json.JSONObject body = new org.json.JSONObject(request.body());
             assertThat(body.getLong("amount")).isEqualTo(6708L);
             assertThat(body.getJSONObject("notes").getString("reason")).isEqualTo("Hold lapsed");
+            assertThat(body.getString("receipt")).isEqualTo("parkease-refund-42");
+            assertThat(body.getJSONObject("notes").getString("parkeaseRefund")).isEqualTo("parkease-refund-42");
         } finally {
             server.stop(0);
         }
@@ -127,16 +129,43 @@ class RazorpayPaymentProviderTest {
         try {
             RazorpayPaymentProvider provider = providerAgainst(server);
 
-            assertThatThrownBy(() -> provider.refund("pay_9", 100L, "x", "k"))
-                    .isInstanceOfSatisfying(ApiException.class,
-                            e -> assertThat(e.getCode()).isEqualTo("PAYMENT_PROVIDER_ERROR"));
+            assertThatThrownBy(() -> provider.refund("pay_9", 100L, "x", "k", "r"))
+                    .isInstanceOfSatisfying(PaymentProviderException.class, e -> {
+                        assertThat(e.getCode()).isEqualTo("PAYMENT_PROVIDER_ERROR");
+                        assertThat(e.getMessage()).doesNotContain("already refunded"); // not shown to clients
+                        assertThat(e.getProviderMessage()).isEqualTo("already refunded");
+                    });
             seen.set(null);
-            assertThatThrownBy(() -> provider.refund("pay_9/../../orders", 100L, "x", "k"))
+            assertThatThrownBy(() -> provider.refund("pay_9/../../orders", 100L, "x", "k", "r"))
                     .isInstanceOf(ApiException.class);
             assertThat(seen.get()).isNull();
         } finally {
             server.stop(0);
         }
+    }
+
+    @Test
+    void mapsWhatWeSentIntoTheProviderRefund() throws org.json.JSONException {
+        ProviderRefund ours = RazorpayPaymentProvider.toProviderRefund(new org.json.JSONObject(
+                "{\"id\":\"r1\",\"status\":\"processed\",\"amount\":6708,\"receipt\":\"parkease-refund-7\","
+                        + "\"notes\":{\"reason\":\"x\",\"parkeaseRefund\":\"parkease-refund-7\"}}"));
+        assertThat(ours.amountPaise()).isEqualTo(6708L);
+        assertThat(ours.receipt()).isEqualTo("parkease-refund-7");
+        assertThat(ours.notes()).containsEntry("parkeaseRefund", "parkease-refund-7");
+        // A refund made in the dashboard: Razorpay answers notes as an empty array and receipt as null.
+        ProviderRefund dashboard = RazorpayPaymentProvider.toProviderRefund(new org.json.JSONObject(
+                "{\"id\":\"r2\",\"status\":\"pending\",\"amount\":1000,\"receipt\":null,\"notes\":[]}"));
+        assertThat(dashboard.amountPaise()).isEqualTo(1000L);
+        assertThat(dashboard.receipt()).isNull();
+        assertThat(dashboard.notes()).isEmpty();
+    }
+
+    @Test
+    void mapsPaymentErrorDescriptionsAndKeepsOrderAndAmount() throws org.json.JSONException {
+        ProviderPayment failed = RazorpayPaymentProvider.toProviderPayment(new org.json.JSONObject(
+                "{\"id\":\"pay_3\",\"status\":\"failed\",\"order_id\":\"o\",\"amount\":5,\"currency\":\"INR\","
+                        + "\"error_description\":\"Card declined\"}"));
+        assertThat(failed.errorDescription()).isEqualTo("Card declined");
     }
 
     @Test

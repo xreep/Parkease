@@ -36,7 +36,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -68,6 +68,9 @@ class PaymentVerificationTest {
         final List<String> captures = new CopyOnWriteArrayList<>();
         final List<String> refundedPaymentIds = new CopyOnWriteArrayList<>();
         final AtomicInteger refundFailures = new AtomicInteger();
+        /** When set, capture() fails with this provider message. */
+        volatile String captureFailure;
+        volatile boolean pendingRefunds;
 
         StubProvider(String jwtSecret) {
             super(jwtSecret);
@@ -82,6 +85,8 @@ class PaymentVerificationTest {
             captures.clear();
             refundedPaymentIds.clear();
             refundFailures.set(0);
+            captureFailure = null;
+            pendingRefunds = false;
         }
 
         @Override
@@ -98,6 +103,9 @@ class PaymentVerificationTest {
         @Override
         public void capture(String paymentId, long amountPaise, String currency) {
             captures.add(paymentId + ":" + amountPaise + ":" + currency);
+            if (captureFailure != null) {
+                throw new PaymentProviderException(captureFailure);
+            }
         }
 
         @Override
@@ -111,10 +119,10 @@ class PaymentVerificationTest {
             refundedPaymentIds.add(paymentId);
             if (refundFailures.get() > 0) {
                 refundFailures.decrementAndGet();
-                throw new com.smartparking.common.error.ApiException(org.springframework.http.HttpStatus.BAD_GATEWAY,
-                        "PAYMENT_PROVIDER_ERROR", "Provider is down");
+                throw new PaymentProviderException("Insufficient balance for the refund");
             }
-            return super.refund(paymentId, amountPaise, reason);
+            ProviderRefund accepted = super.refund(paymentId, amountPaise, reason);
+            return pendingRefunds ? new ProviderRefund(accepted.refundId(), RefundStatus.PENDING) : accepted;
         }
 
         @Override
@@ -295,11 +303,107 @@ class PaymentVerificationTest {
         assertNothingConfirmed(held);
     }
 
+    @Test
+    void aRefundStillSettlingIsDescribedAsBeingRefunded() throws Exception {
+        Held held = hold(10);
+        String pay = mockPay(mvc, driver.auth(), held.bookingId());
+        jdbc.update("update bookings set status = 'CANCELLED' where id = ?", held.bookingId());
+        provider.pendingRefunds = true;
+        emails.clear();
+
+        verifyPayment(held, pay).andExpect(status().isOk());
+
+        assertThat(emails.lastTo(DRIVER_EMAIL).textBody()).contains(
+                "This booking was already cancelled, so your payment of ₹67.08 is being refunded in full.");
+    }
+
+    @Test
+    void aRefundThatFailedFirstEmailsTheDriverOnlyOnceTheRetryGetsThrough() throws Exception {
+        Held held = hold(10);
+        String pay = mockPay(mvc, driver.auth(), held.bookingId());
+        jdbc.update("update bookings set status = 'CANCELLED' where id = ?", held.bookingId());
+        provider.refundFailures.set(1);
+        emails.clear();
+
+        verifyPayment(held, pay).andExpect(status().isOk());
+
+        assertThat(emails.sentTo(DRIVER_EMAIL)).isEmpty();
+        // The provider's own explanation is kept for support.
+        assertThat(jdbc.queryForObject("select failure_reason from refunds", String.class))
+                .isEqualTo("Insufficient balance for the refund");
+
+        jobs.retryFailedRefunds();
+
+        assertThat(emails.sentTo(DRIVER_EMAIL)).extracting(EmailMessage::subject)
+                .containsExactly("Payment refunded – ParkEase");
+        assertThat(emails.lastTo(DRIVER_EMAIL).textBody()).contains(
+                "This booking was already cancelled, so your payment of ₹67.08 has been refunded in full.");
+        jobs.retryFailedRefunds();
+        assertThat(emails.sentTo(DRIVER_EMAIL)).hasSize(1);
+    }
+
+    @Test
+    void realModeRefusesAPaymentTheProviderDoesNotDescribeFully() throws Exception {
+        Held held = hold(10);
+        String pay = mockPay(mvc, driver.auth(), held.bookingId());
+        provider.type = PaymentProviderType.RAZORPAY; // fetcher still answers like the mock: captured, nothing else
+
+        verifyPayment(held, pay).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("PAYMENT_VERIFICATION_FAILED"));
+
+        assertNothingConfirmed(held);
+    }
+
+    @Test
+    void aCaptureThatFailsBecauseAConcurrentRequestCapturedFirstIsStillConfirmed() throws Exception {
+        Held held = hold(10);
+        String pay = mockPay(mvc, driver.auth(), held.bookingId());
+        provider.captureFailure = "The payment has already been captured";
+        AtomicInteger calls = new AtomicInteger();
+        provider.fetcher = id -> provided(id, calls.incrementAndGet() == 1 ? "authorized" : "captured", held.orderId(),
+                6708L, "INR", "upi");
+
+        verifyPayment(held, pay).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CONFIRMED"));
+
+        assertThat(provider.captures).hasSize(1);
+        assertThat(provider.fetches.get()).isEqualTo(2);
+    }
+
+    @Test
+    void aCaptureThatFailsForGoodIsAnErrorAndTheProvidersReasonIsKept() throws Exception {
+        Held held = hold(10);
+        String pay = mockPay(mvc, driver.auth(), held.bookingId());
+        provider.captureFailure = "Capture amount exceeds the authorized amount";
+        provider.fetcher = id -> provided(id, "authorized", held.orderId(), 6708L, "INR", "upi");
+
+        verifyPayment(held, pay).andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.code").value("PAYMENT_PROVIDER_ERROR"));
+
+        assertNothingConfirmed(held);
+        assertThat(jdbc.queryForObject("select failure_reason from payments where booking_id = ?", String.class,
+                held.bookingId())).isEqualTo("Capture amount exceeds the authorized amount");
+    }
+
+    @Test
+    void aFailedPaymentKeepsTheProvidersErrorDescription() throws Exception {
+        Held held = hold(10);
+        String pay = mockPay(mvc, driver.auth(), held.bookingId());
+        provider.fetcher = id -> new ProviderPayment(id, "failed", held.orderId(), 6708L, "INR", "card",
+                "Card declined by bank");
+
+        verifyPayment(held, pay).andExpect(status().isBadRequest());
+
+        assertThat(jdbc.queryForObject("select failure_reason from payments where booking_id = ?", String.class,
+                held.bookingId())).isEqualTo("Card declined by bank");
+        assertThat(paymentStatus(held.bookingId())).isEqualTo("CREATED");
+    }
+
     // ---- money for a booking that can no longer be paid ---------------------------------------------------------
 
     @ParameterizedTest
-    @ValueSource(strings = {"CANCELLED", "REJECTED", "COMPLETED"})
-    void aCaptureForABookingThatIsNoLongerPayableIsRefundedInFullAndTheBookingStaysAsItWas(String status)
+    @CsvSource({"CANCELLED,cancelled", "REJECTED,declined", "COMPLETED,completed"})
+    void aCaptureForABookingThatIsNoLongerPayableIsRefundedInFullAndTheBookingStaysAsItWas(String status,
+                                                                                         String word)
             throws Exception {
         Held held = hold(10);
         String pay = mockPay(mvc, driver.auth(), held.bookingId());
@@ -331,7 +435,8 @@ class PaymentVerificationTest {
         assertThat(emails.sentTo(DRIVER_EMAIL)).extracting(EmailMessage::subject)
                 .containsExactly("Payment refunded – ParkEase");
         assertThat(emails.lastTo(DRIVER_EMAIL).textBody()).contains(
-                "We couldn't hold your slot, so your payment of ₹67.08 has been refunded in full.");
+                "This booking was already " + word + ", so your payment of ₹67.08 has been refunded in full.")
+                .doesNotContain("couldn't hold your slot");
 
         verifyPayment(held, pay).andExpect(status().isOk()); // replay: still one refund, one email
         assertThat(count("select count(*) from refunds")).isEqualTo(1);
@@ -385,6 +490,20 @@ class PaymentVerificationTest {
     }
 
     @Test
+    void anExtraPaymentThatIsOnlyAuthorizedIsNeitherCapturedNorRefundedItIsLeftToVoid() throws Exception {
+        Held held = paidWithProviderEchoing();
+        provider.fetcher = id -> provided(id, "authorized", held.orderId(), 6708L, "INR", "card");
+
+        capturedWebhook(held, "pay_dup_auth", "evt_dup_a").andExpect(status().isOk());
+
+        assertThat(provider.captures).isEmpty();
+        assertThat(provider.refundedPaymentIds).isEmpty();
+        assertThat(count("select count(*) from refunds")).isZero();
+        assertThat(paymentStatus(held.bookingId())).isEqualTo("CAPTURED");
+        assertThat(bookingStatus(held.bookingId())).isEqualTo("CONFIRMED");
+    }
+
+    @Test
     void aFailedRefundOfAnExtraPaymentIsRetriedAndNeverChangesTheBookingsPaymentState() throws Exception {
         Held held = paidWithProviderEchoing();
         provider.refundFailures.set(1);
@@ -422,7 +541,7 @@ class PaymentVerificationTest {
         providerHasCaptured(held, "pay_lost_1");
         emails.clear();
 
-        jobs.reconcileLostPayments();
+        jobs.reconcileRecentPayments();
 
         assertThat(bookingStatus(held.bookingId())).isEqualTo("CONFIRMED");
         assertThat(jdbc.queryForMap("select status, provider_payment_id, method from payments where booking_id = ?",
@@ -431,7 +550,7 @@ class PaymentVerificationTest {
         assertThat(emails.sentTo(DRIVER_EMAIL)).extracting(EmailMessage::subject)
                 .containsExactly("Booking confirmed – ParkEase");
 
-        jobs.reconcileLostPayments(); // nothing left to do
+        jobs.reconcileRecentPayments(); // nothing left to do
         assertThat(count("select count(*) from invoices")).isEqualTo(1);
     }
 
@@ -444,7 +563,7 @@ class PaymentVerificationTest {
                 held.bookingId());
         jdbc.update("update payments set status = 'FAILED' where booking_id = ?", held.bookingId());
 
-        jobs.reconcileLostPayments();
+        jobs.reconcileRecentPayments();
 
         assertThat(bookingStatus(held.bookingId())).isEqualTo("CONFIRMED");
         assertThat(paymentStatus(held.bookingId())).isEqualTo("CAPTURED");
@@ -465,11 +584,54 @@ class PaymentVerificationTest {
         jdbc.update("update bookings set status = 'CONFIRMED' where id = ?", settled.bookingId());
         provider.orderPayments = order -> List.of(provided("pay_x", "captured", order, 6708L, "INR", "upi"));
 
-        jobs.reconcileLostPayments();
+        jobs.reconcileRecentPayments();
 
         assertThat(provider.orderFetches.get()).isZero();
         assertThat(bookingStatus(mockOrder.bookingId())).isEqualTo("PENDING_PAYMENT");
         assertThat(bookingStatus(old.bookingId())).isEqualTo("PENDING_PAYMENT");
+    }
+
+    @Test
+    void reconciliationLooksAtRecentOrdersEveryFiveMinutesAndOlderOnesInTheHourlyRun() throws Exception {
+        Held recent = hold(10);
+        Held older = hold(14);
+        for (Held h : List.of(recent, older)) {
+            asRazorpay(h);
+        }
+        jdbc.update("update payments set created_at = now() - interval '2 hours' where booking_id = ?", older.bookingId());
+        provider.orderPayments = order -> List.of(provided("pay_for_" + order, "captured", order, 6708L, "INR", "upi"));
+        provider.fetcher = id -> provided(id, "captured", id.substring("pay_for_".length()), 6708L, "INR", "upi");
+
+        jobs.reconcileRecentPayments();
+        assertThat(bookingStatus(recent.bookingId())).isEqualTo("CONFIRMED");
+        assertThat(bookingStatus(older.bookingId())).isEqualTo("PENDING_PAYMENT");
+
+        jobs.reconcileOlderPayments();
+        assertThat(bookingStatus(older.bookingId())).isEqualTo("CONFIRMED");
+        // Anything beyond 24 hours is given up on.
+        Held ancient = hold(18);
+        asRazorpay(ancient);
+        jdbc.update("update payments set created_at = now() - interval '25 hours' where booking_id = ?", ancient.bookingId());
+        jobs.reconcileOlderPayments();
+        assertThat(bookingStatus(ancient.bookingId())).isEqualTo("PENDING_PAYMENT");
+    }
+
+    @Test
+    void whenThereAreMoreCandidatesThanTheCapTheNewestOrdersAreHandledFirst() throws Exception {
+        Held first = hold(10);
+        Held second = hold(14);
+        Held third = hold(18);
+        for (Held h : List.of(first, second, third)) {
+            asRazorpay(h);
+        }
+        provider.orderPayments = order -> List.of(provided("pay_for_" + order, "captured", order, 6708L, "INR", "upi"));
+        provider.fetcher = id -> provided(id, "captured", id.substring("pay_for_".length()), 6708L, "INR", "upi");
+
+        jobs.reconcileBand(Instant.now().minusSeconds(3600), Instant.now().plusSeconds(60), 2);
+
+        assertThat(bookingStatus(third.bookingId())).isEqualTo("CONFIRMED");
+        assertThat(bookingStatus(second.bookingId())).isEqualTo("CONFIRMED");
+        assertThat(bookingStatus(first.bookingId())).isEqualTo("PENDING_PAYMENT");
     }
 
     @Test
@@ -479,14 +641,14 @@ class PaymentVerificationTest {
         provider.orderPayments = order -> List.of(provided("pay_f", "failed", order, 6708L, "INR", "upi"),
                 provided("pay_c", "created", order, 6708L, "INR", "upi"));
 
-        jobs.reconcileLostPayments();
+        jobs.reconcileRecentPayments();
         assertThat(bookingStatus(held.bookingId())).isEqualTo("PENDING_PAYMENT");
 
         provider.orderPayments = order -> {
             throw new com.smartparking.common.error.ApiException(org.springframework.http.HttpStatus.BAD_GATEWAY,
                     "PAYMENT_PROVIDER_ERROR", "down");
         };
-        jobs.reconcileLostPayments(); // must not throw
+        jobs.reconcileRecentPayments(); // must not throw
         assertThat(bookingStatus(held.bookingId())).isEqualTo("PENDING_PAYMENT");
     }
 }
