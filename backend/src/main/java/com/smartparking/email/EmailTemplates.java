@@ -138,6 +138,23 @@ public final class EmailTemplates {
                 "View booking", link);
     }
 
+    /** Reminder to the driver shortly before parking starts. */
+    public static EmailMessage startingSoon(User driver, Booking booking, String link) {
+        return build(driver, "Your parking starts soon – ParkEase",
+                "Your parking starts at " + formatTime(booking.getStartTime()) + " (IST).\n\n"
+                        + "Address: " + booking.getListing().getAddress() + "\n" + bookingLines(booking),
+                "View booking", link);
+    }
+
+    /** Nudge to the owner when a booking request is about to lapse unanswered. */
+    public static EmailMessage approvalReminder(User owner, Booking booking, String link) {
+        return build(owner, "Respond to a booking request – ParkEase",
+                "A booking request is still waiting for your answer. Please respond by "
+                        + formatTime(booking.getApprovalDeadline()) + " (IST), otherwise it is declined "
+                        + "automatically and the driver is refunded.\n\n" + ownerDetails(booking),
+                "Review request", link);
+    }
+
     private static String closedWord(BookingStatus status) {
         return switch (status) {
             case CANCELLED -> "cancelled";

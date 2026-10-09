@@ -73,6 +73,43 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
             """)
     List<Long> findOverdueApprovalIds(@Param("cutoff") Instant cutoff, Limit limit);
 
+    /** Ids of confirmed bookings whose parking time is under way at {@code now}, earliest start first. */
+    @Query("""
+            select b.id from Booking b
+            where b.status = com.smartparking.booking.BookingStatus.CONFIRMED
+              and b.startTime <= :now and b.endTime > :now
+            order by b.startTime, b.id
+            """)
+    List<Long> findDueToStartIds(@Param("now") Instant now, Limit limit);
+
+    /** Ids of confirmed or active bookings whose parking time is over at {@code now}, earliest end first. */
+    @Query("""
+            select b.id from Booking b
+            where b.status in (com.smartparking.booking.BookingStatus.CONFIRMED,
+                               com.smartparking.booking.BookingStatus.ACTIVE)
+              and b.endTime <= :now
+            order by b.endTime, b.id
+            """)
+    List<Long> findDueToCompleteIds(@Param("now") Instant now, Limit limit);
+
+    /** Confirmed bookings starting within (now, horizon] that have not had their reminder yet, earliest first. */
+    @Query("""
+            select b.id from Booking b
+            where b.status = com.smartparking.booking.BookingStatus.CONFIRMED and b.reminderSentAt is null
+              and b.startTime > :now and b.startTime <= :horizon
+            order by b.startTime, b.id
+            """)
+    List<Long> findDueForReminderIds(@Param("now") Instant now, @Param("horizon") Instant horizon, Limit limit);
+
+    /** Requests whose approval deadline falls within (now, horizon] and whose owner was not nudged yet. */
+    @Query("""
+            select b.id from Booking b
+            where b.status = com.smartparking.booking.BookingStatus.AWAITING_APPROVAL and b.approvalNudgeSentAt is null
+              and b.approvalDeadline > :now and b.approvalDeadline <= :horizon
+            order by b.approvalDeadline, b.id
+            """)
+    List<Long> findDueForApprovalNudgeIds(@Param("now") Instant now, @Param("horizon") Instant horizon, Limit limit);
+
     // ---- owner views (never PENDING_PAYMENT or EXPIRED: those were never paid) ----------------------------------
 
     boolean existsByIdAndListingOwnerId(Long id, Long ownerId);

@@ -30,6 +30,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class OwnerBookingService {
 
+    static final String START_PASSED_REASON = "The booking start time passed before the owner responded";
+
     private static final List<BookingStatus> HIDDEN_FROM_OWNERS = List.of(BookingStatus.PENDING_PAYMENT,
             BookingStatus.EXPIRED);
 
@@ -143,7 +145,7 @@ public class OwnerBookingService {
                 || booking.getApprovalDeadline() == null || booking.getApprovalDeadline().isAfter(now)) {
             return false;
         }
-        unwind(booking, BookingActor.SYSTEM, autoRejectReason());
+        unwind(booking, BookingActor.SYSTEM, autoRejectReason(booking));
         notifier.notify(booking.getDriver(), NotificationType.BOOKING_EXPIRED_REQUEST, "Booking request expired",
                 "Your request " + booking.getBookingCode() + " at " + booking.getListing().getTitle()
                         + " expired without an answer. You will be refunded in full.", driverPath(booking),
@@ -151,7 +153,11 @@ public class OwnerBookingService {
         return true;
     }
 
-    String autoRejectReason() {
+    /** The deadline equals the start time when the cap applied: then the start, not the window, ran out. */
+    String autoRejectReason(Booking booking) {
+        if (booking.getApprovalDeadline().equals(booking.getStartTime())) {
+            return START_PASSED_REASON;
+        }
         int hours = properties.approvalHours();
         return "The owner didn't respond within " + hours + (hours == 1 ? " hour" : " hours");
     }
