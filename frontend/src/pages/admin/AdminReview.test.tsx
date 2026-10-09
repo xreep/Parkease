@@ -90,11 +90,10 @@ describe('admin review area', () => {
       expect(screen.getByText('1 listing waiting for approval')).toBeInTheDocument()
       expect(screen.getByRole('link', { name: 'Review owners' })).toHaveAttribute('href', '/admin/owners')
       expect(screen.getByRole('link', { name: 'Review listings' })).toHaveAttribute('href', '/admin/listings')
-      expect(screen.getByText('More admin tools (users, bookings, reports) arrive in a later phase.')).toBeInTheDocument()
       const nav = within(screen.getByRole('navigation', { name: 'Sections' }))
       expect(nav.getByRole('link', { name: 'Overview' })).toHaveAttribute('href', '/admin')
-      expect(nav.getByRole('link', { name: 'Owner verification' })).toHaveAttribute('href', '/admin/owners')
-      expect(nav.getByRole('link', { name: 'Listing approvals' })).toHaveAttribute('href', '/admin/listings')
+      expect(nav.getByRole('link', { name: 'Owners' })).toHaveAttribute('href', '/admin/owners')
+      expect(nav.getByRole('link', { name: 'Listings' })).toHaveAttribute('href', '/admin/listings')
     })
 
     it('uses the plural form for any count other than one', async () => {
