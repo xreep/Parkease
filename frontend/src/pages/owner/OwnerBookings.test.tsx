@@ -105,7 +105,7 @@ describe('owner bookings', () => {
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Booking approved'))
     expect(mock.history.post.map((r) => r.url)).toEqual(['/owner/bookings/5/approve'])
     // The driver's booking, lists and the availability shown by quotes and search change too.
-    await waitFor(() => expect(invalidatedKeys(invalidate)).toEqual(expect.arrayContaining(['owner', 'bookings', 'booking', 'quote', 'search'])))
+    await waitFor(() => expect(invalidatedKeys(invalidate)).toEqual(expect.arrayContaining(['owner', 'bookings', 'booking', 'quote', 'search', 'availability'])))
     // The list is refetched after the decision.
     await waitFor(() => expect(listCalls().length).toBeGreaterThan(1))
   })

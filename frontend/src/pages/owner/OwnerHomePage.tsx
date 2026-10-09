@@ -14,7 +14,7 @@ import { VEHICLE_TYPE_LABELS, formatINR } from '../../lib/format'
 import { useMyListings, useOwnerProfile, type OwnerProfile } from '../../lib/owner'
 import { STATS_RANGES, useOwnerStats, type OwnerStatsDto, type StatsRange } from '../../lib/ownerDashboard'
 import { ratingText } from '../../lib/reviews'
-import { formatWindow } from '../../lib/time'
+import { formatShortDate, formatWindow } from '../../lib/time'
 
 const primaryLink =
   'inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700'
@@ -130,11 +130,6 @@ function Balance({ label, value }: { label: string; value: number }) {
   )
 }
 
-const chartDay = (date: string) => {
-  const [, month, day] = date.split('-').map(Number)
-  return `${day} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][month - 1]}`
-}
-
 function StatsView({ stats }: { stats: OwnerStatsDto }) {
   const { totals, balances } = stats
   return (
@@ -174,7 +169,7 @@ function StatsView({ stats }: { stats: OwnerStatsDto }) {
           <h3 className="font-semibold">Earnings</h3>
           <BarChart
             title="Earnings per day"
-            points={stats.series.map((d) => ({ label: chartDay(d.date), value: d.earningsNet }))}
+            points={stats.series.map((d) => ({ label: formatShortDate(d.date), value: d.earningsNet }))}
             formatValue={formatINR}
           />
         </section>
@@ -182,7 +177,7 @@ function StatsView({ stats }: { stats: OwnerStatsDto }) {
           <h3 className="font-semibold">Bookings</h3>
           <LineChart
             title="Bookings per day"
-            points={stats.series.map((d) => ({ label: chartDay(d.date), value: d.bookings }))}
+            points={stats.series.map((d) => ({ label: formatShortDate(d.date), value: d.bookings }))}
             formatValue={(n) => String(n)}
           />
         </section>
@@ -250,7 +245,9 @@ export function OwnerHomePage() {
   const { user } = useAuth()
   const profile = useOwnerProfile()
   if (!user) return null
-  // Until verified, the prompt leads the page; afterwards it is one card among the rest.
+  // Until verified, the prompt leads the page; afterwards it is one card among the rest. It waits for the profile, so
+  // it never appears in one place and then moves.
+  const profileKnown = !profile.isPending
   const needsVerification = profile.data !== undefined && profile.data.verificationStatus !== 'VERIFIED'
   return (
     <div className="space-y-6">
@@ -263,7 +260,7 @@ export function OwnerHomePage() {
       {needsVerification && <VerificationCard />}
       <Overview />
       <div className="grid gap-6 md:grid-cols-2">
-        {!needsVerification && <VerificationCard />}
+        {profileKnown && !needsVerification && <VerificationCard />}
         <ListingsCard />
         <RequestsCard />
       </div>

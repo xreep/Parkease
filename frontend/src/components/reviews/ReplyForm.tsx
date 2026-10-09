@@ -26,11 +26,10 @@ export function ReplyForm({ reviewId }: { reviewId: number }) {
       await replyToReview(reviewId, text)
       toast.success('Reply posted')
     } catch (err) {
+      // One message, one place: the toast for a reply that already exists (the form is about to go away),
+      // inline under the field for anything the owner can fix or retry.
       if (toProblem(err).code === 'ALREADY_REPLIED') toast.error("You've already replied to this review.")
-      else {
-        toast.error(errorMessage(err))
-        setError(errorMessage(err))
-      }
+      else setError(errorMessage(err))
     } finally {
       // Either way the list now shows the truth: our reply, or the one that was already there.
       await invalidateOwnerReviews(queryClient)

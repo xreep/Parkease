@@ -1,5 +1,6 @@
 import clsx from 'clsx'
 import { Star } from 'lucide-react'
+import { useId } from 'react'
 
 const STARS = [1, 2, 3, 4, 5]
 
@@ -18,11 +19,18 @@ export function StarPicker({
   onChange: (value: number) => void
   error?: string
 }) {
+  const errorId = useId()
   return (
     <div className="space-y-1.5">
-      <div role="radiogroup" aria-label="Your rating" aria-invalid={error ? true : undefined} className="flex gap-1">
+      <div
+        role="radiogroup"
+        aria-label="Your rating"
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? errorId : undefined}
+        className="flex"
+      >
         {STARS.map((n) => (
-          <label key={n} className="cursor-pointer">
+          <label key={n} className="flex h-11 w-11 cursor-pointer items-center justify-center">
             <input
               type="radio"
               name={name}
@@ -42,7 +50,9 @@ export function StarPicker({
           </label>
         ))}
       </div>
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && (
+        <p id={errorId} role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p>
+      )}
     </div>
   )
 }

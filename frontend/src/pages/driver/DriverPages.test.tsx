@@ -51,7 +51,8 @@ describe('driver booking tabs', () => {
     const tabs = await screen.findAllByRole('tab')
     expect(tabs.map((t) => t.textContent)).toEqual(['Upcoming', 'Active', 'Past', 'Cancelled'])
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true')
-    expect(views()).toEqual(['upcoming'])
+    // The request goes out a moment after the tab renders.
+    await waitFor(() => expect(views()).toEqual(['upcoming']))
   })
 
   it('keeps the tab in the URL and loads that view', async () => {
@@ -79,12 +80,12 @@ describe('driver booking tabs', () => {
     mock.onGet('/bookings').reply(200, page([]))
     const first = renderApp('/driver/bookings?view=past')
     expect(await screen.findByRole('tab', { name: 'Past' })).toHaveAttribute('aria-selected', 'true')
-    expect(views()).toEqual(['past'])
+    await waitFor(() => expect(views()).toEqual(['past']))
     first.unmount()
 
     renderApp('/driver/bookings?view=bogus')
     expect(await screen.findByRole('tab', { name: 'Upcoming' })).toHaveAttribute('aria-selected', 'true')
-    expect(views().at(-1)).toBe('upcoming')
+    await waitFor(() => expect(views().at(-1)).toBe('upcoming'))
   })
 
   it('has an empty state for every tab', async () => {
@@ -238,7 +239,7 @@ describe('driver payments', () => {
 
 describe('driver home stats', () => {
   let mock: MockAdapter
-  const stats: DriverStatsDto = { totalBookings: 14, completedBookings: 11, amountSpent: 2450, hoursParked: 38.5, pendingReviews: 2 }
+  const stats: DriverStatsDto = { totalBookings: 14, completedBookings: 11, amountSpent: 2450, hoursParked: 38.5, pendingReviews: 2, reviewBookingId: 70 }
 
   beforeEach(() => {
     localStorage.clear()
@@ -248,9 +249,6 @@ describe('driver home stats', () => {
     mock.onGet('/me/vehicles').reply(200, [])
     mock.onGet('/me/stats').reply(200, stats)
     mock.onGet('/bookings', { params: { view: 'upcoming', page: 0, size: 1 } }).reply(200, page([summary()]))
-    mock.onGet('/bookings', { params: { view: 'past', page: 0, size: 5 } }).reply(200, page([
-      summary({ id: 70, bookingCode: 'PE-DONE01', status: 'COMPLETED' }),
-    ]))
   })
 
   afterEach(() => mock.restore())
@@ -272,22 +270,24 @@ describe('driver home stats', () => {
     expect(screen.getByRole('link', { name: 'View booking' })).toHaveAttribute('href', '/driver/bookings/91')
   })
 
-  it('prompts for pending reviews with a link to the review card', async () => {
+  it('prompts for pending reviews with a link to the booking that can be reviewed', async () => {
     renderApp('/driver')
 
     const prompt = await screen.findByRole('region', { name: 'Rate your parking' })
     expect(within(prompt).getByText('2 bookings are waiting for your review.')).toBeInTheDocument()
-    await waitFor(() => expect(within(prompt).getByRole('link', { name: 'Rate your parking' })).toHaveAttribute('href', '/driver/bookings/70#review'))
+    expect(within(prompt).getByRole('link', { name: 'Rate your parking' })).toHaveAttribute('href', '/driver/bookings/70#review')
+    // The id comes from the stats; no booking list is fetched to guess it.
+    expect(mock.history.get.filter((r) => r.url === '/bookings').map((r) => r.params.view)).toEqual(['upcoming'])
   })
 
-  it('links to the Past tab when no completed booking is at hand, and says nothing without pending reviews', async () => {
-    mock.onGet('/bookings', { params: { view: 'past', page: 0, size: 5 } }).reply(200, page([]))
-    const { unmount } = renderApp('/driver')
-    const link = await screen.findByRole('link', { name: 'Rate your parking' })
-    await waitFor(() => expect(link).toHaveAttribute('href', '/driver/bookings?view=past'))
-    unmount()
+  it('says nothing without a booking to review, or without pending reviews', async () => {
+    mock.onGet('/me/stats').reply(200, { ...stats, reviewBookingId: null })
+    const first = renderApp('/driver')
+    await screen.findByRole('group', { name: 'Bookings' })
+    expect(screen.queryByRole('region', { name: 'Rate your parking' })).not.toBeInTheDocument()
+    first.unmount()
 
-    mock.onGet('/me/stats').reply(200, { ...stats, pendingReviews: 0 })
+    mock.onGet('/me/stats').reply(200, { ...stats, pendingReviews: 0, reviewBookingId: null })
     renderApp('/driver')
     await screen.findByRole('group', { name: 'Bookings' })
     expect(screen.queryByRole('region', { name: 'Rate your parking' })).not.toBeInTheDocument()

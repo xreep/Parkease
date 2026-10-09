@@ -1,5 +1,6 @@
 const QUARTER_MS = 15 * 60 * 1000
 const HOUR_MS = 60 * 60 * 1000
+export const DAY_MS = 24 * HOUR_MS
 
 /** The next quarter hour strictly after `now` (exactly 10:15:00.000 gives 10:30). */
 export function nextQuarter(now: Date = new Date()): Date {
@@ -38,8 +39,11 @@ export function fromLocalInputValue(s: string): Date {
   return new Date(s)
 }
 
+export const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December',
+]
+const MONTHS = MONTH_NAMES.map((m) => m.slice(0, 3))
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 const dayLabel = (d: Date) => `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`
 
@@ -85,7 +89,7 @@ export function formatRelativeTime(iso: string, now: number = Date.now()): strin
   const diff = Math.max(0, now - then.getTime())
   if (diff < MINUTE_MS) return 'Just now'
   if (diff < RELATIVE_HOUR_MS) return `${Math.floor(diff / MINUTE_MS)} min ago`
-  const days = Math.round((startOfDay(new Date(now)) - startOfDay(then)) / 86_400_000)
+  const days = Math.round((startOfDay(new Date(now)) - startOfDay(then)) / DAY_MS)
   if (days === 1) return 'Yesterday'
   if (days < 1) return `${Math.floor(diff / RELATIVE_HOUR_MS)} hr ago`
   if (days < 7) return `${days} days ago`
@@ -94,7 +98,6 @@ export function formatRelativeTime(iso: string, now: number = Date.now()): strin
 
 // India has no daylight saving, so IST is a fixed +05:30 offset.
 const IST_OFFSET_MS = 5.5 * HOUR_MS
-const DAY_MS = 24 * HOUR_MS
 
 /** `YYYY-MM-DD` of the given instant on the IST calendar. */
 export function istDate(now: Date = new Date()): string {
@@ -116,9 +119,6 @@ export function weekdayOf(date: string): number {
   return new Date(`${date}T00:00:00Z`).getUTCDay()
 }
 
-export const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December',
-]
 
 /** The `YYYY-MM-DD` of the 1st and the last day of the month holding `date`. */
 export function monthBounds(date: string): { first: string; last: string } {
@@ -126,4 +126,9 @@ export function monthBounds(date: string): { first: string; last: string } {
   const [y, m] = first.split('-').map(Number)
   const last = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10)
   return { first, last }
+}
+
+/** "5 Oct" for a `YYYY-MM-DD` calendar day. */
+export function formatShortDate(date: string): string {
+  return `${Number(date.slice(8))} ${MONTHS[Number(date.slice(5, 7)) - 1]}`
 }

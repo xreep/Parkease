@@ -153,7 +153,7 @@ describe('driver cancellation', () => {
     expect(JSON.parse(mock.history.post.find((r) => r.url === '/bookings/91/cancel')!.data)).toEqual({ reason: 'Plans changed' })
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     const keys = invalidate.mock.calls.map(([filters]) => (filters as { queryKey: unknown[] }).queryKey[0])
-    expect(keys).toEqual(expect.arrayContaining(['booking', 'bookings', 'quote', 'search', 'notifications']))
+    expect(keys).toEqual(expect.arrayContaining(['booking', 'bookings', 'quote', 'search', 'availability', 'notifications']))
   })
 
   it('cancels without a reason and without a refund line for an unpaid booking', async () => {

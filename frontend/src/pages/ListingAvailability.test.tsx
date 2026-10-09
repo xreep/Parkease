@@ -31,12 +31,15 @@ const emptyReviews = {
 // Friday 9 Oct 2026, 11:30 in IST. The last bookable day is today + 90 = 7 Jan 2027.
 const NOW = new Date('2026-10-09T06:00:00Z')
 
-const OVERRIDES: Record<string, Partial<DayAvailabilityDto>> = {
+const BASE_OVERRIDES: Record<string, Partial<DayAvailabilityDto>> = {
   '2026-10-12': { level: 'AVAILABLE', openTime: '08:00', closeTime: '20:00', bookedPercent: 10 },
   '2026-10-13': { level: 'LIMITED', openTime: '08:00', closeTime: '20:00', bookedPercent: 80 },
   '2026-10-14': { level: 'FULL', openTime: '08:00', closeTime: '20:00', bookedPercent: 100 },
   '2026-10-15': { level: 'CLOSED', openTime: null, closeTime: null, bookedPercent: 0 },
 }
+
+/** Per-test copy of BASE_OVERRIDES, reset before every test. */
+let OVERRIDES: Record<string, Partial<DayAvailabilityDto>> = {}
 
 function days(from: string, to: string): DayAvailabilityDto[] {
   const out: DayAvailabilityDto[] = []
@@ -52,6 +55,7 @@ describe('listing availability calendar', () => {
 
   beforeEach(() => {
     localStorage.clear()
+    OVERRIDES = { ...BASE_OVERRIDES }
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(NOW)
     mock = new MockAdapter(api)
@@ -141,7 +145,6 @@ describe('listing availability calendar', () => {
     await user.click(await within(calendar).findByRole('button', { name: '13 October 2026, Limited' }))
 
     expect(screen.getByLabelText('Until')).toHaveValue(toLocalInputValue(new Date('2026-10-13T09:00:00+05:30')))
-    OVERRIDES['2026-10-13'] = { level: 'LIMITED', openTime: '08:00', closeTime: '20:00', bookedPercent: 80 }
   })
 
   it('starts today from the next quarter hour when the opening time has passed', async () => {

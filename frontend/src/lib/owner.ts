@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { api } from './api'
 import type { ListingStatus, VerificationStatus } from './format'
 import { uploadFile } from './uploads'
@@ -190,6 +190,15 @@ export function useHours(id: number | undefined) {
 
 export function useBlocks(id: number | undefined) {
   return useQuery({ queryKey: ['owner', 'blocks', id], queryFn: () => listBlocks(id!), enabled: id !== undefined })
+}
+
+/** A block changes the owner's blocks, their slot calendar and the availability drivers see. */
+export function invalidateBlocks(queryClient: QueryClient, listingId: number) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['owner', 'blocks', listingId] }),
+    queryClient.invalidateQueries({ queryKey: ['owner', 'calendar'] }),
+    queryClient.invalidateQueries({ queryKey: ['availability'] }),
+  ]).then(() => undefined)
 }
 
 /** Returns a function that refetches the listing and the owner's listing list (after any edit). */

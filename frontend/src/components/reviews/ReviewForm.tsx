@@ -1,4 +1,5 @@
 import { useId, useState } from 'react'
+import { toast } from 'sonner'
 import { FormError } from '../AuthCard'
 import { Button } from '../ui/Button'
 import { TextArea } from '../ui/TextArea'
@@ -42,8 +43,13 @@ export function ReviewForm({
       onPosted(await submitReview(bookingId, rating, comment.trim() || undefined))
     } catch (err) {
       const problem = toProblem(err)
-      setError(ERROR_COPY[problem.code] ?? problem.detail)
-      if (problem.code === 'ALREADY_REVIEWED' || problem.code === 'NOT_REVIEWABLE') onStale()
+      const message = ERROR_COPY[problem.code] ?? problem.detail
+      setError(message)
+      if (problem.code === 'ALREADY_REVIEWED' || problem.code === 'NOT_REVIEWABLE') {
+        // The refetch that follows replaces this form, so the explanation also goes out as a toast.
+        toast.error(message)
+        onStale()
+      }
       setBusy(false)
     }
   }

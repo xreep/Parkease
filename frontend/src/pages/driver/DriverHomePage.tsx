@@ -94,13 +94,8 @@ function Stat({ label, value }: { label: string; value: string }) {
   )
 }
 
-/**
- * Reviews are waiting. The stats only carry a count, so the link goes to the newest completed booking (its review
- * card is at `#review`), or to the Past tab when none is in the latest few.
- */
-function ReviewPrompt({ count }: { count: number }) {
-  const { data } = useBookings('past', 0, 5)
-  const completed = data?.content.find((b) => b.status === 'COMPLETED')
+/** Reviews are waiting: the link goes straight to the form on the booking that can be reviewed. */
+function ReviewPrompt({ count, bookingId }: { count: number; bookingId: number }) {
   return (
     <section aria-labelledby="review-prompt" className="rounded-2xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900 dark:bg-amber-950/40">
       <h2 id="review-prompt" className="sr-only">Rate your parking</h2>
@@ -108,7 +103,7 @@ function ReviewPrompt({ count }: { count: number }) {
         {count === 1 ? '1 booking is waiting for your review.' : `${count} bookings are waiting for your review.`}
       </p>
       <Link
-        to={completed ? `/driver/bookings/${completed.id}#review` : '/driver/bookings?view=past'}
+        to={`/driver/bookings/${bookingId}#review`}
         className="mt-2 inline-block text-sm font-semibold text-brand-700 hover:underline dark:text-brand-400"
       >
         Rate your parking
@@ -129,7 +124,9 @@ function StatsSection() {
         <Stat label="Spent" value={formatINR(data.amountSpent)} />
         <Stat label="Hours parked" value={String(data.hoursParked)} />
       </div>
-      {data.pendingReviews > 0 && <ReviewPrompt count={data.pendingReviews} />}
+      {data.pendingReviews > 0 && data.reviewBookingId !== null && (
+        <ReviewPrompt count={data.pendingReviews} bookingId={data.reviewBookingId} />
+      )}
     </div>
   )
 }

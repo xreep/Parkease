@@ -175,7 +175,7 @@ export const mockPay = async (bookingId: number) =>
  */
 export function invalidateBookingQueries(queryClient: QueryClient) {
   return Promise.all([
-    ...['bookings', 'booking', 'quote', 'search', 'driver'].map((key) => queryClient.invalidateQueries({ queryKey: [key] })),
+    ...['bookings', 'booking', 'quote', 'search', 'availability', 'driver'].map((key) => queryClient.invalidateQueries({ queryKey: [key] })),
     // Booking changes (a cancellation, an approval) leave a notification behind.
     invalidateNotifications(queryClient),
   ]).then(() => undefined)
