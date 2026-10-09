@@ -44,3 +44,12 @@ describe('format helpers', () => {
     expect(REFUND_NOTE).toBe("Refunds apply to the parking charge; platform fee and GST aren't refunded on driver cancellations.")
   })
 })
+
+describe('ratingText', () => {
+  it('always shows one decimal so ratings read the same everywhere', async () => {
+    const { ratingText } = await import('./reviews')
+    expect(ratingText(4)).toBe('4.0')
+    expect(ratingText(4.25)).toBe('4.3')
+    expect(ratingText(4.6)).toBe('4.6')
+  })
+})
