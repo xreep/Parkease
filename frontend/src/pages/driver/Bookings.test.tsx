@@ -21,7 +21,7 @@ function booking(overrides: Partial<BookingDetailDto> = {}): BookingDetailDto {
     totalAmount: 89.44, createdAt: '2026-10-09T08:00:00Z', address: 'FC Road, Shivajinagar', lat: 18.5, lng: 73.8, slotLabel: 'A-3',
     pricingMode: 'HOURLY', pricingBreakdown: '2 hours at ₹40/hr', baseAmount: 80, platformFee: 8, gstAmount: 1.44, refundAmount: 0,
     holdExpiresAt: null, approvalDeadline: null, confirmedAt: '2026-10-09T08:02:00Z', cancelReason: null, cancelledBy: null,
-    paymentStatus: 'CAPTURED', invoiceNumber: 'PE-INV-0042', autoApprove: true, ownerFirstName: 'Priya',
+    paymentStatus: 'CAPTURED', invoiceNumber: 'PE-INV-0042', autoApprove: true, ownerFirstName: 'Priya', reviewable: false, review: null,
     events: [
       { fromStatus: null, toStatus: 'PENDING_PAYMENT', actor: 'DRIVER', note: null, at: '2026-10-09T08:00:00Z' },
       { fromStatus: 'PENDING_PAYMENT', toStatus: 'CONFIRMED', actor: 'SYSTEM', note: null, at: '2026-10-09T08:02:00Z' },

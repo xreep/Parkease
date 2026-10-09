@@ -4,6 +4,7 @@ import { useCallback } from 'react'
 import { api } from './api'
 import { invalidateNotifications } from './notifications'
 import type { CancellationPolicy, Page, VehicleType } from './owner'
+import type { ReviewDto } from './reviews'
 import type { PricingMode } from './search'
 
 export type BookingStatus =
@@ -75,6 +76,9 @@ export type BookingDetailDto = BookingSummaryDto & {
   autoApprove: boolean
   ownerFirstName: string
   events: BookingEventDto[]
+  /** The driver can review it now (completed, not yet reviewed). */
+  reviewable: boolean
+  review: ReviewDto | null
 }
 
 /**

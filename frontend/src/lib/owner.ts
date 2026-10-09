@@ -123,8 +123,8 @@ export const submitDocument = (type: DocumentType, file: File, onProgress?: (pct
   uploadFile<OwnerProfile>('/owner/verification', file, { documentType: type }, onProgress)
 export const getDocumentUrl = async () => (await api.get<SignedUrl>('/owner/verification/document-url')).data
 
-export const listMyListings = async (page: number) =>
-  (await api.get<Page<ListingSummary>>(base, { params: { page, size: 20 } })).data
+export const listMyListings = async (page: number, size = 20) =>
+  (await api.get<Page<ListingSummary>>(base, { params: { page, size } })).data
 export const getListing = async (id: number) => (await api.get<ListingDetail>(`${base}/${id}`)).data
 export const createListing = async (body: BasicsBody) => (await api.post<ListingDetail>(base, body)).data
 export const updateBasics = async (id: number, body: BasicsBody) => (await api.put<ListingDetail>(`${base}/${id}`, body)).data
@@ -169,8 +169,11 @@ export function useOwnerProfile() {
   return useQuery({ queryKey: ['owner', 'profile'], queryFn: getOwnerProfile })
 }
 
-export function useMyListings(page: number) {
-  return useQuery({ queryKey: ['owner', 'listings', page], queryFn: () => listMyListings(page) })
+export function useMyListings(page: number, size = 20) {
+  return useQuery({
+    queryKey: size === 20 ? ['owner', 'listings', page] : ['owner', 'listings', page, size],
+    queryFn: () => listMyListings(page, size),
+  })
 }
 
 export function useListing(id: number | undefined) {

@@ -91,3 +91,39 @@ export function formatRelativeTime(iso: string, now: number = Date.now()): strin
   if (days < 7) return `${days} days ago`
   return `${then.getDate()} ${MONTHS[then.getMonth()]} ${then.getFullYear()}`
 }
+
+// India has no daylight saving, so IST is a fixed +05:30 offset.
+const IST_OFFSET_MS = 5.5 * HOUR_MS
+const DAY_MS = 24 * HOUR_MS
+
+/** `YYYY-MM-DD` of the given instant on the IST calendar. */
+export function istDate(now: Date = new Date()): string {
+  return new Date(now.getTime() + IST_OFFSET_MS).toISOString().slice(0, 10)
+}
+
+/** `YYYY-MM-DD` shifted by whole days (pure calendar arithmetic). */
+export function addDays(date: string, days: number): string {
+  return new Date(new Date(`${date}T00:00:00Z`).getTime() + days * DAY_MS).toISOString().slice(0, 10)
+}
+
+/** The instant at which `HH:mm` on an IST calendar day happens. */
+export function istInstant(date: string, time: string): Date {
+  return new Date(`${date}T${time.slice(0, 5)}:00+05:30`)
+}
+
+/** 0 = Sunday .. 6 = Saturday, for a `YYYY-MM-DD` calendar day. */
+export function weekdayOf(date: string): number {
+  return new Date(`${date}T00:00:00Z`).getUTCDay()
+}
+
+export const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December',
+]
+
+/** The `YYYY-MM-DD` of the 1st and the last day of the month holding `date`. */
+export function monthBounds(date: string): { first: string; last: string } {
+  const first = `${date.slice(0, 7)}-01`
+  const [y, m] = first.split('-').map(Number)
+  const last = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10)
+  return { first, last }
+}
