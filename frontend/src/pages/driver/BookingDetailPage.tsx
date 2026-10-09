@@ -19,6 +19,7 @@ import {
   useBooking,
   type BookingDetailDto,
 } from '../../lib/bookings'
+import { saveBlob } from '../../lib/download'
 import { errorMessage } from '../../lib/errors'
 import { VEHICLE_TYPE_LABELS, formatDateTime, formatINR } from '../../lib/format'
 import { invalidateReviewQueries, type ReviewDto } from '../../lib/reviews'
@@ -117,15 +118,7 @@ function ReceiptButton({ booking }: { booking: BookingDetailDto }) {
     setError(null)
     try {
       const blob = await downloadReceipt(booking.id)
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `ParkEase-${booking.invoiceNumber}.pdf`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      // Revoking right away can cancel the download in some browsers, so give it a moment.
-      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      saveBlob(blob, `ParkEase-${booking.invoiceNumber}.pdf`)
     } catch (e) {
       setError(errorMessage(e))
     } finally {

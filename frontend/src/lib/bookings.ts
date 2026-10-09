@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
-import { isAxiosError } from 'axios'
 import { useCallback } from 'react'
 import { api } from './api'
+import { blobProblem } from './download'
 import { invalidateNotifications } from './notifications'
 import type { CancellationPolicy, Page, VehicleType } from './owner'
 import type { ReviewDto } from './reviews'
@@ -161,16 +161,7 @@ export async function downloadReceipt(id: number | string): Promise<Blob> {
   try {
     return (await api.get<Blob>(`/bookings/${id}/receipt`, { responseType: 'blob' })).data
   } catch (error) {
-    const body = isAxiosError(error) ? error.response?.data : undefined
-    if (body instanceof Blob) {
-      try {
-        const detail = (JSON.parse(await body.text()) as { detail?: unknown }).detail
-        if (typeof detail === 'string' && detail) throw new Error(detail)
-      } catch (parsed) {
-        if (parsed instanceof Error && !(parsed instanceof SyntaxError)) throw parsed
-      }
-    }
-    throw error
+    throw await blobProblem(error)
   }
 }
 export const verifyPayment = async (body: VerifyBody) => (await api.post<BookingDetailDto>('/payments/verify', body)).data
@@ -204,7 +195,11 @@ export function useOwnerBookings(view: OwnerBookingView, page = 0, size = 20) {
 }
 
 export function invalidateOwnerBookings(queryClient: QueryClient) {
-  return queryClient.invalidateQueries({ queryKey: ['owner', 'bookings'] })
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['owner', 'bookings'] }),
+    // A decision also changes the dashboard figures, the earnings ledger and the slot calendar.
+    ...['stats', 'earnings', 'calendar'].map((key) => queryClient.invalidateQueries({ queryKey: ['owner', key] })),
+  ]).then(() => undefined)
 }
 
 /** Statuses that change without the driver doing anything (payment confirming, the owner replying). */
