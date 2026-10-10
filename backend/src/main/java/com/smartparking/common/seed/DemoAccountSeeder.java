@@ -18,10 +18,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Creates admin/owner/driver demo logins on dev startup. Safe to run repeatedly. */
+/** Creates admin/owner/driver demo logins on startup under the dev and demo profiles. Safe to run repeatedly. */
 @Slf4j
 @Component
-@Profile("dev")
+@Profile({"dev", "demo"})
 @Order(1)
 public class DemoAccountSeeder implements ApplicationRunner {
 

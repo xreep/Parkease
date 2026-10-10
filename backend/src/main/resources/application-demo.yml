@@ -1,0 +1,9 @@
+# Opt-in profile that seeds a realistic demo on startup: logins, listings and ~500 bookings with their payments,
+# refunds, invoices, earnings, reviews and disputes (DemoAccountSeeder, DemoListingSeeder, DemoActivitySeeder).
+# Locally it adds to the dev profile; for a hosted demo run it next to prod:  SPRING_PROFILES_ACTIVE=prod,demo
+# Idempotent and deterministic; it never changes rows it did not create.
+app:
+  seed:
+    # Every seeded account (admin@, owner@, driver@parkease.dev and the generated owners and drivers) logs in with it.
+    # No default on purpose: a public demo must not run with a password that is written down in the repository.
+    demo-password: ${DEMO_PASSWORD}
