@@ -1,5 +1,6 @@
 package com.smartparking.location;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Limit;
@@ -24,6 +25,10 @@ public interface CityRepository extends JpaRepository<City, Long> {
 
     @Query("select c from City c join fetch c.state where c.capital = true and c.active = true order by c.name")
     List<City> findCapitals(Limit limit);
+
+    /** The cities with their states, for labelling aggregate rows. */
+    @Query("select c from City c join fetch c.state where c.id in :ids")
+    List<City> findAllWithStateByIdIn(@Param("ids") Collection<Long> ids);
 
     long countByStateId(Long stateId);
 
