@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class AdminListingController {
 
-    private final AdminReviewService service;
+    private final AdminVerificationService service;
 
     @GetMapping
     public PageResponse<AdminListingSummaryDto> list(

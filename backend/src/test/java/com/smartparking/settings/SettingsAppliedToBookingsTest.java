@@ -69,18 +69,23 @@ class SettingsAppliedToBookingsTest {
 
     private void resetSettings() {
         jdbc.update("update platform_settings set value = '10' where key = 'platform_fee_percent'");
+        jdbc.update("update platform_settings set value = '18' where key = 'gst_percent'");
         jdbc.update("update platform_settings set value = '10' where key = 'hold_minutes'");
         jdbc.update("update platform_settings set value = '30' where key = 'request_min_lead_minutes'");
         settings.invalidate();
     }
 
     private void putSettings(String fee, int holdMinutes, int leadMinutes) throws Exception {
+        putSettings(fee, "18", holdMinutes, leadMinutes);
+    }
+
+    private void putSettings(String fee, String gst, int holdMinutes, int leadMinutes) throws Exception {
         mvc.perform(put("/api/v1/admin/settings").header(HttpHeaders.AUTHORIZATION, admin)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(("{\"platformFeePercent\":%s,\"gstPercent\":18,\"holdMinutes\":%d,\"approvalHours\":2,"
+                        .content(("{\"platformFeePercent\":%s,\"gstPercent\":%s,\"holdMinutes\":%d,\"approvalHours\":2,"
                                 + "\"requestMinLeadMinutes\":%d,\"priceGuidelines\":[{\"tier\":1,\"minHourly\":20,\"maxHourly\":150},"
                                 + "{\"tier\":2,\"minHourly\":10,\"maxHourly\":100},{\"tier\":3,\"minHourly\":5,\"maxHourly\":80}]}")
-                                .formatted(fee, holdMinutes, leadMinutes)))
+                                .formatted(fee, gst, holdMinutes, leadMinutes)))
                 .andExpect(status().isOk());
     }
 
@@ -107,6 +112,34 @@ class SettingsAppliedToBookingsTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalAmount").value(67.08))
                 .andExpect(jsonPath("$.platformFee").value(6.0));
+    }
+
+    private String receiptText(Driver who, long bookingId) throws Exception {
+        byte[] pdf = mvc.perform(get("/api/v1/bookings/" + bookingId + "/receipt")
+                        .header(HttpHeaders.AUTHORIZATION, who.auth()))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+        return com.smartparking.support.PdfTestSupport.textOf(pdf);
+    }
+
+    @Test
+    void aReceiptKeepsTheGstRateOfItsOwnBooking() throws Exception {
+        Instant start = tomorrowAt(10);
+        long first = bookingId(reserveOk(mvc, driver.auth(), listingId, driver.vehicleId(), start,
+                start.plusSeconds(7200)));
+        com.smartparking.support.BookingApiSupport.payOk(mvc, driver.auth(), first);
+
+        putSettings("10", "12", 10, 30);
+
+        long second = bookingId(reserveOk(mvc, driver.auth(), listingId, driver.vehicleId(), tomorrowAt(14),
+                tomorrowAt(16)));
+        com.smartparking.support.BookingApiSupport.payOk(mvc, driver.auth(), second);
+
+        assertThat(jdbc.queryForObject("select gst_percent from bookings where id = ?", java.math.BigDecimal.class,
+                first)).isEqualByComparingTo("18");
+        assertThat(jdbc.queryForObject("select gst_percent from bookings where id = ?", java.math.BigDecimal.class,
+                second)).isEqualByComparingTo("12");
+        assertThat(receiptText(driver, first)).contains("GST on platform fee (18%)").doesNotContain("(12%)");
+        assertThat(receiptText(driver, second)).contains("GST on platform fee (12%)");
     }
 
     @Test

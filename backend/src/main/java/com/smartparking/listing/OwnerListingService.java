@@ -65,6 +65,7 @@ public class OwnerListingService {
     @Transactional
     public ListingDetailDto create(Long ownerId, ListingBasicsRequest r) {
         City city = requireCity(r.cityId());
+        requireActive(city);
         checkWithinCity(city, r.lat(), r.lng());
         ParkingListing listing = new ParkingListing();
         listing.setOwner(users.getReferenceById(ownerId));
@@ -91,6 +92,9 @@ public class OwnerListingService {
     public ListingDetailDto updateBasics(Long ownerId, Long listingId, ListingBasicsRequest r) {
         ParkingListing listing = requireEditable(ownerId, listingId);
         City city = requireCity(r.cityId());
+        if (!city.getId().equals(listing.getCity().getId())) { // a listing may stay where it is
+            requireActive(city);
+        }
         checkWithinCity(city, r.lat(), r.lng());
         applyBasics(listing, r, city);
         return detail(listings.save(listing));
@@ -185,6 +189,13 @@ public class OwnerListingService {
 
     private City requireCity(Long cityId) {
         return cities.findById(cityId).orElseThrow(() -> ApiException.badRequest("INVALID_CITY", "Unknown city"));
+    }
+
+    /** Admins deactivate cities they no longer serve; nothing new may be listed there. */
+    private static void requireActive(City city) {
+        if (!city.isActive()) {
+            throw ApiException.badRequest("CITY_INACTIVE", city.getName() + " is not open for new listings");
+        }
     }
 
     private static void checkWithinCity(City city, double lat, double lng) {

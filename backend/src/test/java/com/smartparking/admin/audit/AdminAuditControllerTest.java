@@ -150,6 +150,21 @@ class AdminAuditControllerTest {
     }
 
     @Test
+    void settingsActionsHaveAnExplicitNullTargetId() throws Exception {
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/v1/admin/settings")
+                        .header(HttpHeaders.AUTHORIZATION, admin).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"platformFeePercent\":12,\"gstPercent\":18,\"holdMinutes\":10,\"approvalHours\":2,"
+                                + "\"requestMinLeadMinutes\":30,\"priceGuidelines\":[{\"tier\":1,\"minHourly\":20,\"maxHourly\":150},"
+                                + "{\"tier\":2,\"minHourly\":10,\"maxHourly\":100},{\"tier\":3,\"minHourly\":5,\"maxHourly\":80}]}"))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/v1/admin/audit").header(HttpHeaders.AUTHORIZATION, admin))
+                .andExpect(jsonPath("$.content[0].action").value("SETTINGS_UPDATED"))
+                .andExpect(jsonPath("$.content[0]", org.hamcrest.Matchers.hasKey("targetId")))
+                .andExpect(jsonPath("$.content[0].targetId").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.content[0].targetType").value("SETTINGS"));
+    }
+
+    @Test
     void onlyAdminsCanReadTheLog() throws Exception {
         String driver = AuthTestSupport.bearer(AuthTestSupport.accessToken(
                 AuthTestSupport.register(mvc, "audit-driver@example.com", "DRIVER")));

@@ -119,6 +119,7 @@ public class SlotAllocator {
         booking.setBaseAmount(quote.baseAmount());
         booking.setPlatformFee(quote.platformFee());
         booking.setGstAmount(quote.gstAmount());
+        booking.setGstPercent(quote.gstPercent());
         booking.setTotalAmount(quote.totalAmount());
         booking.setStatus(BookingStatus.PENDING_PAYMENT);
         booking.setHoldExpiresAt(now.plus(Duration.ofMinutes(settings.holdMinutes())));

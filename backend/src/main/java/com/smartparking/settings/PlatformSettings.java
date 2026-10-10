@@ -53,6 +53,7 @@ public class PlatformSettings {
     private final AdminAuditService audit;
     private final Clock clock;
 
+    private final Object cacheLock = new Object();
     private final AtomicLong version = new AtomicLong();
     private volatile Map<String, String> cache;
 
@@ -161,8 +162,10 @@ public class PlatformSettings {
 
     /** Drops the cached values; the next read reloads them from the database. */
     public void invalidate() {
-        version.incrementAndGet();
-        cache = null;
+        synchronized (cacheLock) {
+            version.incrementAndGet();
+            cache = null;
+        }
     }
 
     // ---- validation ---------------------------------------------------------------------------------------------
@@ -186,6 +189,8 @@ public class PlatformSettings {
         }
         for (int tier = 1; tier <= TIERS; tier++) {
             PriceGuidelineDto g = byTier.get(tier);
+            checkedMoney("Tier " + tier + " minHourly", g.minHourly());
+            checkedMoney("Tier " + tier + " maxHourly", g.maxHourly());
             if (g.minHourly().signum() <= 0 || g.minHourly().compareTo(g.maxHourly()) > 0
                     || g.maxHourly().compareTo(MAX_PRICE) > 0) {
                 throw invalid("Tier " + tier + " prices must satisfy 0 < min <= max <= 100000");
@@ -196,7 +201,16 @@ public class PlatformSettings {
         return out;
     }
 
+    /** At most two decimals, so every value fits its column and reads back exactly as typed. */
+    private static BigDecimal checkedMoney(String field, BigDecimal v) {
+        if (v.stripTrailingZeros().scale() > 2) {
+            throw invalid(field + " can have at most two decimals");
+        }
+        return v;
+    }
+
     private static String range(String field, BigDecimal v, BigDecimal min, BigDecimal max) {
+        checkedMoney(field, v);
         if (v.compareTo(min) < 0 || v.compareTo(max) > 0) {
             throw invalid(field + " must be between " + min.toPlainString() + " and " + max.toPlainString());
         }
@@ -253,8 +267,10 @@ public class PlatformSettings {
         for (PlatformSetting s : repository.findAll()) {
             loaded.put(s.getKey(), s.getValue());
         }
-        if (version.get() == seen) {
-            cache = loaded;
+        synchronized (cacheLock) { // check and set must be atomic with invalidate(), or a stale load could win
+            if (version.get() == seen) {
+                cache = loaded;
+            }
         }
         return loaded;
     }

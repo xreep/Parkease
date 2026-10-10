@@ -11,6 +11,7 @@ import com.smartparking.support.AuthTestSupport;
 import com.smartparking.support.IntegrationTest;
 import com.smartparking.user.UserRepository;
 import java.math.BigDecimal;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,6 +37,11 @@ class PlatformSettingsControllerTest {
     @Autowired PlatformSettings settings;
 
     String admin;
+
+    @AfterEach
+    void forgetCachedValues() {
+        settings.invalidate(); // a test deletes rows behind the cache; the next test must reload
+    }
 
     @BeforeEach
     void setUp() throws Exception {
@@ -121,6 +127,21 @@ class PlatformSettingsControllerTest {
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value("INVALID_SETTING"));
         }
+    }
+
+    @Test
+    void rejectsMoreThanTwoDecimals() throws Exception {
+        String[] bad = {
+                VALID.replace("\"platformFeePercent\":12.5", "\"platformFeePercent\":12.555"),
+                VALID.replace("\"gstPercent\":18", "\"gstPercent\":18.001"),
+                VALID.replace("\"minHourly\":25", "\"minHourly\":25.999"),
+                VALID.replace("\"maxHourly\":160", "\"maxHourly\":160.1234567890123456789012345678901234567890")};
+        for (String json : bad) {
+            adminPut(admin, json).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_SETTING"));
+        }
+        adminPut(admin, VALID.replace("\"platformFeePercent\":12.5", "\"platformFeePercent\":12.55")
+                .replace("\"minHourly\":25", "\"minHourly\":25.5")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.platformFeePercent").value(12.55));
     }
 
     @Test

@@ -41,10 +41,11 @@ public class PricingService {
         }
 
         BigDecimal base = best.amount.setScale(2, RoundingMode.HALF_UP);
+        BigDecimal gstPercent = settings.gstPercent();
         BigDecimal fee = base.multiply(settings.platformFeePercent()).divide(HUNDRED, 2, RoundingMode.HALF_UP);
-        BigDecimal gst = fee.multiply(settings.gstPercent()).divide(HUNDRED, 2, RoundingMode.HALF_UP);
+        BigDecimal gst = fee.multiply(gstPercent).divide(HUNDRED, 2, RoundingMode.HALF_UP);
         BigDecimal total = base.add(fee).add(gst);
-        return new Quote(best.mode, minutes, base, fee, gst, total, best.breakdown);
+        return new Quote(best.mode, minutes, base, fee, gst, total, best.breakdown, gstPercent.setScale(2, RoundingMode.HALF_UP));
     }
 
     /** Strictly cheaper wins; ties keep the earlier (simpler) option. */

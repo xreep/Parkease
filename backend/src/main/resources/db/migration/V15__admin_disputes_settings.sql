@@ -59,6 +59,10 @@ ALTER TABLE reviews
     ADD COLUMN hidden_at     TIMESTAMPTZ,
     ADD COLUMN hidden_reason VARCHAR(300);
 
+-- The GST rate a booking was priced with, so receipts keep showing it after the rate is edited. Existing rows
+-- were all priced at 18%.
+ALTER TABLE bookings ADD COLUMN gst_percent NUMERIC(5, 2) NOT NULL DEFAULT 18;
+
 -- 1 = metro, 2 = other state capitals, 3 = everything else.
 ALTER TABLE cities
     ADD COLUMN tier   SMALLINT NOT NULL DEFAULT 3 CHECK (tier BETWEEN 1 AND 3),
