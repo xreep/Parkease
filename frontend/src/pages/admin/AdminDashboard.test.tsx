@@ -451,13 +451,13 @@ describe('admin audit log', () => {
   const calls = () => mock.history.get.filter((r) => r.url === '/admin/audit')
 
   it('lists the actions, newest first as served', async () => {
-    mock.onGet('/admin/audit').reply(200, page([action(1), action(2, { action: 'SETTINGS_UPDATED', targetType: 'SETTINGS', targetId: 'platform', details: null })]))
+    mock.onGet('/admin/audit').reply(200, page([action(1), action(2, { action: 'SETTINGS_UPDATED', targetType: 'SETTINGS', targetId: null, details: null })]))
     renderApp('/admin/audit')
 
     const table = within(await screen.findByRole('table', { name: 'Audit log' }))
     expect(calls()[0].params).toEqual({ page: 0, size: 20 })
     expect(table.getByRole('row', { name: /Admin User USER_SUSPENDED USER 7 Reason: spam/ })).toBeInTheDocument()
-    expect(table.getByRole('row', { name: /SETTINGS_UPDATED SETTINGS platform/ })).toBeInTheDocument()
+    expect(table.getByRole('row', { name: /SETTINGS_UPDATED SETTINGS —/ })).toBeInTheDocument()
   })
 
   it('filters by action and target type', async () => {

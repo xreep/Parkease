@@ -54,37 +54,56 @@ const paymentTone: Record<PaymentStatus, keyof typeof tones> = {
   PARTIALLY_REFUNDED: 'sky',
 }
 
+const userTone = { ACTIVE: 'emerald', SUSPENDED: 'red' } as const
+const userLabels = { ACTIVE: 'Active', SUSPENDED: 'Suspended' } as const
+
+const refundTone = { PENDING: 'amber', PROCESSED: 'emerald', FAILED: 'red' } as const
+const refundLabels = { PENDING: 'Pending', PROCESSED: 'Processed', FAILED: 'Failed' } as const
+
+const disputeTone = { OPEN: 'amber', UNDER_REVIEW: 'sky', RESOLVED: 'emerald' } as const
+const disputeLabels = { OPEN: 'Open', UNDER_REVIEW: 'Under review', RESOLVED: 'Resolved' } as const
+
+/** A pill in one of the status tones, for states that have no dedicated kind. */
+export function Badge({ tone, children }: { tone: keyof typeof tones; children: string }) {
+  return (
+    <span className={clsx('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold', tones[tone])}>
+      {children}
+    </span>
+  )
+}
+
 export type StatusBadgeProps =
   | { kind: 'listing'; status: ListingStatus }
   | { kind: 'verification'; status: VerificationStatus }
   | { kind: 'booking'; status: BookingStatus }
   | { kind: 'earning'; status: EarningStatus }
   | { kind: 'payment'; status: PaymentStatus }
+  | { kind: 'user'; status: 'ACTIVE' | 'SUSPENDED' }
+  | { kind: 'refund'; status: 'PENDING' | 'PROCESSED' | 'FAILED' }
+  | { kind: 'dispute'; status: 'OPEN' | 'UNDER_REVIEW' | 'RESOLVED' }
+
+function describe(props: StatusBadgeProps): { label: string; tone: keyof typeof tones } {
+  switch (props.kind) {
+    case 'listing':
+      return { label: listingStatusLabel(props.status), tone: listingTone[props.status] }
+    case 'verification':
+      return { label: verificationStatusLabel(props.status), tone: verificationTone[props.status] }
+    case 'earning':
+      return { label: EARNING_STATUS_LABELS[props.status], tone: earningTone[props.status] }
+    case 'payment':
+      return { label: PAYMENT_STATUS_LABELS[props.status], tone: paymentTone[props.status] }
+    case 'user':
+      return { label: userLabels[props.status], tone: userTone[props.status] }
+    case 'refund':
+      return { label: refundLabels[props.status], tone: refundTone[props.status] }
+    case 'dispute':
+      return { label: disputeLabels[props.status], tone: disputeTone[props.status] }
+    case 'booking':
+      return { label: BOOKING_STATUS_LABELS[props.status], tone: bookingTone[props.status] }
+  }
+}
 
 export function StatusBadge(props: StatusBadgeProps) {
-  const label =
-    props.kind === 'listing'
-      ? listingStatusLabel(props.status)
-      : props.kind === 'verification'
-        ? verificationStatusLabel(props.status)
-        : props.kind === 'earning'
-          ? EARNING_STATUS_LABELS[props.status]
-          : props.kind === 'payment'
-            ? PAYMENT_STATUS_LABELS[props.status]
-            : BOOKING_STATUS_LABELS[props.status]
-  const tone =
-    props.kind === 'listing'
-      ? listingTone[props.status]
-      : props.kind === 'verification'
-        ? verificationTone[props.status]
-        : props.kind === 'earning'
-          ? earningTone[props.status]
-          : props.kind === 'payment'
-            ? paymentTone[props.status]
-            : bookingTone[props.status]
-  return (
-    <span className={clsx('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold', tones[tone])}>
-      {label}
-    </span>
-  )
+  const { label, tone } = describe(props)
+  return <Badge tone={tone}>{label}</Badge>
 }

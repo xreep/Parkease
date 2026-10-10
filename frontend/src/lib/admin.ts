@@ -187,7 +187,7 @@ export type AdminAction = {
   adminName: string
   action: string
   targetType: string
-  targetId: number | string
+  targetId: number | null
   details: string | null
   createdAt: string
 }
@@ -212,3 +212,8 @@ export function useAdminAudit(filters: AuditFilters, page: number) {
     placeholderData: keepPreviousData,
   })
 }
+
+export const suspendListing = async (id: number, reason: string) =>
+  (await api.post<AdminListingDetail>(`/admin/listings/${id}/suspend`, { reason })).data
+export const reinstateListing = async (id: number) =>
+  (await api.post<AdminListingDetail>(`/admin/listings/${id}/reinstate`)).data
