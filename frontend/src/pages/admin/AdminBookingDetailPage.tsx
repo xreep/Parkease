@@ -15,21 +15,12 @@ import {
   refundOnCancel,
   useAdminBooking,
   type AdminBookingDetail,
-  type DisputeCategory,
 } from '../../lib/adminManage'
 import { BOOKING_STATUS_LABELS } from '../../lib/bookings'
+import { DISPUTE_CATEGORY_LABELS } from '../../lib/disputes'
 import { errorMessage } from '../../lib/errors'
 import { formatDateTime, formatINR } from '../../lib/format'
 import { formatWindow } from '../../lib/time'
-
-const CATEGORY_LABELS: Record<DisputeCategory, string> = {
-  NO_ACCESS: 'No access',
-  SLOT_OCCUPIED: 'Slot occupied',
-  OVERSTAY: 'Overstay',
-  DAMAGE: 'Damage',
-  PAYMENT: 'Payment',
-  OTHER: 'Other',
-}
 
 const ACTOR_LABELS = { DRIVER: 'Driver', OWNER: 'Owner', SYSTEM: 'System', ADMIN: 'Admin' } as const
 
@@ -173,7 +164,7 @@ function BookingContent({ booking }: { booking: AdminBookingDetail }) {
             <ul className="space-y-2">
               {booking.disputes.map((d) => (
                 <li key={d.id} className="flex flex-wrap items-center gap-2">
-                  <Link to={`/admin/disputes/${d.id}`} className={linkClass}>{CATEGORY_LABELS[d.category]}</Link>
+                  <Link to={`/admin/disputes/${d.id}`} className={linkClass}>{DISPUTE_CATEGORY_LABELS[d.category]}</Link>
                   <StatusBadge kind="dispute" status={d.status} />
                   <span className="text-xs text-slate-500">{formatDateTime(d.createdAt)}</span>
                 </li>

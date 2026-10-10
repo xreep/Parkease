@@ -18,6 +18,8 @@ import { BookingDetailPage } from './pages/driver/BookingDetailPage'
 import { CheckoutPage } from './pages/driver/CheckoutPage'
 import { MyBookingsPage } from './pages/driver/MyBookingsPage'
 import { PaymentsPage } from './pages/driver/PaymentsPage'
+import { DisputeDetailPage } from './pages/driver/DisputeDetailPage'
+import { DisputesPage } from './pages/driver/DisputesPage'
 import { DriverHomePage } from './pages/driver/DriverHomePage'
 import { DriverLayout } from './pages/driver/DriverLayout'
 import { VehiclesPage } from './pages/driver/VehiclesPage'
@@ -28,6 +30,8 @@ import { AdminPaymentsPage } from './pages/admin/AdminPaymentsPage'
 import { AdminPayoutsPage } from './pages/admin/AdminPayoutsPage'
 import { AdminReviewsPage } from './pages/admin/AdminReviewsPage'
 import { AdminUsersPage } from './pages/admin/AdminUsersPage'
+import { AdminDisputeDetailPage } from './pages/admin/AdminDisputeDetailPage'
+import { AdminDisputesPage } from './pages/admin/AdminDisputesPage'
 import { AdminHomePage } from './pages/admin/AdminHomePage'
 import { AdminAuditPage } from './pages/admin/AdminAuditPage'
 import { AdminLayout } from './pages/admin/AdminLayout'
@@ -41,6 +45,8 @@ import { ListingWizardPage } from './pages/owner/ListingWizardPage'
 import { MyListingsPage } from './pages/owner/MyListingsPage'
 import { OwnerBookingsPage } from './pages/owner/OwnerBookingsPage'
 import { OwnerCalendarPage } from './pages/owner/OwnerCalendarPage'
+import { OwnerDisputeDetailPage } from './pages/owner/OwnerDisputeDetailPage'
+import { OwnerDisputesPage } from './pages/owner/OwnerDisputesPage'
 import { OwnerEarningsPage } from './pages/owner/OwnerEarningsPage'
 import { OwnerHomePage } from './pages/owner/OwnerHomePage'
 import { OwnerLayout } from './pages/owner/OwnerLayout'
@@ -69,6 +75,8 @@ export default function App() {
           <Route path="bookings/:id" element={<BookingDetailPage />} />
           <Route path="payments" element={<PaymentsPage />} />
           <Route path="vehicles" element={<VehiclesPage />} />
+          <Route path="disputes" element={<DisputesPage />} />
+          <Route path="disputes/:id" element={<DisputeDetailPage />} />
         </Route>
         <Route path="checkout/:bookingId" element={<RequireRole roles={['DRIVER']}><CheckoutPage /></RequireRole>} />
         <Route path="owner" element={<RequireRole roles={['OWNER']}><OwnerLayout /></RequireRole>}>
@@ -77,6 +85,8 @@ export default function App() {
           <Route path="earnings" element={<OwnerEarningsPage />} />
           <Route path="calendar" element={<OwnerCalendarPage />} />
           <Route path="reviews" element={<OwnerReviewsPage />} />
+          <Route path="disputes" element={<OwnerDisputesPage />} />
+          <Route path="disputes/:id" element={<OwnerDisputeDetailPage />} />
           <Route path="verification" element={<OwnerVerificationPage />} />
           <Route path="listings" element={<MyListingsPage />} />
           <Route path="listings/new" element={<ListingWizardPage />} />
@@ -88,6 +98,8 @@ export default function App() {
           <Route path="owners" element={<OwnerQueuePage />} />
           <Route path="listings" element={<ListingQueuePage />} />
           <Route path="listings/:id" element={<AdminListingReviewPage />} />
+          <Route path="disputes" element={<AdminDisputesPage />} />
+          <Route path="disputes/:id" element={<AdminDisputeDetailPage />} />
           <Route path="bookings" element={<AdminBookingsPage />} />
           <Route path="bookings/:id" element={<AdminBookingDetailPage />} />
           <Route path="payments" element={<AdminPaymentsPage />} />

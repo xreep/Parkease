@@ -24,7 +24,7 @@ function booking(overrides: Partial<BookingDetailDto> = {}): BookingDetailDto {
     refundAmount: 0, holdExpiresAt: null, approvalDeadline: null, confirmedAt: '2026-10-04T08:02:00Z', cancelReason: null, cancelledBy: null,
     paymentStatus: 'CAPTURED', invoiceNumber: 'PE-INV-0042', autoApprove: true, ownerFirstName: 'Priya',
     events: [{ fromStatus: null, toStatus: 'PENDING_PAYMENT', actor: 'DRIVER', note: null, at: '2026-10-04T08:00:00Z' }],
-    reviewable: true, review: null,
+    reviewable: true, review: null, disputes: [], disputable: false,
     ...overrides,
   }
 }
