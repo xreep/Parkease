@@ -158,8 +158,17 @@ public class DemoListingSeeder implements ApplicationRunner {
         User user = ensureOwnerUser(PENDING_OWNER_EMAIL, "Vikram Singh", "9000000016");
         OwnerProfile profile = profileFor(user);
         if (profile.getVerificationStatus() == VerificationStatus.UNSUBMITTED && profile.getDocumentKey() == null) {
-            StoredFile stored = storage.storePrivate(new ValidatedUpload(DOCUMENT_PDF, "application/pdf", "pdf"),
-                    "owner-documents");
+            StoredFile stored;
+            try {
+                stored = storage.storePrivate(new ValidatedUpload(DOCUMENT_PDF, "application/pdf", "pdf"),
+                        "owner-documents");
+            } catch (RuntimeException e) {
+                // A file-store problem (e.g. a wrong or revoked Cloudinary key) must not stop the whole demo from
+                // starting: this owner just stays unsubmitted and the next start tries again.
+                log.warn("Could not store the sample document of {} ({}); it stays unsubmitted for now",
+                        PENDING_OWNER_EMAIL, e.getClass().getSimpleName());
+                return;
+            }
             profile.setVerificationStatus(VerificationStatus.PENDING);
             profile.setDocumentType(DocumentType.DRIVING_LICENCE);
             profile.setDocumentKey(stored.key());
