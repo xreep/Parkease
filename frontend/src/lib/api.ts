@@ -6,6 +6,21 @@ export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api/v1',
 })
 
+const SUSPENDED_MESSAGE = 'Your account has been suspended.'
+
+/** The problem body of a failed request, also when the request asked for a blob (a download). */
+async function problemBody(error: AxiosError): Promise<{ code?: string; detail?: string } | undefined> {
+  const data = error.response?.data
+  if (data instanceof Blob) {
+    try {
+      return JSON.parse(await data.text()) as { code?: string; detail?: string }
+    } catch {
+      return undefined
+    }
+  }
+  return data as { code?: string; detail?: string } | undefined
+}
+
 let onSessionExpired: (() => void) | null = null
 
 export function setSessionExpiredHandler(handler: () => void) {
@@ -48,6 +63,8 @@ async function refreshAccessToken(failedToken: string | null): Promise<RefreshRe
       return { token: data.accessToken }
     } catch (e) {
       if (isAxiosError(e) && [401, 403].includes(e.response?.status ?? 0)) {
+        const body = e.response?.data as { code?: string; detail?: string } | undefined
+        if (e.response?.status === 403 && body?.code === 'ACCOUNT_SUSPENDED') toast.error(body.detail ?? SUSPENDED_MESSAGE)
         tokenStore.clear()
         return { expired: true }
       }
@@ -92,11 +109,12 @@ api.interceptors.response.use(
     // first of several parallel answers is the only one that acts.
     if (error.response?.status === 403 && original && !isAuthCall) {
       const sent = bearerToken(original)
-      const body = error.response.data as { code?: string; detail?: string } | undefined
+      const body = await problemBody(error)
+      // Checked after reading the body, so of several parallel answers only the first still finds its token stored.
       if (sent !== null && sent === tokenStore.getAccess() && body?.code === 'ACCOUNT_SUSPENDED') {
         tokenStore.clear()
         onSessionExpired?.()
-        toast.error(body.detail ?? 'Your account has been suspended.')
+        toast.error(body.detail ?? SUSPENDED_MESSAGE)
       }
     }
     return Promise.reject(error)

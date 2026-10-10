@@ -124,6 +124,36 @@ describe('api client', () => {
     expect(toast.error).toHaveBeenCalledTimes(1)
   })
 
+  it('reads a suspended answer that arrives as a blob', async () => {
+    tokenStore.set('a1', 'r1')
+    const expired = vi.fn()
+    setSessionExpiredHandler(expired)
+    vi.mocked(toast.error).mockClear()
+    mock.onGet('/owner/earnings').reply(403, new Blob([JSON.stringify({ code: 'ACCOUNT_SUSPENDED', detail: 'Your account is suspended' })]))
+
+    await expect(api.get('/owner/earnings', { responseType: 'blob' })).rejects.toBeDefined()
+
+    expect(tokenStore.getAccess()).toBeNull()
+    expect(expired).toHaveBeenCalledTimes(1)
+    expect(toast.error).toHaveBeenCalledWith('Your account is suspended')
+  })
+
+  it('shows the suspended message when the refresh itself is refused for it', async () => {
+    tokenStore.set('old', 'r1')
+    const expired = vi.fn()
+    setSessionExpiredHandler(expired)
+    vi.mocked(toast.error).mockClear()
+    mock.onGet('/me').reply(401, { code: 'UNAUTHORIZED' })
+    mock.onPost('/auth/refresh').reply(403, { code: 'ACCOUNT_SUSPENDED', detail: 'Your account is suspended' })
+
+    await expect(api.get('/me')).rejects.toBeDefined()
+
+    expect(tokenStore.getAccess()).toBeNull()
+    expect(expired).toHaveBeenCalledTimes(1)
+    expect(toast.error).toHaveBeenCalledTimes(1)
+    expect(toast.error).toHaveBeenCalledWith('Your account is suspended')
+  })
+
   it('keeps the session on other 403 answers', async () => {
     tokenStore.set('a1', 'r1')
     const expired = vi.fn()

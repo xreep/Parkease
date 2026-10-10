@@ -18,6 +18,7 @@ const CODE_MESSAGES: Record<string, string> = {
   CANNOT_SUSPEND: 'Admins and your own account can’t be suspended.',
   NOT_RETRYABLE: 'This refund can’t be retried — it has already been processed or is still in progress.',
   NOTHING_TO_PAY: 'There is nothing to pay: those earnings are no longer pending payout.',
+  EARNING_DISPUTED: 'Some of those earnings are held for an open dispute. Resolve it first.',
 }
 
 export function adminErrorMessage(error: unknown): string {
@@ -188,6 +189,8 @@ export type RefundStatus = 'PENDING' | 'PROCESSED' | 'FAILED'
 export type AdminBookingDetail = AdminBookingSummary & {
   listingId: number
   slotLabel: string
+  /** What a cancellation would still refund: paid minus refunded, 0 when nothing was paid. */
+  refundableRemaining: number
   baseAmount: number
   platformFee: number
   gstAmount: number
@@ -233,12 +236,6 @@ export function useAdminBookings(filters: AdminBookingFilters, page: number) {
 
 export function useAdminBooking(id: number | undefined) {
   return useQuery({ queryKey: ['admin', 'booking', id], queryFn: () => getAdminBooking(id!), enabled: id !== undefined })
-}
-
-/** What an admin cancellation sends back: everything paid and not yet refunded. */
-export function refundOnCancel(booking: AdminBookingDetail): number {
-  const paid = booking.payment && ['CAPTURED', 'PARTIALLY_REFUNDED', 'REFUNDED'].includes(booking.payment.status) ? booking.payment.amount : 0
-  return Math.max(0, Math.round((paid - booking.refundAmount) * 100) / 100)
 }
 
 /** A booking that is still running its course (the admin can cancel it). */
@@ -317,14 +314,19 @@ export type PayoutOwner = {
   earningsCount: number
   payoutMethod: 'UPI' | 'BANK' | null
   payoutMasked: string | null
+  /** Pending earnings held back by open disputes. */
+  disputedAmount: number
 }
+
+/** A pending earning; `disputed` ones can't be paid out until the dispute is resolved. */
+export type PayoutEarning = OwnerEarningDto & { disputed: boolean }
 
 export type MarkPaidBody = { ownerId: number; earningIds: number[]; reference: string }
 export type MarkPaidResult = { paidCount: number; paidAmount: number }
 
 export const listPayouts = async () => (await api.get<PayoutOwner[]>('/admin/payouts')).data
 export const listPayoutEarnings = async (ownerId: number) =>
-  (await api.get<OwnerEarningDto[]>(`/admin/payouts/${ownerId}/earnings`)).data
+  (await api.get<PayoutEarning[]>(`/admin/payouts/${ownerId}/earnings`)).data
 export const markPaid = async (body: MarkPaidBody) => (await api.post<MarkPaidResult>('/admin/payouts/mark-paid', body)).data
 
 /** The pending payouts as a CSV (the server names the file); `truncated` when it cut the export at its row limit. */
