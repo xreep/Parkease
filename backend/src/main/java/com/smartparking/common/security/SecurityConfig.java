@@ -12,7 +12,11 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy;
+import org.springframework.security.web.header.writers.StaticHeadersWriter;
+import org.springframework.security.web.util.matcher.AnyRequestMatcher;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -26,6 +30,7 @@ public class SecurityConfig {
     private final JwtService jwtService;
     private final AppProperties app;
     private final UserStatusCache statusCache;
+    private final SecurityProperties security;
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -48,7 +53,26 @@ public class SecurityConfig {
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint(SecurityProblemWriter::unauthorized)
                         .accessDeniedHandler(SecurityProblemWriter::forbidden))
-                .addFilterBefore(new AuthRateLimitFilter(app.authRateLimitPerMinute()),
+                .headers(headers -> {
+                    headers.frameOptions(HeadersConfigurer.FrameOptionsConfig::deny);
+                    headers.referrerPolicy(referrer -> referrer.policy(ReferrerPolicy.NO_REFERRER));
+                    headers.addHeaderWriter(new StaticHeadersWriter("Permissions-Policy",
+                            "camera=(), microphone=(), geolocation=(), payment=()"));
+                    // Render terminates TLS, so the app sees plain HTTP: HSTS must not depend on request.isSecure().
+                    headers.httpStrictTransportSecurity(hsts -> {
+                        if (security.hsts()) {
+                            hsts.requestMatcher(AnyRequestMatcher.INSTANCE)
+                                    .maxAgeInSeconds(31_536_000).includeSubDomains(true);
+                        } else {
+                            hsts.disable();
+                        }
+                    });
+                })
+                .addFilterBefore(new RateLimitFilter(
+                                RateLimitRules.standard(app.authRateLimitPerMinute(), security.rateLimit()),
+                                new ClientIpResolver(security.trustForwardedFor(), security.trustedProxyHops())),
+                        UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(new RequestSizeLimitFilter(security.maxJsonBodyBytes()),
                         UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(new JwtAuthenticationFilter(jwtService, statusCache), UsernamePasswordAuthenticationFilter.class);
         return http.build();
