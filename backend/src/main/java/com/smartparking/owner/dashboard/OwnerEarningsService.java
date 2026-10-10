@@ -96,7 +96,7 @@ public class OwnerEarningsService {
         };
     }
 
-    private static OwnerEarningDto toDto(OwnerEarning e) {
+    public static OwnerEarningDto toDto(OwnerEarning e) {
         return new OwnerEarningDto(e.getId(), e.getBooking().getId(), e.getBooking().getBookingCode(),
                 e.getBooking().getListing().getTitle(), e.getBooking().getStartTime(), e.getBooking().getEndTime(),
                 e.getGross(), e.getCommission(), e.getNet(), e.getStatus(), e.getPaidAt(), e.getPayoutReference());

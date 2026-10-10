@@ -27,6 +27,28 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
     Optional<Payment> findByBookingId(Long bookingId);
 
+    List<Payment> findByBookingIdIn(Collection<Long> bookingIds);
+
+    /**
+     * Admin search over payments created in [{@code from}, {@code to}); {@code pattern} is a lower-cased,
+     * backslash-escaped LIKE pattern matched against booking code, driver email and the provider order / payment ids.
+     */
+    @Query(value = """
+            select p from Payment p join fetch p.booking b join fetch b.driver d
+            where (:status is null or p.status = :status) and p.createdAt >= :from and p.createdAt < :to
+              and (lower(b.bookingCode) like :pattern escape '\\' or lower(d.email) like :pattern escape '\\'
+                   or lower(p.orderId) like :pattern escape '\\'
+                   or lower(coalesce(p.paymentId, '')) like :pattern escape '\\')
+            """, countQuery = """
+            select count(p) from Payment p join p.booking b join b.driver d
+            where (:status is null or p.status = :status) and p.createdAt >= :from and p.createdAt < :to
+              and (lower(b.bookingCode) like :pattern escape '\\' or lower(d.email) like :pattern escape '\\'
+                   or lower(p.orderId) like :pattern escape '\\'
+                   or lower(coalesce(p.paymentId, '')) like :pattern escape '\\')
+            """)
+    Page<Payment> adminSearch(@Param("status") PaymentStatus status, @Param("from") Instant from,
+                              @Param("to") Instant to, @Param("pattern") String pattern, Pageable pageable);
+
     @EntityGraph(attributePaths = {"booking", "booking.listing"})
     Page<Payment> findByBookingDriverIdAndStatusIn(Long driverId, Collection<PaymentStatus> statuses,
                                                    Pageable pageable);

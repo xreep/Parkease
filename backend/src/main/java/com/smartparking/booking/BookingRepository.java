@@ -61,6 +61,26 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     Optional<Booking> findByIdAndDriverId(Long id, Long driverId);
 
+    /**
+     * Admin search. {@code cityId} 0 matches every city; {@code pattern} is a lower-cased, backslash-escaped LIKE
+     * pattern matched against the booking code and the driver's email; the start time lies in [{@code from}, {@code to}).
+     */
+    @Query(value = """
+            select b from Booking b join fetch b.listing l join fetch l.city c join fetch l.owner o
+              join fetch b.driver d
+            where (:status is null or b.status = :status) and (:cityId = 0L or c.id = :cityId)
+              and b.startTime >= :from and b.startTime < :to
+              and (lower(b.bookingCode) like :pattern escape '\\' or lower(d.email) like :pattern escape '\\')
+            """, countQuery = """
+            select count(b) from Booking b join b.listing l join l.city c join b.driver d
+            where (:status is null or b.status = :status) and (:cityId = 0L or c.id = :cityId)
+              and b.startTime >= :from and b.startTime < :to
+              and (lower(b.bookingCode) like :pattern escape '\\' or lower(d.email) like :pattern escape '\\')
+            """)
+    Page<Booking> adminSearch(@Param("status") BookingStatus status, @Param("cityId") long cityId,
+                              @Param("from") Instant from, @Param("to") Instant to,
+                              @Param("pattern") String pattern, Pageable pageable);
+
     /** Rows of {driverId, count} of the bookings that were ever confirmed or at least paid for (not lapsed holds). */
     @Query("""
             select b.driver.id, count(b) from Booking b
