@@ -20,11 +20,11 @@ export function ListingReviews({ listingId }: { listingId: number | string }) {
         <Spinner className="h-5 w-5 text-brand-600" />
       ) : !data ? (
         <p className="text-sm text-red-600 dark:text-red-400">Could not load reviews.</p>
-      ) : data.pages[0].summary.reviewCount === 0 ? (
+      ) : !data.pages[0].summary || data.pages[0].summary.reviewCount === 0 ? (
         <p className="text-slate-600 dark:text-slate-400">No reviews yet</p>
       ) : (
         <>
-          <ReviewSummary summary={data.pages[0].summary} />
+          {data.pages[0].summary && <ReviewSummary summary={data.pages[0].summary} />}
           <div className="space-y-3">
             {uniqueReviews(data.pages).map((review) => (
               <ReviewCard key={review.id} review={review} label={`Review by ${review.authorName}`} />
