@@ -21,7 +21,7 @@ import org.springframework.test.context.TestPropertySource;
  */
 @SpringBootTest
 @ActiveProfiles({"test", "demo"})
-@TestPropertySource(properties = "app.seed.demo-password=Demo@1234")
+@TestPropertySource(properties = {"DEMO_PASSWORD=Demo@1234", "app.seed.demo-password=Demo@1234"})
 @Import(TestEmailConfig.class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class DemoProfileStartupTest {

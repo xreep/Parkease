@@ -28,6 +28,6 @@ class DemoProfileConfigTest {
         List<PropertySource<?>> sources = new YamlPropertySourceLoader()
                 .load("application-demo", new ClassPathResource("application-demo.yml"));
         assertThat(sources).hasSize(1);
-        assertThat(sources.get(0).getProperty("app.seed.demo-password")).isEqualTo("${DEMO_PASSWORD}");
+        assertThat(sources.get(0).getProperty("app.seed.demo-password")).isEqualTo("${DEMO_PASSWORD:}");
     }
 }

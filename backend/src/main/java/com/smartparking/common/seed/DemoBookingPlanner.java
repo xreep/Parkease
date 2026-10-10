@@ -54,6 +54,8 @@ final class DemoBookingPlanner {
     private final PricingService pricing;
     private final int holdMinutes;
     private final int approvalHours;
+    /** The slowest an owner answers a request in this demo: inside the approval window, with room to spare. */
+    private final int decisionMaxSeconds;
     private final List<Lst> listings;
     private final List<Person> drivers;
     private final LocalDate today;
@@ -71,6 +73,7 @@ final class DemoBookingPlanner {
         this.pricing = pricing;
         this.holdMinutes = settings.holdMinutes();
         this.approvalHours = settings.approvalHours();
+        this.decisionMaxSeconds = Math.min(100 * 60, approvalHours * 3600 - 300);
         this.listings = bookableListings;
         this.drivers = bookableDrivers;
         this.today = now.atZone(IST).toLocalDate();
@@ -253,15 +256,17 @@ final class DemoBookingPlanner {
         Instant start = b.start;
         BigDecimal total = b.quote.totalAmount();
         Duration approvalWindow = Duration.ofHours(approvalHours);
-        // A request needs a few hours to be answered before the parking starts.
-        Instant latestCreated = now.minus(Duration.ofMinutes(needsApproval ? 130 : 3));
+        // A request must have been answered by now (decision delay plus the payment delay and a margin).
+        Instant latestCreated = now.minusSeconds(needsApproval ? decisionMaxSeconds + 900 : 180);
 
         switch (o) {
             case AWAITING -> {
-                if (!needsApproval || Duration.between(now, start).toHours() < 3) {
+                if (!needsApproval || Duration.between(now, start).toHours() < Math.max(3, approvalHours + 1)) {
                     return false;
                 }
-                b.createdAt = now.minus(Duration.ofSeconds(180 + rnd.nextInt(97 * 60)));
+                // Younger than the approval window by a margin, so the deadline is still ahead.
+                int maxAge = Math.max(300, Math.min(97 * 60, approvalHours * 3600 - 20 * 60));
+                b.createdAt = now.minusSeconds(180 + rnd.nextInt(maxAge - 180));
                 b.paidAt = b.createdAt.plusSeconds(30 + rnd.nextInt(150));
                 b.approvalDeadline = min(b.paidAt.plus(approvalWindow), start);
             }
@@ -274,14 +279,15 @@ final class DemoBookingPlanner {
                 if (needsApproval) {
                     b.approvalDeadline = min(b.paidAt.plus(approvalWindow), start);
                     if (o == Outcome.REJECTED_OWNER) {
-                        b.decidedAt = b.paidAt.plusSeconds(8 * 60 + rnd.nextInt(92 * 60));
+                        b.decidedAt = b.paidAt.plusSeconds(decisionDelay());
                     } else if (o == Outcome.REJECTED_SYSTEM) {
                         if (b.approvalDeadline.plusSeconds(60).isAfter(now)) {
                             return false;
                         }
                         b.decidedAt = b.approvalDeadline.plusSeconds(5 + rnd.nextInt(50));
                     } else {
-                        b.approvedAt = b.paidAt.plusSeconds(6 * 60 + rnd.nextInt(94 * 60));
+                        b.approvedAt = b.paidAt.plusSeconds(decisionDelay());
+                        b.approvalDeadline = null; // approving clears it
                         b.decidedAt = b.approvedAt;
                     }
                 }
@@ -313,7 +319,7 @@ final class DemoBookingPlanner {
                 b.createdAt = createdBefore(start, true, latestCreated);
                 b.paidAt = b.createdAt.plusSeconds(30 + rnd.nextInt(210));
                 b.approvalDeadline = min(b.paidAt.plus(approvalWindow), start);
-                b.decidedAt = b.paidAt.plusSeconds(5 * 60 + rnd.nextInt(90 * 60));
+                b.decidedAt = b.paidAt.plusSeconds(decisionDelay());
                 b.cancelledFrom = BookingStatus.AWAITING_APPROVAL;
                 b.cancelReason = pickOne(DemoCatalog.DRIVER_CANCEL_REASONS);
                 b.refund = total;
@@ -331,12 +337,11 @@ final class DemoBookingPlanner {
                         return false;
                     }
                 }
-                long minLead = needsApproval ? 130 * 60 : 20 * 60;
+                long minLead = needsApproval ? decisionMaxSeconds + 900 : 20 * 60;
                 b.createdAt = cancelAt.minusSeconds(minLead + rnd.nextInt(2 * 86_400 - (int) minLead));
                 b.paidAt = b.createdAt.plusSeconds(30 + rnd.nextInt(210));
                 if (needsApproval) {
-                    b.approvalDeadline = min(b.paidAt.plus(approvalWindow), start);
-                    b.approvedAt = b.paidAt.plusSeconds(6 * 60 + rnd.nextInt(94 * 60));
+                    b.approvedAt = b.paidAt.plusSeconds(decisionDelay());
                 }
                 b.confirmedAt = needsApproval ? b.approvedAt : b.paidAt;
                 b.decidedAt = cancelAt;
@@ -361,6 +366,12 @@ final class DemoBookingPlanner {
         return true;
     }
 
+    /** Seconds an owner takes to answer a request: a few minutes up to the slowest allowed. */
+    private int decisionDelay() {
+        int min = Math.min(6 * 60, decisionMaxSeconds / 2);
+        return min + rnd.nextInt(decisionMaxSeconds - min);
+    }
+
     /** A creation time {@code lead} before the start, but early enough to have been answered by now. */
     private Instant createdBefore(Instant start, boolean needsApproval, Instant latestCreated) {
         Instant created = start.minusSeconds(lead(needsApproval));
@@ -381,7 +392,8 @@ final class DemoBookingPlanner {
         } else {
             seconds = 86_400 + rnd.nextInt(5 * 86_400);
         }
-        return needsApproval ? Math.max(seconds, 3 * 3600 + rnd.nextInt(2 * 3600)) : seconds;
+        long floor = Math.max(3 * 3600L, approvalHours * 3600L + 3600) + rnd.nextInt(2 * 3600);
+        return needsApproval ? Math.max(seconds, floor) : seconds;
     }
 
     /** Hours before the start at which a cancellation happens, spread over every refund tier of every policy. */
