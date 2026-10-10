@@ -11,8 +11,10 @@ import { ReasonDialog } from '../../components/ui/Dialog'
 import { Pagination } from '../../components/ui/Pagination'
 import { Select } from '../../components/ui/Select'
 import { Badge } from '../../components/ui/StatusBadge'
+import { invalidateAdminActivity } from '../../lib/admin'
 import { adminErrorMessage, hideReview, unhideReview, useAdminReviews, type AdminReview, type ReviewFilters } from '../../lib/adminManage'
 import { errorMessage } from '../../lib/errors'
+import { stepBackIfEmpty } from '../../lib/usePaging'
 
 type Show = 'all' | 'visible' | 'hidden'
 const HIDDEN: Record<Show, boolean | undefined> = { all: undefined, visible: false, hidden: true }
@@ -56,14 +58,14 @@ export function AdminReviewsPage() {
   const filters: ReviewFilters = { ...(HIDDEN[show] !== undefined && { hidden: HIDDEN[show] }), ...(q && { q }) }
   const { data, error, isPending, isPlaceholderData } = useAdminReviews(filters, page)
 
-  // The last row of a later page was handled elsewhere: step back instead of showing an empty page.
-  if (data !== undefined && data.content.length === 0 && page > 0) setPage(page - 1)
+  stepBackIfEmpty(page, setPage, data?.content, isPlaceholderData)
 
   // Hidden reviews leave the public lists and the rating aggregates.
   const refresh = () =>
-    Promise.all(
-      [['admin', 'reviews'], ['reviews'], ['listing'], ['search'], ['owner', 'reviews']].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
-    ).then(() => undefined)
+    Promise.all([
+      ...[['admin', 'reviews'], ['reviews'], ['listing'], ['search'], ['owner', 'reviews']].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+      invalidateAdminActivity(queryClient),
+    ]).then(() => undefined)
 
   async function confirmHide(reason: string) {
     if (!hiding) return
@@ -137,6 +139,7 @@ export function AdminReviewsPage() {
           open
           title="Hide this review?"
           confirmLabel="Hide"
+          maxLength={300}
           helper="Hidden reviews leave public lists and the listing’s rating."
           onConfirm={confirmHide}
           onClose={() => setHiding(null)}

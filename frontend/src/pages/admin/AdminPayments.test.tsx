@@ -38,6 +38,7 @@ describe('admin payments and refunds', () => {
     mock.onGet('/me').reply(200, admin)
     vi.mocked(toast.success).mockClear()
     vi.mocked(toast.error).mockClear()
+    vi.mocked(toast.warning).mockClear()
   })
 
   afterEach(() => mock.restore())
@@ -112,7 +113,7 @@ describe('admin payments and refunds', () => {
     mock.onGet('/admin/payments').reply(200, page([]))
     mock.onGet('/admin/refunds').replyOnce(200, page([refund(2, { status: 'FAILED', providerRefundId: null, lastError: 'Gateway timeout' })]))
     mock.onGet('/admin/refunds').reply(200, page([refund(2)]))
-    mock.onPost('/admin/refunds/2/retry').reply(200, refund(2))
+    mock.onPost('/admin/refunds/2/retry').reply(200, refund(2, { status: 'PROCESSED' }))
     const u = userEvent.setup()
     renderApp('/admin/payments')
     await u.click(await screen.findByRole('tab', { name: 'Refunds' }))
@@ -121,6 +122,34 @@ describe('admin payments and refunds', () => {
 
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Refund retried'))
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument())
+  })
+
+  it('warns when the retried refund fails again, and celebrates only a real success', async () => {
+    mock.onGet('/admin/payments').reply(200, page([]))
+    mock.onGet('/admin/refunds').reply(200, page([refund(2, { status: 'FAILED', lastError: 'Gateway timeout' })]))
+    mock.onPost('/admin/refunds/2/retry').replyOnce(200, refund(2, { status: 'FAILED', attempts: 4, lastError: 'Gateway timeout again' }))
+    mock.onPost('/admin/refunds/2/retry').reply(200, refund(2, { status: 'PENDING', providerRefundId: null }))
+    const u = userEvent.setup()
+    renderApp('/admin/payments')
+    await u.click(await screen.findByRole('tab', { name: 'Refunds' }))
+
+    await u.click(await screen.findByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(toast.warning).toHaveBeenCalledWith('The refund failed again: Gateway timeout again'))
+    expect(toast.success).not.toHaveBeenCalled()
+
+    await u.click(await screen.findByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Refund retried'))
+  })
+
+  it('puts Retry next to the booking, in the first column, so it is visible on a phone', async () => {
+    mock.onGet('/admin/payments').reply(200, page([]))
+    mock.onGet('/admin/refunds').reply(200, page([refund(2, { status: 'FAILED', lastError: 'x' })]))
+    const u = userEvent.setup()
+    renderApp('/admin/payments')
+    await u.click(await screen.findByRole('tab', { name: 'Refunds' }))
+
+    const row = await screen.findByRole('row', { name: /PE-REF002/ })
+    expect(within(within(row).getAllByRole('cell')[0]).getByRole('button', { name: 'Retry' })).toBeInTheDocument()
   })
 
   it('explains NOT_RETRYABLE and reloads the list', async () => {

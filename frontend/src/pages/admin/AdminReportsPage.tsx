@@ -1,7 +1,6 @@
 import clsx from 'clsx'
 import { Download } from 'lucide-react'
 import { useState } from 'react'
-import { toast } from 'sonner'
 import { FormError } from '../../components/AuthCard'
 import { Empty, Loading } from '../../components/admin/common'
 import { StateCityFilter, type StateCity } from '../../components/admin/StateCityFilter'
@@ -21,6 +20,7 @@ import {
 import { errorMessage } from '../../lib/errors'
 import { formatINR, formatPercent } from '../../lib/format'
 import { statsRange } from '../../lib/ownerDashboard'
+import { useCsvExport } from '../../lib/useCsvExport'
 
 type Column<Row, Totals> = {
   header: string
@@ -153,34 +153,20 @@ export function AdminReportsPage() {
   const [from, setFrom] = useState(initial.from)
   const [to, setTo] = useState(initial.to)
   const [place, setPlace] = useState<StateCity>({})
-  const [exporting, setExporting] = useState(false)
-  const [exportError, setExportError] = useState<string | null>(null)
   const filters: ReportFilters = { from, to, ...place }
   const valid = from !== '' && to !== '' && from <= to
-
-  async function exportCsv() {
-    setExporting(true)
-    setExportError(null)
-    try {
-      const { truncated } = await downloadReportCsv(kind, filters)
-      if (truncated) toast.warning('The export was cut at the row limit — narrow the filters.')
-    } catch (e) {
-      setExportError(errorMessage(e))
-    } finally {
-      setExporting(false)
-    }
-  }
+  const csv = useCsvExport(() => downloadReportCsv(kind, filters), 'The export was cut at the row limit — narrow the filters.')
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-semibold">Reports</h2>
-        <Button type="button" variant="secondary" loading={exporting} disabled={!valid} onClick={() => void exportCsv()}>
-          {!exporting && <Download aria-hidden className="h-4 w-4" />}
+        <Button type="button" variant="secondary" loading={csv.exporting} disabled={!valid} onClick={() => void csv.run()}>
+          {!csv.exporting && <Download aria-hidden className="h-4 w-4" />}
           Download CSV
         </Button>
       </div>
-      <FormError message={exportError} />
+      <FormError message={csv.error} />
 
       <ViewTabs idPrefix="admin-reports" label="Reports" items={TABS} value={kind} onChange={setKind} />
 

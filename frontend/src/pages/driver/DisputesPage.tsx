@@ -5,10 +5,12 @@ import { DisputeList } from '../../components/disputes/DisputeView'
 import { Pagination } from '../../components/ui/Pagination'
 import { useMyDisputes } from '../../lib/disputes'
 import { errorMessage } from '../../lib/errors'
+import { stepBackIfEmpty } from '../../lib/usePaging'
 
 export function DisputesPage() {
   const [page, setPage] = useState(0)
-  const { data, error, isPending } = useMyDisputes(page)
+  const { data, error, isPending, isPlaceholderData } = useMyDisputes(page)
+  stepBackIfEmpty(page, setPage, data?.content, isPlaceholderData)
 
   return (
     <div className="space-y-6">

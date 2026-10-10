@@ -9,7 +9,7 @@ import { Button } from '../../components/ui/Button'
 import { ReasonDialog } from '../../components/ui/Dialog'
 import { Spinner } from '../../components/ui/Spinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
-import { approveListing, reinstateListing, rejectListing, suspendListing, useAdminListing, type AdminListingDetail } from '../../lib/admin'
+import { approveListing, invalidateAdminActivity, reinstateListing, rejectListing, suspendListing, useAdminListing, type AdminListingDetail } from '../../lib/admin'
 import { errorMessage } from '../../lib/errors'
 import { formatAddress, formatDateTime, LISTING_TYPE_LABELS } from '../../lib/format'
 
@@ -40,6 +40,7 @@ function ReviewContent({ detail }: { detail: AdminListingDetail }) {
       queryClient.invalidateQueries({ queryKey: ['admin', 'listings'] }),
       queryClient.invalidateQueries({ queryKey: ['admin', 'listing', listing.id] }),
       queryClient.invalidateQueries({ queryKey: ['search'] }),
+      invalidateAdminActivity(queryClient),
     ]).then(() => undefined)
 
   async function suspend(reason: string) {
@@ -67,7 +68,7 @@ function ReviewContent({ detail }: { detail: AdminListingDetail }) {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['admin', 'listings'] }),
       queryClient.invalidateQueries({ queryKey: ['admin', 'listing', listing.id] }),
-      queryClient.invalidateQueries({ queryKey: ['admin', 'queues'] }),
+      invalidateAdminActivity(queryClient),
     ])
     navigate('/admin/listings')
   }

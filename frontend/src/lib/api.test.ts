@@ -68,6 +68,62 @@ describe('api client', () => {
     expect(mock.history.post).toHaveLength(0)
   })
 
+  it('ignores a suspended answer meant for an older token, so a fresh sign-in survives', async () => {
+    tokenStore.set('old', 'r1')
+    const expired = vi.fn()
+    setSessionExpiredHandler(expired)
+    vi.mocked(toast.error).mockClear()
+    mock.onGet('/states').reply(() => {
+      tokenStore.set('new', 'r2')
+      return [403, { code: 'ACCOUNT_SUSPENDED', detail: 'Suspended' }]
+    })
+
+    await expect(api.get('/states')).rejects.toBeDefined()
+
+    expect(tokenStore.getAccess()).toBe('new')
+    expect(expired).not.toHaveBeenCalled()
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('does nothing for a suspended answer when nobody is signed in', async () => {
+    const expired = vi.fn()
+    setSessionExpiredHandler(expired)
+    vi.mocked(toast.error).mockClear()
+    mock.onGet('/states').reply(403, { code: 'ACCOUNT_SUSPENDED', detail: 'Suspended' })
+
+    await expect(api.get('/states')).rejects.toBeDefined()
+
+    expect(expired).not.toHaveBeenCalled()
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('leaves the sign-in call to its own form', async () => {
+    tokenStore.set('a1', 'r1')
+    const expired = vi.fn()
+    setSessionExpiredHandler(expired)
+    vi.mocked(toast.error).mockClear()
+    mock.onPost('/auth/login').reply(403, { code: 'ACCOUNT_SUSPENDED', detail: 'Suspended' })
+
+    await expect(api.post('/auth/login', {})).rejects.toBeDefined()
+
+    expect(tokenStore.getAccess()).toBe('a1')
+    expect(expired).not.toHaveBeenCalled()
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('shows one message and ends the session once for parallel suspended answers', async () => {
+    tokenStore.set('a1', 'r1')
+    const expired = vi.fn()
+    setSessionExpiredHandler(expired)
+    vi.mocked(toast.error).mockClear()
+    mock.onGet().reply(403, { code: 'ACCOUNT_SUSPENDED', detail: 'Suspended' })
+
+    await Promise.allSettled([api.get('/states'), api.get('/me'), api.get('/notifications')])
+
+    expect(expired).toHaveBeenCalledTimes(1)
+    expect(toast.error).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps the session on other 403 answers', async () => {
     tokenStore.set('a1', 'r1')
     const expired = vi.fn()

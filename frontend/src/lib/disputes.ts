@@ -1,4 +1,5 @@
 import { keepPreviousData, useQuery, type QueryClient } from '@tanstack/react-query'
+import { invalidateAdminActivity } from './admin'
 import { api } from './api'
 import { invalidateBookingQueries } from './bookings'
 import type { Page } from './owner'
@@ -119,6 +120,7 @@ export function invalidateDisputes(queryClient: QueryClient) {
     queryClient.invalidateQueries({ queryKey: ['admin', 'dispute'] }),
     queryClient.invalidateQueries({ queryKey: ['admin', 'booking'] }),
     invalidateBookingQueries(queryClient),
+    invalidateAdminActivity(queryClient),
   ]).then(() => undefined)
 }
 

@@ -9,6 +9,7 @@ import { useAdminListings, type AdminListingSummary } from '../../lib/admin'
 import { errorMessage } from '../../lib/errors'
 import { formatDateTime } from '../../lib/format'
 import type { ListingStatus } from '../../lib/owner'
+import { stepBackIfEmpty } from '../../lib/usePaging'
 
 const FILTERS: { value: ListingStatus; label: string }[] = [
   { value: 'PENDING_REVIEW', label: 'Pending review' },
@@ -52,8 +53,7 @@ export function ListingQueuePage() {
   const [page, setPage] = useState(0)
   const { data, error, isPending } = useAdminListings(status, page)
 
-  // The last row of a later page was handled elsewhere: step back instead of showing an empty page.
-  if (data !== undefined && data.content.length === 0 && page > 0) setPage(page - 1)
+  stepBackIfEmpty(page, setPage, data?.content)
 
   return (
     <div className="space-y-6">

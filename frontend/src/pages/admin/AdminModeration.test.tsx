@@ -197,6 +197,21 @@ describe('admin reviews', () => {
     expect(await screen.findByRole('button', { name: 'Unhide' })).toBeInTheDocument()
   })
 
+  it('limits a hide reason to 300 characters', async () => {
+    mock.onGet('/admin/reviews').reply(200, page([review(1)]))
+    const u = userEvent.setup()
+    renderApp('/admin/reviews')
+    await u.click(await screen.findByRole('button', { name: 'Hide' }))
+    const dialog = within(await screen.findByRole('dialog', { name: 'Hide this review?' }))
+
+    await u.click(dialog.getByLabelText('Reason'))
+    await u.paste('x'.repeat(301))
+    await u.click(dialog.getByRole('button', { name: 'Hide' }))
+
+    expect(await dialog.findByText('Use at most 300 characters')).toBeInTheDocument()
+    expect(mock.history.post).toHaveLength(0)
+  })
+
   it('unhides a review', async () => {
     mock.onGet('/admin/reviews').replyOnce(200, page([review(2, { hidden: true, hiddenReason: 'Spam' })]))
     mock.onGet('/admin/reviews').reply(200, page([review(2)]))

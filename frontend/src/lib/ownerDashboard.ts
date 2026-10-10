@@ -1,7 +1,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { api } from './api'
 import type { BookingStatus, OwnerBookingDto } from './bookings'
-import { blobProblem, filenameFrom, saveBlob } from './download'
+import { downloadCsv } from './download'
 import type { Page } from './owner'
 import { addDays, istDate } from './time'
 
@@ -93,18 +93,7 @@ export const getOwnerEarnings = async (filters: EarningsFilters, page = 0, size 
   (await api.get<OwnerEarningsDto>('/owner/earnings', { params: { ...earningsParams(filters), page, size } })).data
 
 /** Every row for the filters as a CSV (the server names the file); `truncated` when it cut the export at its row limit. */
-export async function downloadEarningsCsv(filters: EarningsFilters): Promise<{ truncated: boolean }> {
-  try {
-    const response = await api.get<Blob>('/owner/earnings', {
-      params: { ...earningsParams(filters), format: 'csv' },
-      responseType: 'blob',
-    })
-    saveBlob(response.data, filenameFrom(response.headers['content-disposition']) ?? 'earnings.csv')
-    return { truncated: String(response.headers['x-truncated']).toLowerCase() === 'true' }
-  } catch (error) {
-    throw await blobProblem(error)
-  }
-}
+export const downloadEarningsCsv = (filters: EarningsFilters) => downloadCsv('/owner/earnings', earningsParams(filters), 'earnings.csv')
 
 export const getOwnerCalendar = async (listingId: number, from: string, to: string) =>
   (await api.get<OwnerCalendarDto>('/owner/calendar', { params: { listingId, from, to } })).data

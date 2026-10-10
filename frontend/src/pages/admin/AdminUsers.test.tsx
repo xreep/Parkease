@@ -77,6 +77,28 @@ describe('admin users', () => {
     await waitFor(() => expect(calls().at(-1)!.params).toEqual({ role: 'OWNER', status: 'SUSPENDED', q: 'asha', page: 0, size: 20 }))
   })
 
+  it('searches by name or email', async () => {
+    mock.onGet('/admin/users').reply(200, page([user(5)]))
+    renderApp('/admin/users')
+
+    expect(await screen.findByPlaceholderText('Name or email')).toBeInTheDocument()
+  })
+
+  it('steps back when the last user of a later page is gone, but not on stale placeholder data', async () => {
+    mock.onGet('/admin/users').reply((config) =>
+      config.params.page === 1 ? [200, page([], 2, 1)] : [200, page([user(5)], 2, 0)],
+    )
+    const u = userEvent.setup()
+    renderApp('/admin/users')
+    await screen.findByRole('article', { name: 'Asha Rao' })
+
+    await u.click(screen.getByRole('button', { name: 'Next' }))
+
+    await waitFor(() => expect(calls().filter((r) => r.params.page === 0).length).toBeGreaterThanOrEqual(1))
+    await waitFor(() => expect(calls().at(-1)!.params.page).toBe(0))
+    expect(await screen.findByRole('article', { name: 'Asha Rao' })).toBeInTheDocument()
+  })
+
   it('shows an empty state', async () => {
     mock.onGet('/admin/users').reply(200, page([]))
     renderApp('/admin/users')

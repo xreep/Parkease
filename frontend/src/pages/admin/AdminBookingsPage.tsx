@@ -14,6 +14,7 @@ import { BOOKING_STATUS_LABELS, type BookingStatus } from '../../lib/bookings'
 import { errorMessage } from '../../lib/errors'
 import { formatINR } from '../../lib/format'
 import { formatWindow } from '../../lib/time'
+import { stepBackIfEmpty, withPageReset } from '../../lib/usePaging'
 
 const STATUSES = Object.keys(BOOKING_STATUS_LABELS) as BookingStatus[]
 
@@ -33,10 +34,8 @@ export function AdminBookingsPage() {
   }
   const { data, error, isPending, isPlaceholderData } = useAdminBookings(filters, page)
 
-  const filter = <T,>(set: (value: T) => void) => (value: T) => {
-    set(value)
-    setPage(0)
-  }
+  const filter = withPageReset(setPage)
+  stepBackIfEmpty(page, setPage, data?.content, isPlaceholderData)
 
   return (
     <div className="space-y-6">
@@ -55,6 +54,7 @@ export function AdminBookingsPage() {
           <TextField label="To" type="date" value={to} min={from || undefined} onChange={(e) => filter(setTo)(e.target.value)} />
           <StateCityFilter value={place} onChange={filter(setPlace)} />
         </div>
+        <p className="text-xs text-slate-500">Pick a city to filter by place — the state only narrows the city list.</p>
       </div>
 
       {isPending ? (

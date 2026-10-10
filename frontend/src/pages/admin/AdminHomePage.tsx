@@ -9,11 +9,10 @@ import { Select } from '../../components/ui/Select'
 import { Spinner } from '../../components/ui/Spinner'
 import { useAdminStats, useQueues, type AdminStatsDto } from '../../lib/admin'
 import { errorMessage } from '../../lib/errors'
-import { formatCompactINR, formatINR, formatPercent } from '../../lib/format'
+import { formatCompactINR, formatINR, formatPercent, plural } from '../../lib/format'
 import { STATS_RANGES, type StatsRange } from '../../lib/ownerDashboard'
 import { formatShortDate } from '../../lib/time'
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
 function Kpi({ label, value, note }: { label: string; value: string; note?: string }) {
   return (

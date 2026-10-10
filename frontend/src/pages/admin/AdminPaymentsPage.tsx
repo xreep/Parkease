@@ -13,6 +13,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { TextField } from '../../components/ui/TextField'
 import { panelId, tabId } from '../../components/ui/tabIds'
 import { ViewTabs } from '../../components/ui/ViewTabs'
+import { invalidateAdminActivity } from '../../lib/admin'
 import {
   adminErrorMessage,
   retryRefund,
@@ -26,6 +27,7 @@ import type { PaymentStatus } from '../../lib/bookings'
 import { PAYMENT_STATUS_LABELS } from '../../lib/driver'
 import { errorMessage } from '../../lib/errors'
 import { formatDateTime, formatINR } from '../../lib/format'
+import { stepBackIfEmpty, withPageReset } from '../../lib/usePaging'
 
 type View = 'payments' | 'refunds'
 const TABS: { value: View; label: string }[] = [
@@ -46,10 +48,8 @@ function PaymentsView() {
   const [page, setPage] = useState(0)
   const filters: PaymentFilters = { ...(status && { status }), ...(q && { q }), ...(from && { from }), ...(to && { to }) }
   const { data, error, isPending, isPlaceholderData } = useAdminPayments(filters, page)
-  const filter = <T,>(set: (value: T) => void) => (value: T) => {
-    set(value)
-    setPage(0)
-  }
+  const filter = withPageReset(setPage)
+  stepBackIfEmpty(page, setPage, data?.content, isPlaceholderData)
 
   return (
     <>
@@ -114,8 +114,12 @@ function RefundRow({ refund, onChanged }: { refund: AdminRefund; onChanged: () =
   async function retry() {
     setRetrying(true)
     try {
-      await retryRefund(refund.id)
-      toast.success('Refund retried')
+      const result = await retryRefund(refund.id)
+      if (result.status === 'FAILED') {
+        toast.warning(`The refund failed again${result.lastError ? `: ${result.lastError}` : ''}`)
+      } else {
+        toast.success('Refund retried')
+      }
     } catch (error) {
       toast.error(adminErrorMessage(error))
     } finally {
@@ -127,7 +131,12 @@ function RefundRow({ refund, onChanged }: { refund: AdminRefund; onChanged: () =
 
   return (
     <tr className="align-top">
-      <td className="px-3 py-2">{bookingLink(refund.bookingId, refund.bookingCode)}</td>
+      <td className="space-y-2 px-3 py-2">
+        <p>{bookingLink(refund.bookingId, refund.bookingCode)}</p>
+        {refund.status === 'FAILED' && (
+          <Button type="button" className="px-3 py-1.5" loading={retrying} onClick={() => void retry()}>Retry</Button>
+        )}
+      </td>
       <td className="px-3 py-2 text-right tabular-nums">{formatINR(refund.amount)}</td>
       <td className="px-3 py-2"><StatusBadge kind="refund" status={refund.status} /></td>
       <td className="px-3 py-2 tabular-nums">{refund.attempts}</td>
@@ -136,11 +145,6 @@ function RefundRow({ refund, onChanged }: { refund: AdminRefund; onChanged: () =
         {refund.lastError && <p className="break-words text-xs text-red-600 dark:text-red-400">{refund.lastError}</p>}
       </td>
       <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-600 dark:text-slate-400">{formatDateTime(refund.createdAt)}</td>
-      <td className="px-3 py-2 text-right">
-        {refund.status === 'FAILED' && (
-          <Button type="button" className="px-3 py-1.5" loading={retrying} onClick={() => void retry()}>Retry</Button>
-        )}
-      </td>
     </tr>
   )
 }
@@ -150,11 +154,13 @@ function RefundsView() {
   const [status, setStatus] = useState<RefundStatus | ''>('')
   const [page, setPage] = useState(0)
   const { data, error, isPending, isPlaceholderData } = useAdminRefunds(status || undefined, page)
+  stepBackIfEmpty(page, setPage, data?.content, isPlaceholderData)
   const refresh = () =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: ['admin', 'refunds'] }),
       queryClient.invalidateQueries({ queryKey: ['admin', 'payments'] }),
       queryClient.invalidateQueries({ queryKey: ['admin', 'booking'] }),
+      invalidateAdminActivity(queryClient),
     ]).then(() => undefined)
 
   return (
@@ -187,8 +193,8 @@ function RefundsView() {
               <caption className="sr-only">Refunds</caption>
               <thead className="bg-slate-50 text-slate-600 dark:bg-slate-900 dark:text-slate-400">
                 <tr>
-                  {['Booking', 'Amount', 'Status', 'Attempts', 'Reason', 'Created', ''].map((h, i) => (
-                    <th key={i} scope="col" className={clsx('whitespace-nowrap px-3 py-2 font-medium', h === 'Amount' && 'text-right')}>{h || <span className="sr-only">Actions</span>}</th>
+                  {['Booking', 'Amount', 'Status', 'Attempts', 'Reason', 'Created'].map((h) => (
+                    <th key={h} scope="col" className={clsx('whitespace-nowrap px-3 py-2 font-medium', h === 'Amount' && 'text-right')}>{h}</th>
                   ))}
                 </tr>
               </thead>

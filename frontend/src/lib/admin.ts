@@ -1,6 +1,6 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, type QueryClient } from '@tanstack/react-query'
 import { api } from './api'
-import { blobProblem, filenameFrom, saveBlob } from './download'
+import { downloadCsv } from './download'
 import { statsRange, type StatsRange } from './ownerDashboard'
 import type { ListingDetail, ListingStatus, DocumentType, Page, SignedUrl, VerificationStatus, ListingSummary } from './owner'
 
@@ -141,18 +141,8 @@ export const getReport = async <K extends ReportKind>(kind: K, filters: ReportFi
   (await api.get<K extends 'usage' ? UsageReport : RevenueReport>(`/admin/reports/${kind}`, { params: reportParams(filters) })).data
 
 /** The report as a CSV (the server names the file); `truncated` when it cut the export at its row limit. */
-export async function downloadReportCsv(kind: ReportKind, filters: ReportFilters): Promise<{ truncated: boolean }> {
-  try {
-    const response = await api.get<Blob>(`/admin/reports/${kind}`, {
-      params: { ...reportParams(filters), format: 'csv' },
-      responseType: 'blob',
-    })
-    saveBlob(response.data, filenameFrom(response.headers['content-disposition']) ?? `${kind}-report.csv`)
-    return { truncated: String(response.headers['x-truncated']).toLowerCase() === 'true' }
-  } catch (error) {
-    throw await blobProblem(error)
-  }
-}
+export const downloadReportCsv = (kind: ReportKind, filters: ReportFilters) =>
+  downloadCsv(`/admin/reports/${kind}`, reportParams(filters), `${kind}-report.csv`)
 
 export function useReport<K extends ReportKind>(kind: K, filters: ReportFilters, enabled: boolean) {
   return useQuery({
@@ -217,3 +207,10 @@ export const suspendListing = async (id: number, reason: string) =>
   (await api.post<AdminListingDetail>(`/admin/listings/${id}/suspend`, { reason })).data
 export const reinstateListing = async (id: number) =>
   (await api.post<AdminListingDetail>(`/admin/listings/${id}/reinstate`)).data
+
+/** Every admin write is logged and can move the numbers: refresh the audit log, the overview and the review queues. */
+export function invalidateAdminActivity(queryClient: QueryClient) {
+  return Promise.all(
+    ['audit', 'stats', 'queues'].map((key) => queryClient.invalidateQueries({ queryKey: ['admin', key] })),
+  ).then(() => undefined)
+}

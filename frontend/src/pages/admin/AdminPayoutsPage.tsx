@@ -10,6 +10,7 @@ import { Empty, Loading } from '../../components/admin/common'
 import { Button } from '../../components/ui/Button'
 import { Dialog } from '../../components/ui/Dialog'
 import { TextField } from '../../components/ui/TextField'
+import { invalidateAdminActivity } from '../../lib/admin'
 import {
   downloadPayoutsCsv,
   mapAdminError,
@@ -19,7 +20,8 @@ import {
   type PayoutOwner,
 } from '../../lib/adminManage'
 import { errorMessage } from '../../lib/errors'
-import { formatINR } from '../../lib/format'
+import { formatINR, plural } from '../../lib/format'
+import { useCsvExport } from '../../lib/useCsvExport'
 import { formatWindow } from '../../lib/time'
 
 const referenceSchema = z.object({
@@ -27,7 +29,6 @@ const referenceSchema = z.object({
 })
 type ReferenceValues = z.infer<typeof referenceSchema>
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 const payoutLine = (o: PayoutOwner) =>
   o.payoutMethod && o.payoutMasked ? `${o.payoutMethod === 'UPI' ? 'UPI' : 'Bank'} · ${o.payoutMasked}` : 'No payout details yet'
 
@@ -75,7 +76,7 @@ function ReferenceForm({
       <TextField label="Payment reference" hint="The UPI or bank transaction id" error={errors.reference?.message} {...register('reference')} />
       <div className="flex justify-end gap-2">
         <Button type="button" variant="secondary" disabled={isSubmitting} onClick={onClose}>Cancel</Button>
-        <Button type="submit" loading={isSubmitting}>Mark as paid</Button>
+        <Button type="submit" loading={isSubmitting} disabled={count === 0}>Mark as paid</Button>
       </div>
     </form>
   )
@@ -98,6 +99,7 @@ function OwnerCard({ owner }: { owner: PayoutOwner }) {
     Promise.all([
       queryClient.invalidateQueries({ queryKey: ['admin', 'payouts'] }),
       queryClient.invalidateQueries({ queryKey: ['admin', 'payout-earnings'] }),
+      invalidateAdminActivity(queryClient),
     ]).then(() => undefined)
 
   async function confirm(reference: string) {
@@ -195,21 +197,7 @@ function OwnerCard({ owner }: { owner: PayoutOwner }) {
 
 export function AdminPayoutsPage() {
   const { data, error, isPending } = useAdminPayouts()
-  const [exporting, setExporting] = useState(false)
-  const [exportError, setExportError] = useState<string | null>(null)
-
-  async function exportCsv() {
-    setExporting(true)
-    setExportError(null)
-    try {
-      const { truncated } = await downloadPayoutsCsv()
-      if (truncated) toast.warning('The export was cut at the row limit.')
-    } catch (e) {
-      setExportError(errorMessage(e))
-    } finally {
-      setExporting(false)
-    }
-  }
+  const csv = useCsvExport(downloadPayoutsCsv, 'The export was cut at the row limit.')
 
   const total = Math.round((data ?? []).reduce((sum, o) => sum + o.pendingAmount, 0) * 100) / 100
 
@@ -217,12 +205,12 @@ export function AdminPayoutsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-semibold">Payouts</h2>
-        <Button type="button" variant="secondary" loading={exporting} onClick={() => void exportCsv()}>
-          {!exporting && <Download aria-hidden className="h-4 w-4" />}
+        <Button type="button" variant="secondary" loading={csv.exporting} onClick={() => void csv.run()}>
+          {!csv.exporting && <Download aria-hidden className="h-4 w-4" />}
           Download CSV
         </Button>
       </div>
-      <FormError message={exportError} />
+      <FormError message={csv.error} />
 
       {isPending ? (
         <Loading />
