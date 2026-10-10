@@ -19,5 +19,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts", "publicUrl.ts"]
+  "include": ["vite.config.ts", "publicUrl.ts", "buildChecks.ts"]
 }

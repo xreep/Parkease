@@ -17,8 +17,13 @@ const csp = Object.fromEntries(
 ) as Record<string, string[]>
 
 describe('vercel.json', () => {
-  it('rewrites every path to the single-page app (files on disk are served first)', () => {
-    expect(config.rewrites).toContainEqual({ source: '/(.*)', destination: '/index.html' })
+  it('rewrites app paths to the single-page app, but never /assets/, so a missing chunk is a real 404', () => {
+    expect(config.rewrites).toEqual([{ source: '/((?!assets/).*)', destination: '/index.html' }])
+    const pattern = new RegExp(`^${config.rewrites[0].source}$`)
+    expect(pattern.test('/login')).toBe(true)
+    expect(pattern.test('/driver/bookings/5')).toBe(true)
+    expect(pattern.test('/assets/Page-abc123.js')).toBe(false)
+    expect(pattern.test('/assets/')).toBe(false)
   })
 
   it('sends the security headers on every route', () => {
