@@ -73,6 +73,25 @@ public final class EmailTemplates {
                 "View your listings", link);
     }
 
+    public static EmailMessage disputeOpened(User owner, Booking booking, String category, String link) {
+        return build(owner, "A driver opened a dispute – ParkEase",
+                "A driver reported a problem (" + category + ") with booking " + booking.getBookingCode() + " at "
+                        + booking.getListing().getTitle() + ". You can add your side of the story once.",
+                "View report", link);
+    }
+
+    public static EmailMessage disputeResponse(User driver, Booking booking, String link) {
+        return build(driver, "The owner responded to your report – ParkEase",
+                "The owner has responded to the problem you reported for booking " + booking.getBookingCode() + ".",
+                "View report", link);
+    }
+
+    public static EmailMessage disputeResolved(User user, Booking booking, String outcome, String link) {
+        return build(user, "Dispute resolved – ParkEase",
+                "The report for booking " + booking.getBookingCode() + " has been resolved. " + outcome,
+                "View booking", link);
+    }
+
     /** Booking emails read lazy associations of {@code booking}; build them inside a transaction. */
     public static EmailMessage bookingConfirmed(User driver, Booking booking, String link) {
         return build(driver, "Booking confirmed – ParkEase",

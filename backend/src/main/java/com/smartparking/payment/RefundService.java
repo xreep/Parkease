@@ -191,6 +191,24 @@ public class RefundService {
         return candidate.receipt() != null && candidate.receipt().startsWith("parkease-refund-");
     }
 
+    /**
+     * What can still be given back on the payment: its amount less every refund of its own money that is owed,
+     * failed attempts included (those are retried, so the money is already spoken for). Zero when the payment holds
+     * no money (not captured, or fully refunded).
+     */
+    @Transactional(readOnly = true)
+    public BigDecimal refundableRemaining(Payment payment) {
+        if (payment == null || (payment.getStatus() != PaymentStatus.CAPTURED
+                && payment.getStatus() != PaymentStatus.PARTIALLY_REFUNDED)) {
+            return BigDecimal.ZERO.setScale(2);
+        }
+        BigDecimal owed = refunds.findByPaymentId(payment.getId()).stream()
+                .filter(r -> r.getProviderPaymentId() == null)
+                .map(Refund::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return payment.getAmount().subtract(owed).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+    }
+
     /** What can still be refunded on the payment's own money: its amount less the refunds that did not fail. */
     private BigDecimal remaining(Payment payment) {
         return payment.getAmount().subtract(coveredBy(payment, null));
@@ -332,6 +350,14 @@ public class RefundService {
      * issuing a second one. Returns true when the provider has the refund now.
      */
     public boolean retry(Long refundId) {
+        return retry(refundId, false);
+    }
+
+    /**
+     * Like {@link #retry(Long)}; an admin's manual retry ({@code ignoreAttemptLimit}) goes ahead even when the
+     * automatic attempts are used up. The attempt still counts, and nothing else is reset.
+     */
+    public boolean retry(Long refundId, boolean ignoreAttemptLimit) {
         Boolean done = tx.execute(status -> {
             Long bookingId = refunds.findBookingIdById(refundId).orElse(null);
             if (bookingId == null) {
@@ -343,7 +369,7 @@ public class RefundService {
             boolean extraPayment = refund.getProviderPaymentId() != null;
             boolean refundable = payment.getStatus() == PaymentStatus.CAPTURED
                     || payment.getStatus() == PaymentStatus.PARTIALLY_REFUNDED;
-            if (refund.getStatus() != RefundStatus.FAILED || refund.getAttempts() >= MAX_ATTEMPTS
+            if (refund.getStatus() != RefundStatus.FAILED || (!ignoreAttemptLimit && refund.getAttempts() >= MAX_ATTEMPTS)
                     || (!extraPayment && (!refundable
                     || booking.getRefundAmount().compareTo(payment.getAmount()) >= 0
                     // the payment's other refunds (partial ones included) leave no room for this one any more
