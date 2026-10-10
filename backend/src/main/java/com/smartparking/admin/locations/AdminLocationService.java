@@ -220,7 +220,7 @@ public class AdminLocationService {
                     constraint = cve.getConstraintName();
                 }
             }
-            if (constraint != null && constraint.contains("code")) {
+            if (constraint != null && "states_code_key".equals(constraint)) {
                 throw ApiException.conflict("CODE_TAKEN", "A state or territory with this code already exists");
             }
             throw slugTaken(slug);

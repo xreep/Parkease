@@ -12,8 +12,9 @@ import org.springframework.data.repository.Repository;
 import org.springframework.data.repository.query.Param;
 
 /**
- * Platform-wide aggregates for the admin KPIs and reports. Bookings are attributed by their creation instant
- * (callers pass the IST day boundaries); {@code stateId}/{@code cityId} 0 match everything. "Money moved" is the
+ * Platform-wide aggregates for the admin KPIs and reports. Money and booking counts are attributed by the
+ * booking's creation instant (callers pass the IST day boundaries); booked time is by period. {@code stateId}/
+ * {@code cityId} 0 match everything. "Money moved" is the
  * payment statuses of {@code PaymentStatus.MONEY_MOVED}; platform fee and GST count only for payments that kept
  * their money (captured or partially refunded, not fully refunded).
  */
@@ -104,8 +105,8 @@ public interface AdminReportRepository extends Repository<Booking, Long> {
     List<ParkingListing> approvedListings(@Param("stateId") long stateId, @Param("cityId") long cityId);
 
     /**
-     * Spans of the CONFIRMED, ACTIVE and COMPLETED bookings created in [createdFrom, createdTo) on APPROVED listings
-     * inside the filter, restricted to those overlapping [from, to).
+     * Spans of the CONFIRMED, ACTIVE and COMPLETED bookings on APPROVED listings inside the filter that overlap
+     * [from, to), whenever they were created: booked time is by period.
      */
     @Query("""
             select b.listing.id as listingId, b.slot.id as slotId, b.startTime as startTime, b.endTime as endTime
@@ -114,13 +115,10 @@ public interface AdminReportRepository extends Repository<Booking, Long> {
               and b.status in (com.smartparking.booking.BookingStatus.CONFIRMED,
                                com.smartparking.booking.BookingStatus.ACTIVE,
                                com.smartparking.booking.BookingStatus.COMPLETED)
-              and b.createdAt >= :createdFrom and b.createdAt < :createdTo
               and b.startTime < :to and b.endTime > :from
               and (:stateId = 0L or b.listing.city.state.id = :stateId)
               and (:cityId = 0L or b.listing.city.id = :cityId)
             """)
-    List<ListingSlotWindow> bookedWindows(@Param("createdFrom") Instant createdFrom,
-                                          @Param("createdTo") Instant createdTo, @Param("from") Instant from,
-                                          @Param("to") Instant to, @Param("stateId") long stateId,
-                                          @Param("cityId") long cityId);
+    List<ListingSlotWindow> bookedWindows(@Param("from") Instant from, @Param("to") Instant to,
+                                          @Param("stateId") long stateId, @Param("cityId") long cityId);
 }

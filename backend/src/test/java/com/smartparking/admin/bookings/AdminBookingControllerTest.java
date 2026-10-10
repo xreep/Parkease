@@ -162,6 +162,33 @@ class AdminBookingControllerTest {
                 .andExpect(jsonPath("$.totalPages").value(2));
     }
 
+    private String driverNotice(String type) {
+        return jdbc.queryForObject("select n.body from notifications n join users u on u.id = n.user_id "
+                + "where u.email = 'ab-driver@example.com' and n.type = ? order by n.id desc limit 1", String.class, type);
+    }
+
+    @Test
+    void theCancellationNoticeSaysIssuedWhenTheRefundWentThroughAndProcessedWhenItDidNot() throws Exception {
+        long settled = paid(driver, puneListing, 10);
+        cancel(settled, "{\"reason\":\"Closed\"}").andExpect(status().isOk());
+        assertThat(driverNotice("BOOKING_CANCELLED_BY_ADMIN")).contains("₹67.08 has been issued")
+                .doesNotContain("returned");
+
+        provider.pendingRefunds = true;
+        long settling = paid(driver, puneListing, 14);
+        cancel(settling, "{\"reason\":\"Closed again\"}").andExpect(status().isOk());
+        assertThat(driverNotice("BOOKING_CANCELLED_BY_ADMIN")).contains("₹67.08 will be processed")
+                .doesNotContain("returned");
+
+        provider.pendingRefunds = false;
+        provider.failures.set(1);
+        long failing = paid(driver, puneListing, 18);
+        cancel(failing, "{\"reason\":\"Closed thrice\"}").andExpect(status().isOk());
+        assertThat(driverNotice("BOOKING_CANCELLED_BY_ADMIN")).contains("will be processed");
+        assertThat(jdbc.queryForObject("select details from admin_actions where target_id = ? "
+                + "and action = 'BOOKING_CANCELLED'", String.class, failing)).doesNotContain("Refunded");
+    }
+
     @Test
     void filtersByStartDateInIstAndRejectsABackwardsRange() throws Exception {
         long a = paid(driver, puneListing, 10);

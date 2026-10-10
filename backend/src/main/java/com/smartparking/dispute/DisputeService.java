@@ -4,6 +4,7 @@ import com.smartparking.booking.Booking;
 import com.smartparking.booking.BookingRepository;
 import com.smartparking.common.config.AppProperties;
 import com.smartparking.common.error.ApiException;
+import com.smartparking.common.util.SqlStates;
 import com.smartparking.common.web.PageResponse;
 import com.smartparking.dispute.DisputeMapper.Audience;
 import com.smartparking.dispute.dto.CreateDisputeRequest;
@@ -16,6 +17,7 @@ import com.smartparking.user.User;
 import jakarta.persistence.EntityManager;
 import java.time.Clock;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -28,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class DisputeService {
 
     static final String OWNER_PATH = "/owner/disputes";
+    static final int MIN_DESCRIPTION = 10;
 
     private final DisputeRepository disputes;
     private final BookingRepository bookings;
@@ -41,22 +44,38 @@ public class DisputeService {
 
     @Transactional
     public DisputeDto raise(Long driverId, Long bookingId, CreateDisputeRequest request) {
-        bookings.findByIdAndDriverId(bookingId, driverId).orElseThrow(() -> ApiException.notFound("Booking not found"));
+        String description = request.description().trim();
+        if (description.length() < MIN_DESCRIPTION) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "Describe the problem in at least " + MIN_DESCRIPTION + " characters");
+        }
+        // Ownership by id only: the booking must not be loaded before its row lock, or the locking query would hand
+        // back the stale instance that was read without it.
+        if (!bookings.existsByIdAndDriverId(bookingId, driverId)) {
+            throw ApiException.notFound("Booking not found");
+        }
         // The booking row lock serialises concurrent reports of one booking (the unique index is the backstop).
-        Booking booking = bookings.findByIdForUpdate(bookingId).orElseThrow();
+        Booking booking = bookings.findByIdForUpdate(bookingId).orElseThrow(() -> ApiException.notFound("Booking not found"));
         String reason = DisputePolicy.notDisputableReason(booking, false, clock.instant());
         if (reason != null) {
             throw ApiException.conflict("DISPUTE_NOT_ALLOWED", reason);
         }
         if (disputes.existsByBookingIdAndStatusNot(bookingId, DisputeStatus.RESOLVED)) {
-            throw ApiException.conflict("DISPUTE_ALREADY_OPEN", "There is already an open report for this booking");
+            throw alreadyOpen();
         }
         Dispute dispute = new Dispute();
         dispute.setBooking(booking);
         dispute.setRaisedBy(em.getReference(User.class, driverId));
         dispute.setCategory(request.category());
-        dispute.setDescription(request.description().trim());
-        disputes.saveAndFlush(dispute);
+        dispute.setDescription(description);
+        try {
+            disputes.saveAndFlush(dispute);
+        } catch (DataIntegrityViolationException e) {
+            if (SqlStates.UNIQUE_VIOLATION.equals(SqlStates.of(e))) { // uq_disputes_one_open_per_booking
+                throw alreadyOpen();
+            }
+            throw e;
+        }
 
         User owner = booking.getListing().getOwner();
         notifier.notify(owner, NotificationType.DISPUTE_OPENED, "A driver reported a problem",
@@ -92,7 +111,11 @@ public class DisputeService {
 
     @Transactional
     public DisputeDto respond(Long ownerId, Long id, String rawResponse) {
-        ownedBy(ownerId, id);
+        // Ownership by id only, then the lock: loading the dispute first would make the locking query return that
+        // stale instance, and the update below would write its old status and response back over a concurrent change.
+        if (!disputes.existsByIdAndBookingListingOwnerId(id, ownerId)) {
+            throw ApiException.notFound("Report not found");
+        }
         Dispute dispute = disputes.findByIdForUpdate(id).orElseThrow(() -> ApiException.notFound("Report not found"));
         if (dispute.getStatus() == DisputeStatus.RESOLVED) {
             throw ApiException.conflict("DISPUTE_NOT_ALLOWED", "This report has already been resolved");
@@ -111,6 +134,10 @@ public class DisputeService {
                         + booking.getBookingCode() + ".", path,
                 EmailTemplates.disputeResponse(dispute.getRaisedBy(), booking, app.frontendUrl() + path));
         return mapper.toDto(dispute, Audience.OWNER);
+    }
+
+    private static ApiException alreadyOpen() {
+        return ApiException.conflict("DISPUTE_ALREADY_OPEN", "There is already an open report for this booking");
     }
 
     private Dispute ownedBy(Long ownerId, Long id) {

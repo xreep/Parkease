@@ -62,6 +62,8 @@ ALTER TABLE reviews
 -- The GST rate a booking was priced with, so receipts keep showing it after the rate is edited. Existing rows
 -- were all priced at 18%.
 ALTER TABLE bookings ADD COLUMN gst_percent NUMERIC(5, 2) NOT NULL DEFAULT 18;
+-- New bookings must state the rate they were priced with; no silent fallback.
+ALTER TABLE bookings ALTER COLUMN gst_percent DROP DEFAULT;
 
 -- 1 = metro, 2 = other state capitals, 3 = everything else.
 ALTER TABLE cities
@@ -73,3 +75,12 @@ WHERE slug IN ('mumbai', 'new-delhi', 'bengaluru', 'chennai', 'kolkata', 'hydera
 UPDATE cities SET tier = 2 WHERE is_capital AND tier = 3;
 
 -- Admin cancellations: booking actors/cancelled_by already allow 'ADMIN' (V6) and notifications.type is unconstrained.
+
+-- Refunds made by a dispute resolution: the resolution's own message tells the driver, like for cancellations.
+ALTER TABLE refunds DROP CONSTRAINT refunds_notice_check;
+ALTER TABLE refunds ADD CONSTRAINT refunds_notice_check
+    CHECK (notice IN ('SLOT_LOST','BOOKING_CLOSED','CANCELLATION','DISPUTE'));
+
+-- The admin KPI dashboard and reports select bookings and new accounts by creation time.
+CREATE INDEX idx_bookings_created_at ON bookings (created_at);
+CREATE INDEX idx_users_created_at ON users (created_at);

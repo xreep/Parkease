@@ -11,5 +11,10 @@ public enum RefundNotice {
      * first attempt, so nothing is sent for it; a refund that failed is announced when a retry (or the provider) gets
      * it through, once.
      */
-    CANCELLATION
+    CANCELLATION,
+    /**
+     * The refund of a dispute resolution. The resolution's own message covers the first attempt; a refund that
+     * failed is announced when a retry gets it through, once.
+     */
+    DISPUTE
 }

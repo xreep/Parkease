@@ -172,6 +172,11 @@ class AdminPayoutControllerTest {
         adminGet("/api/v1/admin/payouts").andExpect(jsonPath("$[0].payoutMasked").value("x***@ybl"));
         jdbc.update("update owner_profiles set payout_upi = '9876543210' where user_id = ?", ownerAId);
         adminGet("/api/v1/admin/payouts").andExpect(jsonPath("$[0].payoutMasked").value("98***"));
+        // never more than one character of a short local part
+        for (String[] pair : new String[][] {{"ab@upi", "a***@upi"}, {"abc@upi", "a***@upi"}, {"abcd@upi", "ab***@upi"}}) {
+            jdbc.update("update owner_profiles set payout_upi = ? where user_id = ?", pair[0], ownerAId);
+            adminGet("/api/v1/admin/payouts").andExpect(jsonPath("$[0].payoutMasked").value(pair[1]));
+        }
     }
 
     // ---- mark paid ----------------------------------------------------------------------------------------
@@ -249,6 +254,9 @@ class AdminPayoutControllerTest {
                 .andExpect(status().isBadRequest());
         markPaid("{\"ownerId\":" + ownerAId + ",\"reference\":\"REF-1\"}").andExpect(status().isBadRequest());
         markPaid("{\"earningIds\":[" + e1 + "],\"reference\":\"REF-1\"}").andExpect(status().isBadRequest());
+        Long[] tooMany = java.util.stream.LongStream.rangeClosed(1, 501).boxed().toArray(Long[]::new);
+        markPaid(markJson(ownerAId, "REF-1", tooMany)).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
         assertThat(earningStatus(e1)).isEqualTo("PENDING_PAYOUT");
         markPaid(markJson(ownerAId, "x".repeat(100), e1)).andExpect(status().isOk()); // 100 characters fit
         assertThat(jdbc.queryForObject("select length(payout_reference) from owner_earnings where id = ?",

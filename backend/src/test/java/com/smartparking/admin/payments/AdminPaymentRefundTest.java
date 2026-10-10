@@ -164,9 +164,10 @@ class AdminPaymentRefundTest {
                 .isEqualTo("REFUNDED");
         assertThat(jdbc.queryForObject("select refund_amount from bookings where id = ?", java.math.BigDecimal.class, id))
                 .isEqualByComparingTo("67.08");
-        Map<String, Object> audit = jdbc.queryForMap("select action, target_type, target_id from admin_actions "
+        Map<String, Object> audit = jdbc.queryForMap("select action, target_type, target_id, details from admin_actions "
                 + "where action = 'REFUND_RETRIED'");
         assertThat(audit).containsEntry("target_type", "REFUND").containsEntry("target_id", refund);
+        assertThat((String) audit.get("details")).contains("PROCESSED");
         assertThat(provider.calls).hasSize(2);
     }
 
@@ -199,7 +200,21 @@ class AdminPaymentRefundTest {
         provider.failures.set(1);
         retry(refund).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("FAILED"))
                 .andExpect(jsonPath("$.attempts").value(2)).andExpect(jsonPath("$.lastError").isNotEmpty());
+        assertThat(jdbc.queryForObject("select details from admin_actions where action = 'REFUND_RETRIED' "
+                + "order by id desc limit 1", String.class)).contains("FAILED");
         retry(refund).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PROCESSED"));
+        assertThat(jdbc.queryForObject("select details from admin_actions where action = 'REFUND_RETRIED' "
+                + "order by id desc limit 1", String.class)).contains("PROCESSED");
+    }
+
+    @Test
+    void theAuditTextFollowsTheRefundsFinalStatus() throws Exception {
+        long id = paid(driver, 10);
+        long refund = failedRefund(id);
+        provider.pendingRefunds = true; // the provider accepts the retry but is still settling it
+        retry(refund).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PENDING"));
+        assertThat(jdbc.queryForObject("select details from admin_actions where action = 'REFUND_RETRIED'",
+                String.class)).contains("PENDING");
     }
 
     @Test

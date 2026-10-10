@@ -46,6 +46,15 @@ public interface OwnerEarningRepository
 
     Optional<OwnerEarning> findByBookingId(Long bookingId);
 
+    /**
+     * Row-locks the booking's earning (payment -> booking -> earning is the lock order of every money path), so a
+     * refund and a payout cannot overwrite each other. Load it only after taking the lock: an instance already in the
+     * persistence context would be returned as it was read.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select e from OwnerEarning e where e.booking.id = :bookingId")
+    Optional<OwnerEarning> findByBookingIdForUpdate(@Param("bookingId") Long bookingId);
+
     /** Owners with something to be paid out, the largest amount first. */
     @Query("""
             select e.owner.id as ownerId, sum(e.net) as net, count(e) as rows from OwnerEarning e

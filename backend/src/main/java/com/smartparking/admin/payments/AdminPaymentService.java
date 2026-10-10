@@ -13,6 +13,7 @@ import com.smartparking.payment.RefundRepository;
 import com.smartparking.payment.RefundService;
 import com.smartparking.payment.RefundStatus;
 import java.time.LocalDate;
+import java.util.concurrent.atomic.AtomicReference;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -48,8 +49,9 @@ public class AdminPaymentService {
     /**
      * One more provider attempt for a FAILED refund, whatever the attempt count (the automatic retries stop at
      * {@value RefundService#MAX_ATTEMPTS}). The refund service runs it in its own transaction under the payment and
-     * booking locks, so this method is deliberately not transactional itself. The outcome is audited either way and
-     * returned: a refund that fails again simply stays FAILED.
+     * booking locks, so this method is deliberately not transactional itself. The outcome is audited either way (in
+     * the same transaction as the outcome, worded after the refund's final status) and returned: a refund that fails
+     * again simply stays FAILED.
      */
     public AdminRefundDto retry(AuthUser admin, Long refundId) {
         TransactionTemplate tx = new TransactionTemplate(txManager);
@@ -62,13 +64,17 @@ public class AdminPaymentService {
             throw ApiException.conflict("NOT_RETRYABLE", "Only failed refunds can be retried (this one is "
                     + before.getStatus() + ")");
         }
-        boolean issued = refundService.retry(refundId, true);
-        return new TransactionTemplate(txManager).execute(s -> {
-            Refund after = refunds.findById(refundId).orElseThrow();
-            audit.record(admin, "REFUND_RETRIED", "REFUND", refundId,
-                    issued ? "Retry succeeded (" + after.getStatus() + ")" : "Retry failed, refund is still FAILED");
-            return toDto(after);
+        // The audit row is written inside the retry's own transaction, so it exists exactly when the outcome does.
+        AtomicReference<AdminRefundDto> result = new AtomicReference<>();
+        refundService.retry(refundId, true, (issued, after) -> {
+            audit.record(admin, "REFUND_RETRIED", "REFUND", refundId, after.getStatus() == RefundStatus.FAILED
+                    ? "Retry failed, refund is still FAILED" : "Retry succeeded (" + after.getStatus() + ")");
+            result.set(toDto(after));
         });
+        if (result.get() == null) {
+            throw ApiException.notFound("Refund not found");
+        }
+        return result.get();
     }
 
     private static AdminPaymentDto toDto(Payment p) {

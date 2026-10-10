@@ -3,13 +3,8 @@ package com.smartparking.owner.dashboard;
 import static com.smartparking.owner.dashboard.DashboardRanges.dateOf;
 import static com.smartparking.owner.dashboard.DashboardRanges.startOf;
 
-import com.smartparking.availability.AvailabilityRule;
 import com.smartparking.availability.AvailabilityRuleRepository;
-import com.smartparking.availability.SlotCoverage;
-import com.smartparking.availability.SlotCoverage.OpenWindow;
-import com.smartparking.availability.SlotCoverage.Span;
 import com.smartparking.booking.BookingRepository;
-import com.smartparking.booking.BookingRepository.ListingSlotWindow;
 import com.smartparking.booking.BookingRepository.StartAndStatus;
 import com.smartparking.booking.BookingStatus;
 import com.smartparking.booking.OwnerBookingService;
@@ -20,26 +15,23 @@ import com.smartparking.earning.OwnerEarningRepository.StatusTotal;
 import com.smartparking.listing.ListingStatus;
 import com.smartparking.listing.ParkingListing;
 import com.smartparking.listing.ParkingListingRepository;
+import com.smartparking.owner.dashboard.SlotOccupancy.Usage;
 import com.smartparking.owner.dashboard.dto.OwnerStatsDto;
 import com.smartparking.payment.PaymentStatus;
 import com.smartparking.review.ReviewRepository;
 import com.smartparking.review.ReviewRepository.RatingTotals;
-import com.smartparking.slot.ParkingSlot;
 import com.smartparking.slot.ParkingSlotRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -138,53 +130,15 @@ public class OwnerStatsService {
             return BigDecimal.ZERO.setScale(1);
         }
         List<Long> ids = approved.stream().map(ParkingListing::getId).toList();
-        Map<Long, List<ParkingSlot>> activeSlots = slots.findByListingIdInAndActiveTrue(ids).stream()
-                .collect(Collectors.groupingBy(s -> s.getListing().getId()));
-        Map<Long, Map<Integer, AvailabilityRule>> weekly = new HashMap<>();
-        rules.findByListingIdIn(ids).forEach(r -> weekly
-                .computeIfAbsent(r.getListing().getId(), k -> new HashMap<>()).putIfAbsent(r.getDayOfWeek(), r));
-        // Booked spans bucketed by slot and IST day, so each (slot, day) only looks at the spans that touch it.
-        Map<Long, Map<LocalDate, List<Span>>> bookedBySlotAndDay = new HashMap<>();
-        for (ListingSlotWindow w : bookings.findBookedWindows(ownerId, startOf(from), startOf(to.plusDays(1)))) {
-            Span span = new Span(w.getStartTime().getEpochSecond(), w.getEndTime().getEpochSecond());
-            LocalDate first = max(dateOf(w.getStartTime()), from);
-            LocalDate last = min(dateOf(w.getEndTime().minusSeconds(1)), to);
-            Map<LocalDate, List<Span>> perDay = bookedBySlotAndDay.computeIfAbsent(w.getSlotId(), k -> new HashMap<>());
-            for (LocalDate d = first; !d.isAfter(last); d = d.plusDays(1)) {
-                perDay.computeIfAbsent(d, k -> new ArrayList<>()).add(span);
-            }
-        }
-
-        long open = 0;
-        long taken = 0;
-        for (ParkingListing l : approved) {
-            List<ParkingSlot> listingSlots = activeSlots.getOrDefault(l.getId(), List.of());
-            for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
-                AvailabilityRule rule = weekly.getOrDefault(l.getId(), Map.of()).get(d.getDayOfWeek().getValue());
-                Optional<OpenWindow> window = SlotCoverage.openWindow(l.isOpen24x7(), rule, d);
-                if (window.isEmpty()) {
-                    continue;
-                }
-                Span span = window.get().span();
-                open += span.length() * listingSlots.size();
-                for (ParkingSlot s : listingSlots) {
-                    taken += SlotCoverage.coveredLength(
-                            bookedBySlotAndDay.getOrDefault(s.getId(), Map.of()).getOrDefault(d, List.of()), span);
-                }
-            }
-        }
-        if (open == 0) {
+        Usage usage = SlotOccupancy.perListing(approved, slots.findByListingIdInAndActiveTrue(ids),
+                        rules.findByListingIdIn(ids), bookings.findBookedWindows(ownerId, startOf(from),
+                                startOf(to.plusDays(1))), from, to)
+                .values().stream().reduce(Usage.NONE, Usage::plus);
+        if (usage.openSeconds() == 0) {
             return BigDecimal.ZERO.setScale(1);
         }
-        return BigDecimal.valueOf(taken * 100).divide(BigDecimal.valueOf(open), 1, RoundingMode.HALF_UP);
-    }
-
-    private static LocalDate max(LocalDate a, LocalDate b) {
-        return a.isAfter(b) ? a : b;
-    }
-
-    private static LocalDate min(LocalDate a, LocalDate b) {
-        return a.isBefore(b) ? a : b;
+        return BigDecimal.valueOf(usage.bookedSeconds() * 100)
+                .divide(BigDecimal.valueOf(usage.openSeconds()), 1, RoundingMode.HALF_UP);
     }
 
     private static BigDecimal money(BigDecimal value) {
