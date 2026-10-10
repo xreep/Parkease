@@ -21,12 +21,29 @@ spring:
 server:
   port: ${PORT:8080}
   forward-headers-strategy: native
+  # Error bodies are built by GlobalExceptionHandler; this keeps Boot's own /error page equally quiet.
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-exception: false
+    include-binding-errors: never
 
 app:
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
   cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
   bcrypt-strength: 12
   auth-rate-limit-per-minute: 10
+  security:
+    # Per client IP and minute: public reads 120, uploads and disputes 20, payment verification 30.
+    rate-limit:
+      public-per-minute: 120
+      upload-per-minute: 20
+      payment-verify-per-minute: 30
+    # Only true behind a proxy that appends the real peer to X-Forwarded-For (prod: Render).
+    trust-forwarded-for: false
+    trusted-proxy-hops: 1
+    hsts: false
+    max-json-body-bytes: 1048576
   jwt:
     secret: ${JWT_SECRET:}
     access-ttl: 15m
@@ -70,3 +87,7 @@ management:
     web:
       exposure:
         include: health
+  endpoint:
+    health:
+      show-details: never
+      show-components: never

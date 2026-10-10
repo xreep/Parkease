@@ -1,5 +1,6 @@
 package com.smartparking.common.error;
 
+import com.smartparking.common.security.RequestTooLargeException;
 import java.sql.SQLException;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
@@ -41,6 +42,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     ResponseEntity<ProblemDetail> handleUnreadable(HttpMessageNotReadableException ex) {
+        for (Throwable t = ex; t != null; t = t.getCause()) {
+            if (t instanceof RequestTooLargeException) {
+                return respond(problem(HttpStatus.PAYLOAD_TOO_LARGE, "PAYLOAD_TOO_LARGE", "The request body is too large"));
+            }
+        }
         return respond(problem(HttpStatus.BAD_REQUEST, "MALFORMED_REQUEST", "Request body is missing or malformed"));
     }
 
