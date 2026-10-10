@@ -17,6 +17,7 @@ import java.math.RoundingMode;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.BiConsumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Limit;
@@ -147,7 +148,7 @@ public class RefundService {
             case FAILED -> "Refund of " + money + " could not be issued yet; it will be retried";
         };
         events.record(booking, booking.getStatus(), booking.getStatus(), actor, note);
-        if (notice != RefundNotice.CANCELLATION) { // a cancellation's own message tells the driver
+        if (notice != RefundNotice.CANCELLATION && notice != RefundNotice.DISPUTE) { // those messages tell the driver
             notifyDriver(booking, refund);
         }
         return refund;
@@ -191,6 +192,24 @@ public class RefundService {
         return candidate.receipt() != null && candidate.receipt().startsWith("parkease-refund-");
     }
 
+    /**
+     * What can still be given back on the payment: its amount less every refund of its own money that is owed,
+     * failed attempts included (those are retried, so the money is already spoken for). Zero when the payment holds
+     * no money (not captured, or fully refunded).
+     */
+    @Transactional(readOnly = true)
+    public BigDecimal refundableRemaining(Payment payment) {
+        if (payment == null || (payment.getStatus() != PaymentStatus.CAPTURED
+                && payment.getStatus() != PaymentStatus.PARTIALLY_REFUNDED)) {
+            return BigDecimal.ZERO.setScale(2);
+        }
+        BigDecimal owed = refunds.findByPaymentId(payment.getId()).stream()
+                .filter(r -> r.getProviderPaymentId() == null)
+                .map(Refund::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return payment.getAmount().subtract(owed).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+    }
+
     /** What can still be refunded on the payment's own money: its amount less the refunds that did not fail. */
     private BigDecimal remaining(Payment payment) {
         return payment.getAmount().subtract(coveredBy(payment, null));
@@ -212,7 +231,8 @@ public class RefundService {
      * reversed once nothing is left of the net. Paid-out earnings are left alone.
      */
     private void adjustEarning(Booking booking, Payment payment) {
-        earnings.findByBookingId(booking.getId()).ifPresent(earning -> {
+        // Locked (payment -> booking -> earning), so a payout marking it PAID at the same moment is not overwritten.
+        earnings.findByBookingIdForUpdate(booking.getId()).ifPresent(earning -> {
             if (earning.getStatus() == EarningStatus.PAID || earning.getStatus() == EarningStatus.REVERSED) {
                 return;
             }
@@ -332,72 +352,118 @@ public class RefundService {
      * issuing a second one. Returns true when the provider has the refund now.
      */
     public boolean retry(Long refundId) {
+        return retry(refundId, false);
+    }
+
+    /**
+     * Like {@link #retry(Long)}; an admin's manual retry ({@code ignoreAttemptLimit}) goes ahead even when the
+     * automatic attempts are used up. The attempt still counts, and nothing else is reset.
+     */
+    public boolean retry(Long refundId, boolean ignoreAttemptLimit) {
+        return retry(refundId, ignoreAttemptLimit, (issued, refund) -> { });
+    }
+
+    /**
+     * Like {@link #retry(Long, boolean)}, and runs {@code afterOutcome} (whether the provider has the refund now, and
+     * the refund as it stands) inside the same transaction, so whatever it writes (an audit row) commits or rolls back
+     * together with the outcome. Not called for a refund that does not exist.
+     */
+    public boolean retry(Long refundId, boolean ignoreAttemptLimit, BiConsumer<Boolean, Refund> afterOutcome) {
         Boolean done = tx.execute(status -> {
-            Long bookingId = refunds.findBookingIdById(refundId).orElse(null);
-            if (bookingId == null) {
-                return false;
-            }
-            Booking booking = locks.lock(bookingId); // payment row, then booking row
-            Payment payment = payments.findByBookingId(bookingId).orElseThrow();
-            Refund refund = refunds.findById(refundId).orElseThrow();
-            boolean extraPayment = refund.getProviderPaymentId() != null;
-            boolean refundable = payment.getStatus() == PaymentStatus.CAPTURED
-                    || payment.getStatus() == PaymentStatus.PARTIALLY_REFUNDED;
-            if (refund.getStatus() != RefundStatus.FAILED || refund.getAttempts() >= MAX_ATTEMPTS
-                    || (!extraPayment && (!refundable
-                    || booking.getRefundAmount().compareTo(payment.getAmount()) >= 0
-                    // the payment's other refunds (partial ones included) leave no room for this one any more
-                    || coveredBy(payment, refund).add(refund.getAmount()).compareTo(payment.getAmount()) > 0))) {
-                return false;
-            }
-            String providerPaymentId = extraPayment ? refund.getProviderPaymentId() : payment.getPaymentId();
-            refund.setAttempts(refund.getAttempts() + 1);
-            try {
-                Existing found = lookUp(providerPaymentId, refund);
-                if (found.unmatched() && found.adopted() == null) {
-                    // The provider has a refund for this payment that is not ours (e.g. a partial refund from its
-                    // dashboard). Issuing another could refund too much, adopting it could hide a shortfall.
-                    refund.setAttempts(MAX_ATTEMPTS);
-                    refund.setFailureReason(NO_MATCH_REASON);
-                    events.record(booking, booking.getStatus(), booking.getStatus(), BookingActor.SYSTEM,
-                            "Refund of ₹" + refund.getAmount().toPlainString()
-                                    + " needs manual review: the provider already has a different refund for this payment");
-                    log.error("Refund {} of payment {}: the provider already has a refund that does not match; "
-                            + "left for manual review", refundId, payment.getId());
-                    return false;
-                }
-                ProviderRefund result = found.adopted() != null ? found.adopted()
-                        : provider.refund(providerPaymentId, toPaise(refund.getAmount()), refund.getReason(),
-                                idempotencyKey(refund), receipt(refund), notes(refund));
-                refund.setProviderRefundId(result.refundId());
-                refund.setStatus(result.status());
-                refund.setFailureReason(null);
-            } catch (RuntimeException e) {
-                // Unlike the first attempt, any provider-side failure must count here: the attempts counter is what
-                // stops the job from retrying forever, and nothing else in this transaction needs to roll back.
-                log.error("Retry {} of refund {} for payment {} failed", refund.getAttempts(), refundId,
-                        payment.getId(), e);
-                if (e instanceof ApiException api) {
-                    refund.setFailureReason(abbreviate(PaymentProviderException.describe(api), MAX_FAILURE));
-                }
-                if (refund.getAttempts() >= MAX_ATTEMPTS) {
-                    log.error("Giving up on refund {}: {} attempts used; it needs manual attention", refundId,
-                            MAX_ATTEMPTS);
-                    events.record(booking, booking.getStatus(), booking.getStatus(), BookingActor.SYSTEM,
-                            EXHAUSTED_NOTE);
-                }
-                return false;
-            }
-            if (!extraPayment) {
-                recompute(payment, booking);
-            }
-            events.record(booking, booking.getStatus(), booking.getStatus(), BookingActor.SYSTEM,
-                    "Refund of ₹" + refund.getAmount().toPlainString() + " issued"
-                            + (extraPayment ? " for an extra payment" : ""));
-            notifyDriver(booking, refund);
-            return true;
+            boolean issued = attemptRetry(refundId, ignoreAttemptLimit);
+            refunds.findById(refundId).ifPresent(refund -> afterOutcome.accept(issued, refund));
+            return issued;
         });
         return Boolean.TRUE.equals(done);
+    }
+
+    /**
+     * Whether a retry of this FAILED refund of the payment's own money would still make sense: the payment holds
+     * money, the booking has not got it all back and the payment's other refunds (partial ones included) leave room.
+     */
+    private boolean hasRoom(Refund refund, Payment payment, Booking booking) {
+        boolean refundable = payment.getStatus() == PaymentStatus.CAPTURED
+                || payment.getStatus() == PaymentStatus.PARTIALLY_REFUNDED;
+        return refundable && booking.getRefundAmount().compareTo(payment.getAmount()) < 0
+                && coveredBy(payment, refund).add(refund.getAmount()).compareTo(payment.getAmount()) <= 0;
+    }
+
+    /**
+     * Why a retry of this refund cannot go ahead (the payment cannot be refunded any more, or other refunds already
+     * cover it), or empty when it can. Refunds of extra payments are always retryable. Joins the caller's
+     * transaction (lazy data).
+     */
+    @Transactional(readOnly = true)
+    public Optional<String> retryBlocker(Refund refund) {
+        if (refund.getProviderPaymentId() != null) {
+            return Optional.empty();
+        }
+        Payment payment = refund.getPayment();
+        if (hasRoom(refund, payment, payment.getBooking())) {
+            return Optional.empty();
+        }
+        return Optional.of("There is no refundable amount left on this payment (" + payment.getStatus() + ")");
+    }
+
+    private boolean attemptRetry(Long refundId, boolean ignoreAttemptLimit) {
+        Long bookingId = refunds.findBookingIdById(refundId).orElse(null);
+        if (bookingId == null) {
+            return false;
+        }
+        Booking booking = locks.lock(bookingId); // payment row, then booking row
+        Payment payment = payments.findByBookingId(bookingId).orElseThrow();
+        Refund refund = refunds.findById(refundId).orElseThrow();
+        boolean extraPayment = refund.getProviderPaymentId() != null;
+        if (refund.getStatus() != RefundStatus.FAILED || (!ignoreAttemptLimit && refund.getAttempts() >= MAX_ATTEMPTS)
+                || (!extraPayment && !hasRoom(refund, payment, booking))) {
+            return false;
+        }
+        String providerPaymentId = extraPayment ? refund.getProviderPaymentId() : payment.getPaymentId();
+        refund.setAttempts(refund.getAttempts() + 1);
+        try {
+            Existing found = lookUp(providerPaymentId, refund);
+            if (found.unmatched() && found.adopted() == null) {
+                // The provider has a refund for this payment that is not ours (e.g. a partial refund from its
+                // dashboard). Issuing another could refund too much, adopting it could hide a shortfall.
+                refund.setAttempts(MAX_ATTEMPTS);
+                refund.setFailureReason(NO_MATCH_REASON);
+                events.record(booking, booking.getStatus(), booking.getStatus(), BookingActor.SYSTEM,
+                        "Refund of ₹" + refund.getAmount().toPlainString()
+                                + " needs manual review: the provider already has a different refund for this payment");
+                log.error("Refund {} of payment {}: the provider already has a refund that does not match; "
+                        + "left for manual review", refundId, payment.getId());
+                return false;
+            }
+            ProviderRefund result = found.adopted() != null ? found.adopted()
+                    : provider.refund(providerPaymentId, toPaise(refund.getAmount()), refund.getReason(),
+                            idempotencyKey(refund), receipt(refund), notes(refund));
+            refund.setProviderRefundId(result.refundId());
+            refund.setStatus(result.status());
+            refund.setFailureReason(null);
+        } catch (RuntimeException e) {
+            // Unlike the first attempt, any provider-side failure must count here: the attempts counter is what
+            // stops the job from retrying forever, and nothing else in this transaction needs to roll back.
+            log.error("Retry {} of refund {} for payment {} failed", refund.getAttempts(), refundId,
+                    payment.getId(), e);
+            if (e instanceof ApiException api) {
+                refund.setFailureReason(abbreviate(PaymentProviderException.describe(api), MAX_FAILURE));
+            }
+            if (refund.getAttempts() >= MAX_ATTEMPTS) {
+                log.error("Giving up on refund {}: {} attempts used; it needs manual attention", refundId,
+                        MAX_ATTEMPTS);
+                events.record(booking, booking.getStatus(), booking.getStatus(), BookingActor.SYSTEM,
+                        EXHAUSTED_NOTE);
+            }
+            return false;
+        }
+        if (!extraPayment) {
+            recompute(payment, booking);
+        }
+        events.record(booking, booking.getStatus(), booking.getStatus(), BookingActor.SYSTEM,
+                "Refund of ₹" + refund.getAmount().toPlainString() + " issued"
+                        + (extraPayment ? " for an extra payment" : ""));
+        notifyDriver(booking, refund);
+        return true;
     }
 
     /** What the provider already has for the payment: a refund that is ours, and whether it has others that are not. */

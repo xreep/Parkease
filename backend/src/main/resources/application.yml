@@ -41,6 +41,9 @@ app:
     local-dir: ${STORAGE_LOCAL_DIR:uploads}
     public-base-url: ${PUBLIC_BASE_URL:http://localhost:8080}
     cloudinary-url: ${CLOUDINARY_URL:}
+  # Platform settings (fee, GST, hold/approval/lead times, price guidelines) live in the database: migration V15 seeds
+  # them and admins edit them under Admin -> Settings. The pricing and booking values below are only fallbacks, used
+  # when a key is missing from the platform_settings table.
   pricing:
     platform-fee-percent: 10
     gst-percent: 18

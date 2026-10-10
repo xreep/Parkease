@@ -35,6 +35,7 @@ public final class BookingTestSupport {
         b.setBaseAmount(new BigDecimal("60.00"));
         b.setPlatformFee(new BigDecimal("6.00"));
         b.setGstAmount(new BigDecimal("1.08"));
+        b.setGstPercent(new BigDecimal("18.00"));
         b.setTotalAmount(new BigDecimal("67.08"));
         b.setStatus(status);
         return b;

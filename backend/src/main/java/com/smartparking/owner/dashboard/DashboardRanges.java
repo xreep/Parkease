@@ -7,22 +7,22 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 
 /** IST date-range helpers shared by the owner dashboard services. */
-final class DashboardRanges {
+public final class DashboardRanges {
 
     private DashboardRanges() {
     }
 
     /** First instant of the IST day. */
-    static Instant startOf(LocalDate date) {
+    public static Instant startOf(LocalDate date) {
         return date.atStartOfDay(AvailabilityEvaluator.ZONE).toInstant();
     }
 
-    static LocalDate dateOf(Instant instant) {
+    public static LocalDate dateOf(Instant instant) {
         return instant.atZone(AvailabilityEvaluator.ZONE).toLocalDate();
     }
 
     /** Throws 400 {@code INVALID_DATE_RANGE} unless {@code from <= to} and the range spans at most {@code maxDays}. */
-    static void validate(LocalDate from, LocalDate to, int maxDays) {
+    public static void validate(LocalDate from, LocalDate to, int maxDays) {
         if (to.isBefore(from)) {
             throw invalid("from must not be after to");
         }

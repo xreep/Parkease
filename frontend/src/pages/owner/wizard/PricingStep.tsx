@@ -1,12 +1,13 @@
 import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { FormError } from '../../../components/AuthCard'
 import { TextArea } from '../../../components/ui/TextArea'
 import { TextField } from '../../../components/ui/TextField'
 import { errorMessage, toProblem } from '../../../lib/errors'
-import { AMENITY_LABELS, CANCELLATION_POLICIES, REFUND_NOTE } from '../../../lib/format'
+import { usePricingGuideline } from '../../../lib/disputes'
+import { AMENITY_LABELS, CANCELLATION_POLICIES, REFUND_NOTE, formatINR } from '../../../lib/format'
 import { savePricing, type Amenity, type ListingDetail, type PricingBody } from '../../../lib/owner'
 import { StepFooter } from './StepFooter'
 import { isReadOnly, type StepProps } from './types'
@@ -75,10 +76,16 @@ function defaults(listing: ListingDetail): Values {
 export function PricingStep({ listing, onSaved }: StepProps) {
   const readOnly = isReadOnly(listing)
   const [formError, setFormError] = useState<string | null>(null)
-  const { register, handleSubmit, setError, formState: { errors, isSubmitting } } = useForm<Values>({
+  const { register, handleSubmit, setError, control, formState: { errors, isSubmitting } } = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: defaults(listing),
   })
+
+  const guideline = usePricingGuideline(listing.cityId).data
+  const hourly = useWatch({ control, name: 'pricePerHour' })
+  const typed = validAmount(hourly.trim(), MAX_HOUR) ? Number(hourly.trim()) : null
+  const range = guideline ? `${formatINR(guideline.minHourly)} to ${formatINR(guideline.maxHourly)}` : ''
+  const outside = guideline && typed !== null ? (typed < guideline.minHourly ? 'below' : typed > guideline.maxHourly ? 'above' : null) : null
 
   async function onSubmit(values: Values) {
     setFormError(null)
@@ -112,10 +119,15 @@ export function PricingStep({ listing, onSaved }: StepProps) {
       <FormError message={formError} />
       <fieldset disabled={readOnly} className="space-y-6">
         <div className="grid gap-4 sm:grid-cols-3">
-          <TextField label="Price per hour (₹)" inputMode="decimal" autoComplete="off" error={errors.pricePerHour?.message} {...register('pricePerHour')} />
+          <TextField label="Price per hour (₹)" inputMode="decimal" autoComplete="off" hint={guideline ? `Usual range in ${listing.cityName}: ${range} per hour` : undefined} error={errors.pricePerHour?.message} {...register('pricePerHour')} />
           <TextField label="Price per day (₹, optional)" inputMode="decimal" autoComplete="off" error={errors.pricePerDay?.message} {...register('pricePerDay')} />
           <TextField label="Price per month (₹, optional)" inputMode="decimal" autoComplete="off" error={errors.pricePerMonth?.message} {...register('pricePerMonth')} />
         </div>
+        {outside && typed !== null && (
+          <p role="status" className="-mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+            {`${formatINR(typed)} is ${outside} the usual range for ${listing.cityName} (${range}). You can still save this price.`}
+          </p>
+        )}
 
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium text-slate-700 dark:text-slate-300">Cancellation policy</legend>

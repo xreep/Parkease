@@ -4,6 +4,7 @@ import com.smartparking.common.model.VehicleType;
 import com.smartparking.common.util.SqlStates;
 import com.smartparking.listing.ParkingListing;
 import com.smartparking.pricing.Quote;
+import com.smartparking.settings.PlatformSettings;
 import com.smartparking.slot.ParkingSlot;
 import com.smartparking.user.User;
 import com.smartparking.vehicle.Vehicle;
@@ -44,16 +45,16 @@ public class SlotAllocator {
     private final BookingRepository bookings;
     private final BookingEvents events;
     private final EntityManager em;
-    private final BookingProperties properties;
+    private final PlatformSettings settings;
     private final Clock clock;
     private final TransactionTemplate newTx;
 
     public SlotAllocator(BookingRepository bookings, BookingEvents events, EntityManager em,
-                         BookingProperties properties, Clock clock, PlatformTransactionManager txManager) {
+                         PlatformSettings settings, Clock clock, PlatformTransactionManager txManager) {
         this.bookings = bookings;
         this.events = events;
         this.em = em;
-        this.properties = properties;
+        this.settings = settings;
         this.clock = clock;
         this.newTx = new TransactionTemplate(txManager);
         this.newTx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -118,9 +119,10 @@ public class SlotAllocator {
         booking.setBaseAmount(quote.baseAmount());
         booking.setPlatformFee(quote.platformFee());
         booking.setGstAmount(quote.gstAmount());
+        booking.setGstPercent(quote.gstPercent());
         booking.setTotalAmount(quote.totalAmount());
         booking.setStatus(BookingStatus.PENDING_PAYMENT);
-        booking.setHoldExpiresAt(now.plus(Duration.ofMinutes(properties.holdMinutes())));
+        booking.setHoldExpiresAt(now.plus(Duration.ofMinutes(settings.holdMinutes())));
         bookings.saveAndFlush(booking);
 
         events.record(booking, null, BookingStatus.PENDING_PAYMENT, BookingActor.DRIVER, null);

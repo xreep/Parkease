@@ -10,10 +10,10 @@ import java.util.List;
  * Writes the earnings ledger as CSV (RFC 4180: CRLF line ends, cells with commas, quotes or line breaks quoted, quotes
  * doubled). Cells that a spreadsheet would read as a formula get a leading apostrophe.
  */
-final class EarningsCsv {
+public final class EarningsCsv {
 
     /** Byte order mark, so spreadsheets open the file as UTF-8. */
-    static final String BOM = "\uFEFF";
+    public static final String BOM = "\uFEFF";
 
     static final String HEADER = "Booking,Listing,Start (IST),End (IST),Gross,Commission,Net,Status,Paid at,"
             + "Payout reference";
@@ -43,7 +43,7 @@ final class EarningsCsv {
         return out.toString();
     }
 
-    static String cell(String value) {
+    public static String cell(String value) {
         String text = value == null ? "" : value;
         if (!text.isEmpty() && "=+-@\t\r".indexOf(text.charAt(0)) >= 0) {
             text = "'" + text;

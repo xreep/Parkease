@@ -455,7 +455,7 @@ describe('booking timeline refunds', () => {
       ...summary({ status: 'CANCELLED' }), address: 'FC Road', lat: 18.5, lng: 73.8, slotLabel: 'A-3', pricingMode: 'HOURLY',
       pricingBreakdown: '2 hours', baseAmount: 80, platformFee: 8, gstAmount: 1.44, refundAmount: 80, holdExpiresAt: null,
       approvalDeadline: null, confirmedAt: null, cancelReason: null, cancelledBy: 'DRIVER', paymentStatus: 'PARTIALLY_REFUNDED',
-      invoiceNumber: 'PE-INV-0042', autoApprove: true, ownerFirstName: 'Priya', reviewable: false, review: null,
+      invoiceNumber: 'PE-INV-0042', autoApprove: true, ownerFirstName: 'Priya', reviewable: false, review: null, disputes: [], disputable: false,
       events: [
         { fromStatus: 'CONFIRMED', toStatus: 'CANCELLED', actor: 'DRIVER', note: null, at: '2026-10-09T09:00:00Z' },
         { fromStatus: 'CANCELLED', toStatus: 'CANCELLED', actor: 'SYSTEM', note: 'Refund of ₹80 issued', at: '2026-10-09T09:01:00Z' },
@@ -478,7 +478,7 @@ describe('booking timeline refunds', () => {
       ...summary({ status: 'CANCELLED' }), address: 'FC Road', lat: 18.5, lng: 73.8, slotLabel: 'A-3', pricingMode: 'HOURLY',
       pricingBreakdown: '2 hours', baseAmount: 80, platformFee: 8, gstAmount: 1.44, refundAmount: 0, holdExpiresAt: null,
       approvalDeadline: null, confirmedAt: null, cancelReason: 'Refund me please', cancelledBy: 'DRIVER', paymentStatus: 'CAPTURED',
-      invoiceNumber: 'PE-INV-0042', autoApprove: true, ownerFirstName: 'Priya', reviewable: false, review: null,
+      invoiceNumber: 'PE-INV-0042', autoApprove: true, ownerFirstName: 'Priya', reviewable: false, review: null, disputes: [], disputable: false,
       events: [
         { fromStatus: 'CONFIRMED', toStatus: 'CANCELLED', actor: 'DRIVER', note: 'Refund me please', at: '2026-10-09T09:00:00Z' },
         { fromStatus: 'CANCELLED', toStatus: 'CANCELLED', actor: 'ADMIN', note: 'Goodwill', at: '2026-10-09T09:05:00Z' },

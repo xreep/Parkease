@@ -77,6 +77,10 @@ public class Booking extends BaseEntity {
     @Column(nullable = false)
     private BigDecimal gstAmount;
 
+    /** The GST rate (percent) the amounts were priced with; later changes of the platform setting do not touch it. */
+    @Column(nullable = false)
+    private BigDecimal gstPercent;
+
     @Column(nullable = false)
     private BigDecimal totalAmount;
 

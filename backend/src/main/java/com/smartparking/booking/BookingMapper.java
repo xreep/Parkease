@@ -2,6 +2,11 @@ package com.smartparking.booking;
 
 import com.smartparking.booking.dto.BookingDetailDto;
 import com.smartparking.booking.dto.BookingSummaryDto;
+import com.smartparking.dispute.Dispute;
+import com.smartparking.dispute.DisputePolicy;
+import com.smartparking.dispute.DisputeRepository;
+import com.smartparking.dispute.DisputeStatus;
+import com.smartparking.dispute.dto.DisputeSummaryDto;
 import com.smartparking.invoice.Invoice;
 import com.smartparking.invoice.InvoiceRepository;
 import com.smartparking.listing.ListingMapper;
@@ -35,6 +40,7 @@ public class BookingMapper {
     private final BookingEventRepository events;
     private final ReviewRepository reviews;
     private final ReviewMapper reviewMapper;
+    private final DisputeRepository disputes;
     private final Clock clock;
 
     public BookingSummaryDto toSummary(Booking b) {
@@ -58,6 +64,9 @@ public class BookingMapper {
         Review posted = reviews.findByBookingId(b.getId()).orElse(null);
         boolean reviewable = posted == null && ReviewPolicy.notReviewableReason(b, clock.instant()) == null;
         ReviewDto review = posted == null ? null : reviewMapper.toDto(posted);
+        List<Dispute> raised = disputes.findByBookingIdOrderByCreatedAtDescIdDesc(b.getId());
+        boolean unresolved = raised.stream().anyMatch(d -> d.getStatus() != DisputeStatus.RESOLVED);
+        boolean disputable = DisputePolicy.notDisputableReason(b, unresolved, clock.instant()) == null;
         return new BookingDetailDto(
                 b.getId(), b.getBookingCode(), b.getStatus(), l.getId(), l.getTitle(), l.getCity().getName(),
                 coverUrls(List.of(l.getId())).get(l.getId()), b.getStartTime(), b.getEndTime(), b.getVehicleType(),
@@ -66,7 +75,8 @@ public class BookingMapper {
                 b.getPricingBreakdown(), b.getBaseAmount(), b.getPlatformFee(), b.getGstAmount(), b.getRefundAmount(),
                 b.getHoldExpiresAt(), b.getApprovalDeadline(), b.getConfirmedAt(), b.getCancelReason(),
                 b.getCancelledBy(), payment == null ? null : payment.getStatus(), invoiceNumber, l.isAutoApprove(),
-                firstName(l.getOwner().getName()), history, reviewable, review);
+                firstName(l.getOwner().getName()), history, reviewable, review,
+                raised.stream().map(DisputeSummaryDto::from).toList(), disputable);
     }
 
     private BookingSummaryDto summary(Booking b, Map<Long, String> covers) {

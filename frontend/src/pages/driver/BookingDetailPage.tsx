@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { FormError } from '../../components/AuthCard'
 import { BookingQr } from '../../components/booking/BookingQr'
 import { CancelBookingDialog } from '../../components/booking/CancelBookingDialog'
+import { RaiseDisputeDialog } from '../../components/disputes/RaiseDisputeDialog'
 import { OwnerReply } from '../../components/reviews/ReviewCard'
 import { ReviewForm } from '../../components/reviews/ReviewForm'
 import { Stars } from '../../components/reviews/Stars'
@@ -20,6 +21,7 @@ import {
   type BookingDetailDto,
   type BookingEventDto,
 } from '../../lib/bookings'
+import { DISPUTE_CATEGORY_LABELS } from '../../lib/disputes'
 import { saveBlob } from '../../lib/download'
 import { errorMessage } from '../../lib/errors'
 import { VEHICLE_TYPE_LABELS, formatDateTime, formatINR } from '../../lib/format'
@@ -86,7 +88,9 @@ function StatusNotice({ booking }: { booking: BookingDetailDto }) {
   } else if (booking.status === 'CANCELLED') {
     tone = 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
     if (booking.cancelledBy === 'DRIVER') message = 'Cancelled by you'
-    else if (booking.cancelledBy === 'OWNER') {
+    else if (booking.cancelledBy === 'ADMIN') {
+      message = booking.cancelReason ? `Cancelled by ParkEase: ${booking.cancelReason}` : 'Cancelled by ParkEase'
+    } else if (booking.cancelledBy === 'OWNER') {
       message = booking.cancelReason ? `Cancelled by the owner: ${booking.cancelReason}` : 'Cancelled by the owner'
     }
   }
@@ -199,10 +203,37 @@ function ReviewPanel({ booking }: { booking: BookingDetailDto }) {
   )
 }
 
+/** The problems reported for this booking and where each one stands. */
+function DisputesPanel({ booking }: { booking: BookingDetailDto }) {
+  if (booking.disputes.length === 0) return null
+  return (
+    <section
+      aria-labelledby="problems-heading"
+      className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900"
+    >
+      <h3 id="problems-heading" className="text-base font-semibold">Problems reported</h3>
+      <ul className="mt-3 space-y-2 text-sm">
+        {booking.disputes.map((d) => (
+          <li key={d.id} className="flex flex-wrap items-center justify-between gap-2">
+            <Link to={`/driver/disputes/${d.id}`} className="font-medium text-brand-700 hover:underline dark:text-brand-400">
+              {DISPUTE_CATEGORY_LABELS[d.category]}
+            </Link>
+            <span className="flex items-center gap-2">
+              <StatusBadge kind="dispute" status={d.status} />
+              <span className="text-xs text-slate-500">{formatDateTime(d.createdAt)}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
 function BookingContent({ booking, isNew }: { booking: BookingDetailDto; isNew: boolean }) {
   const minutes = (new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / 60_000
   const showQr = booking.status === 'CONFIRMED' || booking.status === 'ACTIVE'
   const [cancelling, setCancelling] = useState(false)
+  const [reporting, setReporting] = useState(false)
   const now = useNow(booking.status === 'PENDING_PAYMENT' || booking.status === 'CONFIRMED', 5_000)
   const holdValid =
     booking.status === 'PENDING_PAYMENT' && booking.holdExpiresAt !== null && new Date(booking.holdExpiresAt).getTime() > now
@@ -231,6 +262,9 @@ function BookingContent({ booking, isNew }: { booking: BookingDetailDto; isNew: 
         <div className="flex flex-wrap gap-2">
           {holdValid && <Link to={`/checkout/${booking.id}`} className={primaryLink}>Complete payment</Link>}
           {booking.invoiceNumber && <ReceiptButton booking={booking} />}
+          {booking.disputable && (
+            <Button type="button" variant="secondary" onClick={() => setReporting(true)}>Report a problem</Button>
+          )}
           {cancellable && (
             <Button type="button" variant="secondary" onClick={() => setCancelling(true)}>Cancel booking</Button>
           )}
@@ -278,7 +312,7 @@ function BookingContent({ booking, isNew }: { booking: BookingDetailDto; isNew: 
             {booking.refundAmount > 0 && (
               <p className="font-medium text-emerald-700 dark:text-emerald-400">{`Refunded ${formatINR(booking.refundAmount)}`}</p>
             )}
-            {booking.cancelReason && booking.cancelledBy !== 'OWNER' && (
+            {booking.cancelReason && booking.cancelledBy !== 'OWNER' && booking.cancelledBy !== 'ADMIN' && (
               <p className="rounded-lg bg-slate-100 px-3 py-2 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
                 {`Reason${cancelledBy}: ${booking.cancelReason}`}
               </p>
@@ -289,6 +323,7 @@ function BookingContent({ booking, isNew }: { booking: BookingDetailDto; isNew: 
         <div className="min-w-0 space-y-6">
           {showQr && <BookingQr bookingCode={booking.bookingCode} />}
           <ReviewPanel booking={booking} />
+          <DisputesPanel booking={booking} />
           <Panel title="Timeline">
             <ol aria-label="Booking timeline" className="space-y-3">
               {booking.events.map((event, i) => (
@@ -301,6 +336,7 @@ function BookingContent({ booking, isNew }: { booking: BookingDetailDto; isNew: 
           </Panel>
         </div>
       </div>
+      <RaiseDisputeDialog bookingId={booking.id} open={reporting} onClose={() => setReporting(false)} />
       {cancelling && (
         <CancelBookingDialog
           bookingId={booking.id}

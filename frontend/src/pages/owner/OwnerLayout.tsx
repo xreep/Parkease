@@ -8,6 +8,7 @@ const tabs = [
   { to: '/owner/earnings', label: 'Earnings' },
   { to: '/owner/calendar', label: 'Calendar' },
   { to: '/owner/reviews', label: 'Reviews' },
+  { to: '/owner/disputes', label: 'Disputes' },
   { to: '/owner/verification', label: 'Verification' },
 ]
 

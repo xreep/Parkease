@@ -23,7 +23,7 @@ function booking(overrides: Partial<BookingDetailDto> = {}): BookingDetailDto {
     address: 'FC Road, Shivajinagar', lat: 18.5, lng: 73.8, slotLabel: 'A-3', pricingMode: 'HOURLY', pricingBreakdown: '2 hours at ₹40/hr',
     baseAmount: 80, platformFee: 8, gstAmount: 1.44, refundAmount: 0, holdExpiresAt: null, approvalDeadline: null,
     confirmedAt: '2026-10-09T08:02:00Z', cancelReason: null, cancelledBy: null, paymentStatus: 'CAPTURED', invoiceNumber: 'PE-INV-0042',
-    autoApprove: true, ownerFirstName: 'Priya', reviewable: false, review: null,
+    autoApprove: true, ownerFirstName: 'Priya', reviewable: false, review: null, disputes: [], disputable: false,
     events: [{ fromStatus: null, toStatus: 'PENDING_PAYMENT', actor: 'DRIVER', note: null, at: '2026-10-09T08:00:00Z' }],
     ...overrides,
   }
@@ -295,6 +295,17 @@ describe('driver cancellation', () => {
     mock.onGet('/bookings/91').reply(200, booking({ status: 'CANCELLED', cancelledBy: 'OWNER', cancelReason: 'Space is closed' }))
     renderApp('/driver/bookings/91')
     expect(await screen.findByText('Cancelled by the owner: Space is closed')).toBeInTheDocument()
+  })
+
+  it('says ParkEase cancelled it, with the reason', async () => {
+    mock.onGet('/bookings/91').replyOnce(200, booking({ status: 'CANCELLED', cancelledBy: 'ADMIN', cancelReason: 'Owner unreachable' }))
+    const { unmount } = renderApp('/driver/bookings/91')
+    expect(await screen.findByText('Cancelled by ParkEase: Owner unreachable')).toBeInTheDocument()
+    unmount()
+
+    mock.onGet('/bookings/91').reply(200, booking({ status: 'CANCELLED', cancelledBy: 'ADMIN', cancelReason: null }))
+    renderApp('/driver/bookings/91')
+    expect(await screen.findByText('Cancelled by ParkEase')).toBeInTheDocument()
   })
 
   it('marks an active booking in the list and on the dashboard', async () => {

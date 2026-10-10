@@ -15,4 +15,11 @@ public final class Roles {
             throw ApiException.forbidden("DRIVERS_ONLY", "Only drivers can do this");
         }
     }
+
+    /** Throws 403 {@code FORBIDDEN} unless the principal is an owner or an admin. */
+    public static void requireOwnerOrAdmin(AuthUser principal) {
+        if (principal == null || (principal.role() != Role.OWNER && principal.role() != Role.ADMIN)) {
+            throw ApiException.forbidden("FORBIDDEN", "Only owners and admins can do this");
+        }
+    }
 }

@@ -12,6 +12,7 @@ import com.smartparking.listing.ParkingListing;
 import com.smartparking.listing.ParkingListingRepository;
 import com.smartparking.slot.ParkingSlot;
 import com.smartparking.slot.ParkingSlotRepository;
+import com.smartparking.user.UserStatus;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -59,6 +60,7 @@ public class AvailabilityCalendarService {
             throw invalid("The range lies outside the bookable window (today to " + MAX_AHEAD_DAYS + " days ahead)");
         }
         ParkingListing listing = listings.findByIdAndStatus(listingId, ListingStatus.APPROVED)
+                .filter(l -> l.getOwner().getStatus() == UserStatus.ACTIVE) // a suspended owner's listings are hidden
                 .orElseThrow(() -> ApiException.notFound("Listing not found"));
 
         Instant rangeStart = startOf(from);

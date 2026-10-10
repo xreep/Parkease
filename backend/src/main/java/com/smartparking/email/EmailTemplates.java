@@ -53,6 +53,66 @@ public final class EmailTemplates {
                 "Edit listing", link);
     }
 
+    public static EmailMessage accountSuspended(User user, String reason, String link) {
+        return build(user, "Your account has been suspended – ParkEase",
+                "Your ParkEase account has been suspended. Reason: " + reason + ". "
+                        + "Existing bookings are still honoured. If you think this is a mistake, please contact support.",
+                "Visit ParkEase", link);
+    }
+
+    public static EmailMessage listingSuspended(User user, String title, String reason, String link) {
+        return build(user, "Listing suspended – ParkEase",
+                "\"" + title + "\" has been suspended and is no longer visible to drivers. Reason: " + reason + ". "
+                        + "Bookings that already exist are still honoured.",
+                "View your listings", link);
+    }
+
+    public static EmailMessage listingReinstated(User user, String title, String link) {
+        return build(user, "Listing reinstated – ParkEase",
+                "\"" + title + "\" has been reinstated and drivers can find it again.",
+                "View your listings", link);
+    }
+
+    public static EmailMessage disputeOpened(User owner, Booking booking, String category, String link) {
+        return build(owner, "A driver opened a dispute – ParkEase",
+                "A driver reported a problem (" + category + ") with booking " + booking.getBookingCode() + " at "
+                        + booking.getListing().getTitle() + ". You can add your side of the story once.",
+                "View report", link);
+    }
+
+    public static EmailMessage disputeResponse(User driver, Booking booking, String link) {
+        return build(driver, "The owner responded to your report – ParkEase",
+                "The owner has responded to the problem you reported for booking " + booking.getBookingCode() + ".",
+                "View report", link);
+    }
+
+    public static EmailMessage disputeResolved(User user, Booking booking, String outcome, String link) {
+        return build(user, "Dispute resolved – ParkEase",
+                "The report for booking " + booking.getBookingCode() + " has been resolved. " + outcome,
+                "View booking", link);
+    }
+
+    public static EmailMessage bookingCancelledByAdmin(User driver, Booking booking, String reason, String refundLine,
+                                                       String link) {
+        return build(driver, "Booking cancelled – ParkEase",
+                "Your booking was cancelled by ParkEase. Reason: " + reason + "\n\n" + details(booking) + "\n\n"
+                        + refundLine, "View booking", link);
+    }
+
+    public static EmailMessage bookingCancelledByAdminForOwner(User owner, Booking booking, String reason,
+                                                               String link) {
+        return build(owner, "Booking cancelled by ParkEase – ParkEase",
+                "A booking for your parking was cancelled by ParkEase. Reason: " + reason + "\n\n"
+                        + ownerDetails(booking), "View bookings", link);
+    }
+
+    public static EmailMessage payoutSent(User owner, String amount, int count, String reference, String link) {
+        return build(owner, "Payout sent – ParkEase",
+                "We have sent you ₹" + amount + " for " + count + (count == 1 ? " booking" : " bookings")
+                        + ".\nPayout reference: " + reference,
+                "View earnings", link);
+    }
+
     /** Booking emails read lazy associations of {@code booking}; build them inside a transaction. */
     public static EmailMessage bookingConfirmed(User driver, Booking booking, String link) {
         return build(driver, "Booking confirmed – ParkEase",
@@ -131,6 +191,14 @@ public final class EmailTemplates {
      */
     public static EmailMessage paymentRefunded(User driver, Booking booking, String link, RefundNotice notice,
                                                boolean pending, BigDecimal amount) {
+        if (notice == RefundNotice.DISPUTE) {
+            return build(driver, pending ? "Refund initiated – ParkEase" : "Refund issued – ParkEase",
+                    "Your refund of ₹" + amount.toPlainString() + " for your report about booking "
+                            + booking.getBookingCode() + (pending
+                            ? " is being processed to your original payment method."
+                            : " has been issued to your original payment method.") + "\n\n" + details(booking),
+                    "View booking", link);
+        }
         if (notice == RefundNotice.CANCELLATION) {
             return build(driver, pending ? "Refund initiated – ParkEase" : "Refund issued – ParkEase",
                     "Your refund of ₹" + amount.toPlainString() + " for the cancelled booking "

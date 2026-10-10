@@ -17,7 +17,7 @@ public class ReviewMapper {
     public OwnerReviewDto toOwnerDto(Review r) {
         return new OwnerReviewDto(r.getId(), r.getRating(), r.getComment(), authorName(r.getDriver().getName()),
                 r.getCreatedAt(), r.getOwnerReply(), r.getOwnerRepliedAt(), r.getListing().getId(),
-                r.getListing().getTitle(), r.getBooking().getBookingCode());
+                r.getListing().getTitle(), r.getBooking().getBookingCode(), r.isHidden());
     }
 
     static String authorName(String fullName) {
