@@ -176,6 +176,6 @@ public class AdminBookingService {
                 b.getStartTime(), b.getEndTime(), b.getTotalAmount(), b.getRefundAmount(),
                 payment == null ? null : payment.getStatus(), b.getCreatedAt(), l.getId(), b.getSlot().getLabel(),
                 b.getBaseAmount(), b.getPlatformFee(), b.getGstAmount(), b.getCancelReason(), b.getCancelledBy(),
-                paymentInfo, refundInfos, history, raised);
+                paymentInfo, refundInfos, history, raised, refunds.refundableRemaining(payment));
     }
 }

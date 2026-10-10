@@ -8,8 +8,11 @@ import com.smartparking.owner.dashboard.SlotOccupancy;
 import com.smartparking.owner.dashboard.SlotOccupancy.Usage;
 import com.smartparking.slot.ParkingSlot;
 import com.smartparking.slot.ParkingSlotRepository;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
@@ -49,8 +52,31 @@ class PlatformUtilization {
     private final ParkingSlotRepository slots;
     private final AvailabilityRuleRepository rules;
 
+    /** Results are reused for this long. */
+    static final Duration CACHE_TTL = Duration.ofMinutes(2);
+
+    private record Key(LocalDate from, LocalDate to, long stateId, long cityId) {
+    }
+
+    /**
+     * Utilization walks every listing, slot and day of the range, which is the dear part of the admin dashboard, so
+     * results are cached per (range, filters) for {@link #CACHE_TTL}. Nothing evicts them earlier: new bookings,
+     * listing changes and the like show up in the utilization after at most two minutes (acceptable for a KPI).
+     */
+    private final Cache<Key, Map<Long, CityUsage>> cache = Caffeine.newBuilder().expireAfterWrite(CACHE_TTL)
+            .maximumSize(200).build();
+
+    /** Forgets every cached result (tests; also handy after bulk data fixes). */
+    void invalidate() {
+        cache.invalidateAll();
+    }
+
     /** Usage per city id for the approved listings inside the state/city filter (0 = no filter). */
     Map<Long, CityUsage> byCity(LocalDate from, LocalDate to, long stateId, long cityId) {
+        return cache.get(new Key(from, to, stateId, cityId), k -> compute(from, to, stateId, cityId));
+    }
+
+    private Map<Long, CityUsage> compute(LocalDate from, LocalDate to, long stateId, long cityId) {
         List<ParkingListing> approved = reports.approvedListings(stateId, cityId);
         if (approved.isEmpty()) {
             return Map.of();

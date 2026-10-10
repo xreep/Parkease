@@ -170,7 +170,7 @@ public class AdminVerificationService {
 
     @Transactional
     public AdminListingDetailDto suspendListing(AuthUser admin, Long id, String reason) {
-        ParkingListing listing = requireListing(id);
+        ParkingListing listing = requireListingForUpdate(id);
         if (listing.getStatus() != ListingStatus.APPROVED && listing.getStatus() != ListingStatus.PAUSED) {
             throw ApiException.conflict("INVALID_STATUS", "Only approved or paused listings can be suspended");
         }
@@ -187,7 +187,7 @@ public class AdminVerificationService {
 
     @Transactional
     public AdminListingDetailDto reinstateListing(AuthUser admin, Long id) {
-        ParkingListing listing = requireListing(id);
+        ParkingListing listing = requireListingForUpdate(id);
         if (listing.getStatus() != ListingStatus.SUSPENDED) {
             throw ApiException.conflict("INVALID_STATUS", "Only suspended listings can be reinstated");
         }
@@ -199,6 +199,11 @@ public class AdminVerificationService {
                 EmailTemplates.listingReinstated(listing.getOwner(), listing.getTitle(),
                         app.frontendUrl() + "/owner/listings"));
         return toDetail(listing);
+    }
+
+    /** The listing, row-locked: suspension and reinstatement must not interleave with the owner's pause/resume. */
+    private ParkingListing requireListingForUpdate(Long id) {
+        return listings.findByIdForUpdate(id).orElseThrow(() -> ApiException.notFound("Listing not found"));
     }
 
     private ParkingListing requireListing(Long id) {

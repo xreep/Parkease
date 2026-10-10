@@ -377,6 +377,34 @@ public class RefundService {
         return Boolean.TRUE.equals(done);
     }
 
+    /**
+     * Whether a retry of this FAILED refund of the payment's own money would still make sense: the payment holds
+     * money, the booking has not got it all back and the payment's other refunds (partial ones included) leave room.
+     */
+    private boolean hasRoom(Refund refund, Payment payment, Booking booking) {
+        boolean refundable = payment.getStatus() == PaymentStatus.CAPTURED
+                || payment.getStatus() == PaymentStatus.PARTIALLY_REFUNDED;
+        return refundable && booking.getRefundAmount().compareTo(payment.getAmount()) < 0
+                && coveredBy(payment, refund).add(refund.getAmount()).compareTo(payment.getAmount()) <= 0;
+    }
+
+    /**
+     * Why a retry of this refund cannot go ahead (the payment cannot be refunded any more, or other refunds already
+     * cover it), or empty when it can. Refunds of extra payments are always retryable. Joins the caller's
+     * transaction (lazy data).
+     */
+    @Transactional(readOnly = true)
+    public Optional<String> retryBlocker(Refund refund) {
+        if (refund.getProviderPaymentId() != null) {
+            return Optional.empty();
+        }
+        Payment payment = refund.getPayment();
+        if (hasRoom(refund, payment, payment.getBooking())) {
+            return Optional.empty();
+        }
+        return Optional.of("There is no refundable amount left on this payment (" + payment.getStatus() + ")");
+    }
+
     private boolean attemptRetry(Long refundId, boolean ignoreAttemptLimit) {
         Long bookingId = refunds.findBookingIdById(refundId).orElse(null);
         if (bookingId == null) {
@@ -386,13 +414,8 @@ public class RefundService {
         Payment payment = payments.findByBookingId(bookingId).orElseThrow();
         Refund refund = refunds.findById(refundId).orElseThrow();
         boolean extraPayment = refund.getProviderPaymentId() != null;
-        boolean refundable = payment.getStatus() == PaymentStatus.CAPTURED
-                || payment.getStatus() == PaymentStatus.PARTIALLY_REFUNDED;
         if (refund.getStatus() != RefundStatus.FAILED || (!ignoreAttemptLimit && refund.getAttempts() >= MAX_ATTEMPTS)
-                || (!extraPayment && (!refundable
-                || booking.getRefundAmount().compareTo(payment.getAmount()) >= 0
-                // the payment's other refunds (partial ones included) leave no room for this one any more
-                || coveredBy(payment, refund).add(refund.getAmount()).compareTo(payment.getAmount()) > 0))) {
+                || (!extraPayment && !hasRoom(refund, payment, booking))) {
             return false;
         }
         String providerPaymentId = extraPayment ? refund.getProviderPaymentId() : payment.getPaymentId();

@@ -435,6 +435,36 @@ class DisputeFlowTest {
         assertThat(emails.sentTo("dp-driver@example.com")).hasSize(1);
     }
 
+    private String bodyOf(String email, String type) {
+        return jdbc.queryForObject("select n.body from notifications n join users u on u.id = n.user_id "
+                + "where u.email = ? and n.type = ? order by n.id desc limit 1", String.class, email, type);
+    }
+
+    @Test
+    void theOutcomeIsWordedForEachSide() throws Exception {
+        long id = raiseOk();
+        resolve(id, "{\"resolution\":\"REFUND_PARTIAL\",\"amount\":20,\"notes\":\"Part\"}").andExpect(status().isOk());
+        assertThat(bodyOf("dp-driver@example.com", "DISPUTE_RESOLVED"))
+                .contains("A refund of ₹20.00 has been issued to the original payment method.");
+        assertThat(bodyOf("dp-owner@example.com", "DISPUTE_RESOLVED"))
+                .contains("Refund of ₹20.00 issued to the driver; your earning for this booking is now ₹40.00.")
+                .doesNotContain("original payment method");
+
+        raise(driver, bookingId, body("OTHER", DESCRIPTION)).andExpect(status().isCreated());
+        long warn = jdbc.queryForObject("select max(id) from disputes", Long.class);
+        resolve(warn, "{\"resolution\":\"WARNING\",\"notes\":\"Warned\"}").andExpect(status().isOk());
+        assertThat(bodyOf("dp-driver@example.com", "DISPUTE_RESOLVED"))
+                .contains("We've warned the owner and closed this report.");
+        assertThat(bodyOf("dp-owner@example.com", "DISPUTE_RESOLVED"))
+                .contains("ParkEase has issued a warning about this booking.");
+
+        raise(driver, bookingId, body("OTHER", DESCRIPTION)).andExpect(status().isCreated());
+        long none = jdbc.queryForObject("select max(id) from disputes", Long.class);
+        resolve(none, "{\"resolution\":\"NO_REFUND\",\"notes\":\"None\"}").andExpect(status().isOk());
+        assertThat(bodyOf("dp-driver@example.com", "DISPUTE_RESOLVED")).contains("No refund was issued.");
+        assertThat(bodyOf("dp-owner@example.com", "DISPUTE_RESOLVED")).contains("No refund was issued");
+    }
+
     @Test
     void aSettlingDisputeRefundIsSaidToBeProcessedNotReturned() throws Exception {
         provider.pendingRefunds = true;

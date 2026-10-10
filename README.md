@@ -122,6 +122,7 @@ Sign in as an admin and open **Admin** (`/admin`):
 - **Disputes:** drivers press **Report a problem** on a booking (up to 7 days after it ends); the owner answers once under **Owner dashboard → Disputes**; an admin takes it under review and resolves it with a full or partial refund, no refund or a warning.
 - **Payments and payouts:** payments and refunds tables (failed refunds can be retried), and owners' pending payouts with masked payout details; select earnings, enter the transfer reference and mark them paid (no money moves in ParkEase), or download the pending list as CSV. Owners see the reference on their earnings.
 - **Reports, settings and audit:** usage and revenue reports per city with CSV export; platform fee, GST, booking timing and per-tier hourly price guidelines (changes apply to new bookings only; owners see a non-blocking warning outside the range); an audit log of every admin action.
+  Platform settings are stored in the database: migration `V15` seeds the defaults and admins change them under **Admin → Settings**. The `app.pricing` and `app.booking` values in `backend/src/main/resources/application.yml` are only fallbacks for a key that is missing from the `platform_settings` table.
 
 ### Payments
 

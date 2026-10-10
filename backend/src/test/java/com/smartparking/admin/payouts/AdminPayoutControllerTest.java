@@ -307,7 +307,7 @@ class AdminPayoutControllerTest {
                         .string("Content-Type", org.hamcrest.Matchers.startsWith("text/csv")))
                 .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
 
-        assertThat(csv).startsWith("﻿Owner ID,Owner,Email,Pending amount,Earnings,Payout method,Payout details\r\n");
+        assertThat(csv).startsWith("﻿Owner ID,Owner,Email,Pending amount,Earnings,Payout method,Payout details,Held for disputes\r\n");
         String[] lines = csv.split("\r\n");
         assertThat(lines).hasSize(3);
         assertThat(lines[1]).startsWith(ownerBId + ",Ravi Kumar,po-owner-b@example.com,120.00,2,,");

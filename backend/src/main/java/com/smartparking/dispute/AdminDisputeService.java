@@ -12,6 +12,9 @@ import com.smartparking.dispute.DisputeMapper.Audience;
 import com.smartparking.dispute.dto.DisputeDto;
 import com.smartparking.dispute.dto.DisputeSummaryDto;
 import com.smartparking.dispute.dto.ResolveRequest;
+import com.smartparking.earning.EarningStatus;
+import com.smartparking.earning.OwnerEarning;
+import com.smartparking.earning.OwnerEarningRepository;
 import com.smartparking.email.EmailTemplates;
 import com.smartparking.notification.NotificationType;
 import com.smartparking.notification.Notifier;
@@ -38,6 +41,7 @@ public class AdminDisputeService {
 
     private final DisputeRepository disputes;
     private final PaymentRepository payments;
+    private final OwnerEarningRepository earnings;
     private final BookingLocks locks;
     private final RefundService refunds;
     private final DisputeMapper mapper;
@@ -110,17 +114,20 @@ public class AdminDisputeService {
         audit.record(admin, "DISPUTE_RESOLVED", "DISPUTE", id, request.resolution()
                 + (amount == null ? "" : " ₹" + amount.toPlainString()) + ". " + dispute.getAdminNotes());
 
-        String outcome = outcome(request.resolution(), amount, refund);
+        OwnerEarning earning = earnings.findByBookingId(bookingId).orElse(null);
+        String driverOutcome = driverOutcome(request.resolution(), amount, refund);
+        String ownerOutcome = ownerOutcome(request.resolution(), amount, refund, earning);
         User driver = dispute.getRaisedBy();
         User owner = booking.getListing().getOwner();
         String driverPath = "/driver/bookings/" + bookingId;
         String title = "Your report was resolved";
         notifier.notify(driver, NotificationType.DISPUTE_RESOLVED, title,
-                "Booking " + booking.getBookingCode() + ": " + outcome, driverPath,
-                EmailTemplates.disputeResolved(driver, booking, outcome, app.frontendUrl() + driverPath));
+                "Booking " + booking.getBookingCode() + ": " + driverOutcome, driverPath,
+                EmailTemplates.disputeResolved(driver, booking, driverOutcome, app.frontendUrl() + driverPath));
         notifier.notify(owner, NotificationType.DISPUTE_RESOLVED, "A report about your parking was resolved",
-                "Booking " + booking.getBookingCode() + ": " + outcome, DisputeService.OWNER_PATH,
-                EmailTemplates.disputeResolved(owner, booking, outcome, app.frontendUrl() + DisputeService.OWNER_PATH));
+                "Booking " + booking.getBookingCode() + ": " + ownerOutcome, DisputeService.OWNER_PATH,
+                EmailTemplates.disputeResolved(owner, booking, ownerOutcome,
+                        app.frontendUrl() + DisputeService.OWNER_PATH));
         return mapper.toDto(dispute, Audience.ADMIN);
     }
 
@@ -139,14 +146,37 @@ public class AdminDisputeService {
         return amount;
     }
 
-    private static String outcome(DisputeResolution resolution, BigDecimal amount, Refund refund) {
+    /** What the driver is told: where the money goes. */
+    private static String driverOutcome(DisputeResolution resolution, BigDecimal amount, Refund refund) {
         return switch (resolution) {
             case REFUND_FULL, REFUND_PARTIAL -> "A refund of ₹" + amount.toPlainString()
                     + (refund.getStatus() == RefundStatus.PROCESSED ? " has been issued to" : " will be processed to")
                     + " the original payment method.";
             case NO_REFUND -> "No refund was issued.";
-            case WARNING -> "The owner has been warned.";
+            case WARNING -> "We've warned the owner and closed this report.";
         };
+    }
+
+    /** What the owner is told: what it means for their earning (as it stands after the refund). */
+    private static String ownerOutcome(DisputeResolution resolution, BigDecimal amount, Refund refund,
+                                       OwnerEarning earning) {
+        return switch (resolution) {
+            case REFUND_FULL, REFUND_PARTIAL -> "Refund of ₹" + amount.toPlainString()
+                    + (refund.getStatus() == RefundStatus.PROCESSED ? " issued to the driver; "
+                    : " is being processed for the driver; ") + earningLine(earning);
+            case NO_REFUND -> "No refund was issued; " + earningLine(earning);
+            case WARNING -> "ParkEase has issued a warning about this booking.";
+        };
+    }
+
+    private static String earningLine(OwnerEarning earning) {
+        if (earning == null) {
+            return "there is no earning for this booking.";
+        }
+        if (earning.getStatus() == EarningStatus.PAID) {
+            return "your earning for this booking was already paid out (₹" + earning.getNet().toPlainString() + ").";
+        }
+        return "your earning for this booking is now ₹" + earning.getNet().toPlainString() + ".";
     }
 
     private static ApiException invalid(String message) {

@@ -190,6 +190,19 @@ class AdminBookingControllerTest {
     }
 
     @Test
+    void detailShowsWhatIsStillRefundable() throws Exception {
+        long unpaid = hold(other, mumbaiListing, 12);
+        long paidId = paid(driver, puneListing, 10);
+        adminGet("/api/v1/admin/bookings/" + unpaid).andExpect(jsonPath("$.refundableRemaining").value(0));
+        adminGet("/api/v1/admin/bookings/" + paidId).andExpect(jsonPath("$.refundableRemaining").value(67.08));
+        jdbc.update("insert into refunds (payment_id, amount, status, reason) select id, 20.00, 'PROCESSED', 'part' "
+                + "from payments where booking_id = ?", paidId);
+        adminGet("/api/v1/admin/bookings/" + paidId).andExpect(jsonPath("$.refundableRemaining").value(47.08));
+        cancel(paidId, "{\"reason\":\"Closed\"}").andExpect(status().isOk())
+                .andExpect(jsonPath("$.refundableRemaining").value(0));
+    }
+
+    @Test
     void filtersByStartDateInIstAndRejectsABackwardsRange() throws Exception {
         long a = paid(driver, puneListing, 10);
         String day = jdbc.queryForObject("select to_char(start_time at time zone 'Asia/Kolkata', 'YYYY-MM-DD') "

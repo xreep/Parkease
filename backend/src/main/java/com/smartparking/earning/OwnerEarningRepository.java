@@ -39,9 +39,14 @@ public interface OwnerEarningRepository
     interface PendingTotal {
         Long getOwnerId();
 
+        /** Net of the earnings that can be paid out (those with an unresolved dispute are left out). */
         BigDecimal getNet();
 
+        /** Number of earnings that can be paid out. */
         long getRows();
+
+        /** Net held back because the booking has an unresolved dispute. */
+        BigDecimal getDisputedNet();
     }
 
     Optional<OwnerEarning> findByBookingId(Long bookingId);
@@ -55,14 +60,37 @@ public interface OwnerEarningRepository
     @Query("select e from OwnerEarning e where e.booking.id = :bookingId")
     Optional<OwnerEarning> findByBookingIdForUpdate(@Param("bookingId") Long bookingId);
 
-    /** Owners with something to be paid out, the largest amount first. */
+    /**
+     * Owners with something to be paid out, the largest amount first. Earnings of bookings with an unresolved
+     * (OPEN or UNDER_REVIEW) dispute are not payable: they are counted in {@code disputedNet} instead.
+     */
     @Query("""
-            select e.owner.id as ownerId, sum(e.net) as net, count(e) as rows from OwnerEarning e
+            select e.owner.id as ownerId,
+                   sum(case when exists (select 1 from Dispute d where d.booking = e.booking
+                                         and d.status <> com.smartparking.dispute.DisputeStatus.RESOLVED)
+                            then 0 else e.net end) as net,
+                   sum(case when exists (select 1 from Dispute d where d.booking = e.booking
+                                         and d.status <> com.smartparking.dispute.DisputeStatus.RESOLVED)
+                            then 0 else 1 end) as rows,
+                   sum(case when exists (select 1 from Dispute d where d.booking = e.booking
+                                         and d.status <> com.smartparking.dispute.DisputeStatus.RESOLVED)
+                            then e.net else 0 end) as disputedNet
+            from OwnerEarning e
             where e.status = com.smartparking.earning.EarningStatus.PENDING_PAYOUT
-            group by e.owner.id having sum(e.net) > 0
-            order by sum(e.net) desc, e.owner.id
+            group by e.owner.id
+            having sum(case when exists (select 1 from Dispute d where d.booking = e.booking
+                                         and d.status <> com.smartparking.dispute.DisputeStatus.RESOLVED)
+                            then 0 else e.net end) > 0
+            order by 2 desc, e.owner.id
             """)
     List<PendingTotal> pendingByOwner();
+
+    /** Ids of those bookings that have an unresolved (OPEN or UNDER_REVIEW) dispute. */
+    @Query("""
+            select distinct d.booking.id from Dispute d
+            where d.booking.id in :bookingIds and d.status <> com.smartparking.dispute.DisputeStatus.RESOLVED
+            """)
+    List<Long> disputedBookingIds(@Param("bookingIds") Collection<Long> bookingIds);
 
     @EntityGraph(attributePaths = {"booking", "booking.listing"})
     @Query("""

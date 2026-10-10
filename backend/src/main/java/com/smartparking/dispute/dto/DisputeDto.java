@@ -3,12 +3,14 @@ package com.smartparking.dispute.dto;
 import com.smartparking.dispute.DisputeCategory;
 import com.smartparking.dispute.DisputeResolution;
 import com.smartparking.dispute.DisputeStatus;
+import com.smartparking.earning.EarningStatus;
 import java.math.BigDecimal;
 import java.time.Instant;
 
 /**
- * A dispute in full (flat: the summary fields first). {@code adminNotes} and {@code refundableRemaining} are only
- * filled for admins.
+ * A dispute in full (flat: the summary fields first). {@code adminNotes}, {@code refundableRemaining} and the owner's
+ * earning for the booking ({@code earningStatus}, {@code earningNet}; null when there is none) are only filled for
+ * admins, so the resolve screen can warn when the earning was already paid out.
  */
 public record DisputeDto(
         Long id,
@@ -26,5 +28,7 @@ public record DisputeDto(
         DisputeResolution resolution,
         BigDecimal resolutionAmount,
         String adminNotes,
-        BigDecimal refundableRemaining) {
+        BigDecimal refundableRemaining,
+        EarningStatus earningStatus,
+        BigDecimal earningNet) {
 }
