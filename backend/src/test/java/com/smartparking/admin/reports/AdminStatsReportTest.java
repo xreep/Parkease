@@ -311,8 +311,9 @@ class AdminStatsReportTest {
                 .andExpect(jsonPath("$.bookings.confirmed").value(6))
                 .andExpect(jsonPath("$.bookings.conversionPercent").value(60.0))
                 .andExpect(jsonPath("$.bookings.cancelled").value(2))
-                // 11 booked slot-hours of 3 approved 24x7 slots x 5 days = 360 open hours
-                .andExpect(jsonPath("$.bookings.utilizationPercent").value(3.1))
+                // 12 booked slot-hours (by period, whenever the booking was created) of 3 approved 24x7 slots x 5 days
+                // = 360 open hours
+                .andExpect(jsonPath("$.bookings.utilizationPercent").value(3.3))
                 .andExpect(jsonPath("$.money.gmv").value(356.32))
                 .andExpect(jsonPath("$.money.platformRevenue").value(34.0))
                 .andExpect(jsonPath("$.money.refunds").value(164.16))
@@ -457,8 +458,8 @@ class AdminStatsReportTest {
                 .andExpect(jsonPath("$.rows[0].listings").value(1))
                 .andExpect(jsonPath("$.rows[0].slots").value(1))
                 .andExpect(jsonPath("$.rows[0].bookings").value(8))
-                .andExpect(jsonPath("$.rows[0].bookedHours").value(6.0))
-                .andExpect(jsonPath("$.rows[0].utilizationPercent").value(5.0))
+                .andExpect(jsonPath("$.rows[0].bookedHours").value(7.0)) // P1 + P3 + P7 (created before the range)
+                .andExpect(jsonPath("$.rows[0].utilizationPercent").value(5.8))
                 .andExpect(jsonPath("$.rows[0].cancellations").value(2))
                 .andExpect(jsonPath("$.rows[1].cityName").value("Bengaluru"))
                 .andExpect(jsonPath("$.rows[1].bookings").value(2))
@@ -474,8 +475,8 @@ class AdminStatsReportTest {
                 .andExpect(jsonPath("$.totals.listings").value(3))
                 .andExpect(jsonPath("$.totals.slots").value(3))
                 .andExpect(jsonPath("$.totals.bookings").value(10))
-                .andExpect(jsonPath("$.totals.bookedHours").value(11.0))
-                .andExpect(jsonPath("$.totals.utilizationPercent").value(3.1))
+                .andExpect(jsonPath("$.totals.bookedHours").value(12.0))
+                .andExpect(jsonPath("$.totals.utilizationPercent").value(3.3))
                 .andExpect(jsonPath("$.totals.cancellations").value(2));
     }
 
@@ -544,6 +545,31 @@ class AdminStatsReportTest {
         }
     }
 
+    @Test
+    void nonPositiveStateOrCityFiltersAreRejected() throws Exception {
+        for (String kind : new String[] {"usage", "revenue"}) {
+            for (String filter : new String[] {"&stateId=0", "&cityId=0", "&stateId=-3", "&cityId=-1"}) {
+                report(kind, filter).andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+                report(kind, filter + "&format=csv").andExpect(status().isBadRequest());
+            }
+        }
+    }
+
+    @Test
+    void usageTotalsAreTheSumOfTheRows() throws Exception {
+        // 62 min and 26 min show as 1.0 h and 0.4 h; a total taken from the seconds would be 1.5, the rows add to 1.4
+        booking(pune, puneSlot, BookingStatus.COMPLETED, d0, "10:00", d0, "10:00", "11:02");
+        booking(bengaluru, bengaluruSlot, BookingStatus.COMPLETED, d0, "10:00", d0, "10:00", "10:26");
+
+        report("usage", "")
+                .andExpect(jsonPath("$.rows[0].cityName").value("Bengaluru"))
+                .andExpect(jsonPath("$.rows[0].bookedHours").value(0.4))
+                .andExpect(jsonPath("$.rows[1].cityName").value("Pune"))
+                .andExpect(jsonPath("$.rows[1].bookedHours").value(1.0))
+                .andExpect(jsonPath("$.totals.bookedHours").value(1.4));
+    }
+
     // ---- CSV ------------------------------------------------------------------------------------------------
 
     private String body(ResultActions result) throws Exception {
@@ -564,9 +590,10 @@ class AdminStatsReportTest {
         assertThat(csv).startsWith(BOM + "City,State,Listings,Slots,Bookings,Booked hours,Utilization %,Cancellations\r\n");
         assertThat(csv.substring(1).split("\r\n")).containsExactly(
                 "City,State,Listings,Slots,Bookings,Booked hours,Utilization %,Cancellations",
-                "Pune,Maharashtra,1,1,8,6.0,5.0,2",
+                "Pune,Maharashtra,1,1,8,7.0,5.8,2",
                 "Bengaluru,Karnataka,1,1,2,5.0,4.2,0",
-                "Hyderabad,Telangana,1,1,0,0.0,0.0,0");
+                "Hyderabad,Telangana,1,1,0,0.0,0.0,0",
+                "Total,,3,3,10,12.0,3.3,2");
         assertThat(csv).endsWith("\r\n");
     }
 
@@ -590,7 +617,8 @@ class AdminStatsReportTest {
                 "City,State,Bookings,GMV,Platform fees,GST,Refunds,Owner earnings",
                 "\"'=HYPERLINK(\"\"x\"\",\"\"y\"\")\",Telangana,1,1000.00,6.00,1.08,0.00,0.00",
                 "Bengaluru,Karnataka,2,185.08,16.00,19.08,0.00,180.00",
-                "Pune,Maharashtra,8,171.24,18.00,3.24,164.16,148.00");
+                "Pune,Maharashtra,8,171.24,18.00,3.24,164.16,148.00",
+                "Total,,11,1356.32,40.00,23.40,164.16,328.00");
     }
 
     @Test
@@ -603,7 +631,10 @@ class AdminStatsReportTest {
             ResultActions result = report("usage", "&format=csv")
                     .andExpect(status().isOk())
                     .andExpect(header().string("X-Truncated", "true"));
-            assertThat(body(result).substring(1).split("\r\n")).hasSize(2);
+            // header, the one row that fits, and the totals row (which is never cut)
+            String[] lines = body(result).substring(1).split("\r\n");
+            assertThat(lines).hasSize(3);
+            assertThat(lines[2]).startsWith("Total,,");
         } finally {
             target.csvMaxRows = original;
         }

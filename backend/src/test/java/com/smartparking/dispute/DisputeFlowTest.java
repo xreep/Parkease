@@ -23,16 +23,28 @@ import com.smartparking.support.CommittedIntegrationTest;
 import com.smartparking.support.DatabaseCleaner;
 import com.smartparking.support.ListingTestSupport;
 import com.smartparking.support.RecordingEmailSender;
+import com.smartparking.support.RecordingPaymentProvider;
+import com.smartparking.support.RecordingProviderTestConfig;
 import com.smartparking.user.UserRepository;
+import java.sql.Connection;
+import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -41,6 +53,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
 @CommittedIntegrationTest
+@Import(RecordingProviderTestConfig.class)
 class DisputeFlowTest {
 
     static final String DESCRIPTION = "The gate was locked and nobody answered the phone.";
@@ -52,6 +65,8 @@ class DisputeFlowTest {
     @Autowired UserRepository users;
     @Autowired PasswordEncoder encoder;
     @Autowired RecordingEmailSender emails;
+    @Autowired RecordingPaymentProvider provider;
+    @Autowired DataSource dataSource;
 
     String admin;
     String ownerAuth;
@@ -65,6 +80,7 @@ class DisputeFlowTest {
     void setUp() throws Exception {
         DatabaseCleaner.clean(jdbc);
         emails.clear();
+        provider.reset();
         admin = adminAuth(mvc, users, encoder, "dp-admin@example.com");
         ownerAuth = AuthTestSupport.bearer(AuthTestSupport.accessToken(
                 AuthTestSupport.register(mvc, "dp-owner@example.com", "OWNER")));
@@ -206,6 +222,8 @@ class DisputeFlowTest {
     void validationAndAuthorisationOfRaising() throws Exception {
         raise(driver, bookingId, body("NO_ACCESS", "too short")).andExpect(status().isBadRequest());
         raise(driver, bookingId, body("NO_ACCESS", "x".repeat(2001))).andExpect(status().isBadRequest());
+        raise(driver, bookingId, body("NO_ACCESS", " ".repeat(20))).andExpect(status().isBadRequest());
+        raise(driver, bookingId, body("NO_ACCESS", "   short     ")).andExpect(status().isBadRequest()); // 5 once trimmed
         raise(driver, bookingId, body("BOGUS", DESCRIPTION)).andExpect(status().isBadRequest());
         raise(driver, bookingId, "{\"description\":\"" + DESCRIPTION + "\"}").andExpect(status().isBadRequest());
         raise(other, bookingId, body("NO_ACCESS", DESCRIPTION)).andExpect(status().isNotFound());
@@ -285,6 +303,167 @@ class DisputeFlowTest {
                 .andExpect(jsonPath("$.code").value("DISPUTE_NOT_ALLOWED"));
     }
 
+    @Test
+    void ownersAndDriversNeverSeeAdminNotesOrTheRefundableRemainingOfAResolvedDispute() throws Exception {
+        long id = raiseOk();
+        resolve(id, "{\"resolution\":\"REFUND_PARTIAL\",\"amount\":20,\"notes\":\"Internal: owner is a repeat offender\"}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.adminNotes").value("Internal: owner is a repeat offender"))
+                .andExpect(jsonPath("$.refundableRemaining").value(47.08));
+
+        getAs(driver.auth(), "/api/v1/disputes/" + id).andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("RESOLVED"))
+                .andExpect(jsonPath("$.resolution").value("REFUND_PARTIAL"))
+                .andExpect(jsonPath("$.adminNotes").value(nullValue()))
+                .andExpect(jsonPath("$.refundableRemaining").value(nullValue()));
+        getAs(ownerAuth, "/api/v1/owner/disputes/" + id).andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("RESOLVED"))
+                .andExpect(jsonPath("$.adminNotes").value(nullValue()))
+                .andExpect(jsonPath("$.refundableRemaining").value(nullValue()));
+    }
+
+    // ---- concurrency ----------------------------------------------------------------------------------------
+
+    /** Runs the tasks at the same moment and returns their results in order. */
+    private <T> List<T> inParallel(List<Callable<T>> tasks) throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(tasks.size());
+        try {
+            CountDownLatch go = new CountDownLatch(1);
+            List<Future<T>> futures = tasks.stream().map(t -> pool.submit(() -> {
+                go.await();
+                return t.call();
+            })).toList();
+            go.countDown();
+            List<T> results = new java.util.ArrayList<>();
+            for (Future<T> f : futures) {
+                results.add(f.get(30, TimeUnit.SECONDS));
+            }
+            return results;
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void twoRespondsAtOnceHaveOneWinnerAndOneNotification() throws Exception {
+        long id = raiseOk();
+        List<Integer> codes = inParallel(List.of(
+                () -> respond(ownerAuth, id, "First answer").andReturn().getResponse().getStatus(),
+                () -> respond(ownerAuth, id, "Second answer").andReturn().getResponse().getStatus()));
+
+        assertThat(codes).containsExactlyInAnyOrder(200, 409);
+        assertThat(notificationsOf("dp-driver@example.com")).containsOnlyOnce("DISPUTE_RESPONSE");
+        assertThat(jdbc.queryForObject("select count(*) from notifications where type = 'DISPUTE_RESPONSE'",
+                Integer.class)).isEqualTo(1);
+    }
+
+    @Test
+    void aRespondQueuedBehindAResolveCannotWriteTheDisputeBackToOpen() throws Exception {
+        long id = raiseOk();
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try (Connection holder = dataSource.getConnection()) {
+            holder.setAutoCommit(false);
+            try (Statement st = holder.createStatement()) {
+                st.execute("select id from disputes where id = " + id + " for update"); // both requests must queue
+            }
+            Future<Integer> resolved = pool.submit(() -> resolve(id, "{\"resolution\":\"NO_REFUND\",\"notes\":\"Done\"}")
+                    .andReturn().getResponse().getStatus());
+            Thread.sleep(600); // the resolve is waiting for the row first, the respond queues behind it
+            Future<Integer> responded = pool.submit(() -> respond(ownerAuth, id, "Too late?")
+                    .andReturn().getResponse().getStatus());
+            Thread.sleep(600);
+            holder.commit();
+
+            assertThat(resolved.get(30, TimeUnit.SECONDS)).isEqualTo(200);
+            assertThat(responded.get(30, TimeUnit.SECONDS)).isEqualTo(409);
+        } finally {
+            pool.shutdownNow();
+        }
+        Map<String, Object> row = jdbc.queryForMap("select status, owner_response from disputes where id = ?", id);
+        assertThat(row).containsEntry("status", "RESOLVED").containsEntry("owner_response", null);
+        assertThat(notificationsOf("dp-driver@example.com")).doesNotContain("DISPUTE_RESPONSE");
+    }
+
+    @Test
+    void twoReportsAtOnceCreateOneDispute() throws Exception {
+        List<Integer> codes = inParallel(List.of(
+                () -> raise(driver, bookingId, body("NO_ACCESS", DESCRIPTION)).andReturn().getResponse().getStatus(),
+                () -> raise(driver, bookingId, body("PAYMENT", DESCRIPTION)).andReturn().getResponse().getStatus()));
+
+        assertThat(codes).containsExactlyInAnyOrder(201, 409);
+        assertThat(jdbc.queryForObject("select count(*) from disputes", Integer.class)).isEqualTo(1);
+        assertThat(notificationsOf("dp-owner@example.com")).containsOnlyOnce("DISPUTE_OPENED");
+    }
+
+    @Test
+    void aRefundWaitsForAPayoutInFlightAndLeavesThePaidEarningAlone() throws Exception {
+        long id = raiseOk();
+        ExecutorService pool = Executors.newFixedThreadPool(1);
+        try (Connection payout = dataSource.getConnection()) {
+            payout.setAutoCommit(false);
+            try (Statement st = payout.createStatement()) { // what mark-paid does, not committed yet
+                st.execute("select id from owner_earnings where booking_id = " + bookingId + " for update");
+                st.execute("update owner_earnings set status = 'PAID', paid_at = now(), payout_reference = 'UTR-1' "
+                        + "where booking_id = " + bookingId);
+            }
+            Future<Integer> resolved = pool.submit(() -> resolve(id,
+                    "{\"resolution\":\"REFUND_FULL\",\"notes\":\"Refund\"}").andReturn().getResponse().getStatus());
+            Thread.sleep(800);
+            payout.commit();
+            assertThat(resolved.get(30, TimeUnit.SECONDS)).isEqualTo(200);
+        } finally {
+            pool.shutdownNow();
+        }
+        assertThat(earning()).containsEntry("status", "PAID"); // not overwritten with REVERSED
+        assertThat(((Number) earning().get("net")).doubleValue()).isEqualTo(60.0);
+        assertThat(payment()).containsEntry("status", "REFUNDED");
+    }
+
+    // ---- refund wording and notices ---------------------------------------------------------------------------
+
+    private String driverBody(String type) {
+        return jdbc.queryForObject("select n.body from notifications n join users u on u.id = n.user_id "
+                + "where u.email = 'dp-driver@example.com' and n.type = ? order by n.id desc limit 1", String.class, type);
+    }
+
+    @Test
+    void aProcessedDisputeRefundIsSaidToBeIssuedAndTheDriverIsNotToldTwice() throws Exception {
+        long id = raiseOk();
+        resolve(id, "{\"resolution\":\"REFUND_FULL\",\"notes\":\"Locked gate\"}").andExpect(status().isOk());
+
+        assertThat(driverBody("DISPUTE_RESOLVED")).contains("has been issued").doesNotContain("returned");
+        assertThat(notificationsOf("dp-driver@example.com")).doesNotContain("BOOKING_REFUNDED");
+        assertThat(emails.sentTo("dp-driver@example.com")).hasSize(1);
+    }
+
+    @Test
+    void aSettlingDisputeRefundIsSaidToBeProcessedNotReturned() throws Exception {
+        provider.pendingRefunds = true;
+        long id = raiseOk();
+        resolve(id, "{\"resolution\":\"REFUND_PARTIAL\",\"amount\":20,\"notes\":\"Part\"}")
+                .andExpect(status().isOk());
+
+        assertThat(jdbc.queryForObject("select status from refunds", String.class)).isEqualTo("PENDING");
+        assertThat(driverBody("DISPUTE_RESOLVED")).contains("₹20.00").contains("will be processed")
+                .doesNotContain("returned");
+        assertThat(notificationsOf("dp-driver@example.com")).doesNotContain("BOOKING_REFUNDED");
+    }
+
+    @Test
+    void aFailedDisputeRefundIsAnnouncedOnceWhenARetryGetsItThrough() throws Exception {
+        provider.failures.set(1);
+        long id = raiseOk();
+        resolve(id, "{\"resolution\":\"REFUND_FULL\",\"notes\":\"Full\"}").andExpect(status().isOk());
+
+        assertThat(jdbc.queryForObject("select status from refunds", String.class)).isEqualTo("FAILED");
+        assertThat(driverBody("DISPUTE_RESOLVED")).contains("will be processed").doesNotContain("returned");
+        assertThat(notificationsOf("dp-driver@example.com")).doesNotContain("BOOKING_REFUNDED");
+
+        long refund = jdbc.queryForObject("select id from refunds", Long.class);
+        postAs(admin, "/api/v1/admin/refunds/" + refund + "/retry", null).andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PROCESSED"));
+        assertThat(notificationsOf("dp-driver@example.com")).containsOnlyOnce("BOOKING_REFUNDED");
+    }
+
     // ---- admin ----------------------------------------------------------------------------------------------
 
     @Test
@@ -335,9 +514,7 @@ class DisputeFlowTest {
         assertThat(earning()).containsEntry("status", "HELD");
 
         jdbc.update("update disputes set status = 'RESOLVED'");
-        long second = raise(driver, bookingId, body("OTHER", DESCRIPTION)).andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString().length();
-        assertThat(second).isPositive();
+        raise(driver, bookingId, body("OTHER", DESCRIPTION)).andExpect(status().isCreated());
         long warnId = jdbc.queryForObject("select max(id) from disputes", Long.class);
         resolve(warnId, "{\"resolution\":\"WARNING\",\"notes\":\"Owner warned\"}").andExpect(status().isOk())
                 .andExpect(jsonPath("$.resolution").value("WARNING"));

@@ -191,6 +191,14 @@ public final class EmailTemplates {
      */
     public static EmailMessage paymentRefunded(User driver, Booking booking, String link, RefundNotice notice,
                                                boolean pending, BigDecimal amount) {
+        if (notice == RefundNotice.DISPUTE) {
+            return build(driver, pending ? "Refund initiated – ParkEase" : "Refund issued – ParkEase",
+                    "Your refund of ₹" + amount.toPlainString() + " for your report about booking "
+                            + booking.getBookingCode() + (pending
+                            ? " is being processed to your original payment method."
+                            : " has been issued to your original payment method.") + "\n\n" + details(booking),
+                    "View booking", link);
+        }
         if (notice == RefundNotice.CANCELLATION) {
             return build(driver, pending ? "Refund initiated – ParkEase" : "Refund issued – ParkEase",
                     "Your refund of ₹" + amount.toPlainString() + " for the cancelled booking "

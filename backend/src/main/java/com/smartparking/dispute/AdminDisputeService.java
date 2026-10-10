@@ -17,7 +17,10 @@ import com.smartparking.notification.NotificationType;
 import com.smartparking.notification.Notifier;
 import com.smartparking.payment.Payment;
 import com.smartparking.payment.PaymentRepository;
+import com.smartparking.payment.Refund;
+import com.smartparking.payment.RefundNotice;
 import com.smartparking.payment.RefundService;
+import com.smartparking.payment.RefundStatus;
 import com.smartparking.user.User;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -93,10 +96,11 @@ public class AdminDisputeService {
             case REFUND_PARTIAL -> partialAmount(request.amount(), remaining);
             case NO_REFUND, WARNING -> null;
         };
-        if (amount != null) {
-            refunds.refund(booking, payment, amount, BookingActor.ADMIN,
-                    "Dispute resolved: " + request.resolution().name().toLowerCase().replace('_', ' '), null);
-        }
+        // The notice keeps the refund's own driver message away (the resolution tells the driver), except to announce
+        // a refund that failed first and gets through on a retry.
+        Refund refund = amount == null ? null : refunds.refund(booking, payment, amount, BookingActor.ADMIN,
+                "Dispute resolved: " + request.resolution().name().toLowerCase().replace('_', ' '),
+                RefundNotice.DISPUTE);
         dispute.setStatus(DisputeStatus.RESOLVED);
         dispute.setResolution(request.resolution());
         dispute.setResolutionAmount(amount);
@@ -106,7 +110,7 @@ public class AdminDisputeService {
         audit.record(admin, "DISPUTE_RESOLVED", "DISPUTE", id, request.resolution()
                 + (amount == null ? "" : " ₹" + amount.toPlainString()) + ". " + dispute.getAdminNotes());
 
-        String outcome = outcome(request.resolution(), amount);
+        String outcome = outcome(request.resolution(), amount, refund);
         User driver = dispute.getRaisedBy();
         User owner = booking.getListing().getOwner();
         String driverPath = "/driver/bookings/" + bookingId;
@@ -135,10 +139,11 @@ public class AdminDisputeService {
         return amount;
     }
 
-    private static String outcome(DisputeResolution resolution, BigDecimal amount) {
+    private static String outcome(DisputeResolution resolution, BigDecimal amount, Refund refund) {
         return switch (resolution) {
             case REFUND_FULL, REFUND_PARTIAL -> "A refund of ₹" + amount.toPlainString()
-                    + " will be returned to the original payment method.";
+                    + (refund.getStatus() == RefundStatus.PROCESSED ? " has been issued to" : " will be processed to")
+                    + " the original payment method.";
             case NO_REFUND -> "No refund was issued.";
             case WARNING -> "The owner has been warned.";
         };

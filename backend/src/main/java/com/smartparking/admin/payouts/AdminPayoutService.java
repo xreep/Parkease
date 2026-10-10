@@ -127,7 +127,8 @@ public class AdminPayoutService {
             int at = upi.indexOf('@');
             String local = at < 0 ? upi : upi.substring(0, at);
             String handle = at < 0 ? "" : upi.substring(at);
-            return local.substring(0, Math.min(2, local.length())) + "***" + handle;
+            // Short ids give away proportionally more: reveal one character up to three, two beyond that.
+            return local.substring(0, Math.min(local.length() <= 3 ? 1 : 2, local.length())) + "***" + handle;
         }
         String account = p.getPayoutBankAccount().trim();
         String last4 = account.substring(Math.max(0, account.length() - 4));

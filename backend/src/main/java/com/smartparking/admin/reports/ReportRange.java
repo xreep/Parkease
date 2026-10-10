@@ -10,6 +10,7 @@ record ReportRange(LocalDate from, LocalDate to) {
     static final int MAX_DAYS = 366;
     static final int DEFAULT_DAYS = 30;
 
+    /** Resolves the optional bounds once per request; 400 {@code INVALID_DATE_RANGE} when they do not fit. */
     static ReportRange resolve(LocalDate fromParam, LocalDate toParam, Clock clock) {
         LocalDate to = toParam != null ? toParam : DashboardRanges.dateOf(clock.instant());
         LocalDate from = fromParam != null ? fromParam : to.minusDays(DEFAULT_DAYS - 1L);

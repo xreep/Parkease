@@ -26,6 +26,7 @@ import com.smartparking.payment.PaymentStatus;
 import com.smartparking.payment.RefundNotice;
 import com.smartparking.payment.RefundRepository;
 import com.smartparking.payment.RefundService;
+import com.smartparking.payment.RefundStatus;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.EnumSet;
@@ -103,6 +104,7 @@ public class AdminBookingService {
 
         Payment payment = payments.findByBookingId(id).orElse(null);
         BigDecimal refunded = BigDecimal.ZERO;
+        RefundStatus refundStatus = null;
         if (from == BookingStatus.PENDING_PAYMENT) {
             if (payment != null && payment.getStatus() == PaymentStatus.CREATED) {
                 payment.setStatus(PaymentStatus.FAILED);
@@ -111,17 +113,19 @@ public class AdminBookingService {
         } else if (payment != null) {
             BigDecimal remaining = refunds.refundableRemaining(payment);
             if (remaining.signum() > 0) {
-                refunds.refund(booking, payment, remaining, BookingActor.ADMIN, "Booking cancelled by admin",
-                        RefundNotice.CANCELLATION);
+                refundStatus = refunds.refund(booking, payment, remaining, BookingActor.ADMIN,
+                        "Booking cancelled by admin", RefundNotice.CANCELLATION).getStatus();
                 refunded = remaining;
             }
         }
         audit.record(admin, "BOOKING_CANCELLED", "BOOKING", id, "Reason: " + reason
-                + (refunded.signum() > 0 ? ". Refunded ₹" + refunded.toPlainString() : ""));
+                + (refunded.signum() > 0 ? ". Refund of ₹" + refunded.toPlainString() + " " + refundStatus : ""));
 
         ParkingListing listing = booking.getListing();
         String refundLine = refunded.signum() > 0
-                ? "A refund of ₹" + refunded.toPlainString() + " will be returned to your original payment method."
+                ? "A refund of ₹" + refunded.toPlainString()
+                + (refundStatus == RefundStatus.PROCESSED ? " has been issued to" : " will be processed to")
+                + " your original payment method."
                 : from == BookingStatus.PENDING_PAYMENT ? "You hadn't paid yet, so nothing was charged."
                 : "No money is left to refund on this booking.";
         String driverPath = "/driver/bookings/" + id;

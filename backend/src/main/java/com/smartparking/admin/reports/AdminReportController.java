@@ -4,8 +4,8 @@ import com.smartparking.common.error.ApiException;
 import com.smartparking.owner.dashboard.OwnerDashboardController;
 import com.smartparking.owner.dashboard.OwnerEarningsService.CsvExport;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.LocalDate;
-import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ContentDisposition;
@@ -25,6 +25,7 @@ public class AdminReportController {
     private static final MediaType CSV = new MediaType("text", "csv", StandardCharsets.UTF_8);
 
     private final ReportService reports;
+    private final Clock clock;
 
     /** Usage per city as JSON, or as a CSV download with {@code format=csv}. */
     @GetMapping("/usage")
@@ -33,8 +34,12 @@ public class AdminReportController {
                                    @RequestParam(required = false) Long stateId,
                                    @RequestParam(required = false) Long cityId,
                                    @RequestParam(defaultValue = "json") String format) {
-        return respond("usage", from, to, format, () -> reports.usageCsv(from, to, stateId, cityId),
-                () -> reports.usage(from, to, stateId, cityId));
+        boolean csv = isCsv(format);
+        ReportRange range = ReportRange.resolve(from, to, clock);
+        long state = filter(stateId, "stateId");
+        long city = filter(cityId, "cityId");
+        return csv ? csvResponse("usage", range, reports.usageCsv(range, state, city))
+                : ResponseEntity.ok(reports.usage(range, state, city));
     }
 
     /** Revenue per city as JSON, or as a CSV download with {@code format=csv}. */
@@ -44,28 +49,43 @@ public class AdminReportController {
                                      @RequestParam(required = false) Long stateId,
                                      @RequestParam(required = false) Long cityId,
                                      @RequestParam(defaultValue = "json") String format) {
-        return respond("revenue", from, to, format, () -> reports.revenueCsv(from, to, stateId, cityId),
-                () -> reports.revenue(from, to, stateId, cityId));
+        boolean csv = isCsv(format);
+        ReportRange range = ReportRange.resolve(from, to, clock);
+        long state = filter(stateId, "stateId");
+        long city = filter(cityId, "cityId");
+        return csv ? csvResponse("revenue", range, reports.revenueCsv(range, state, city))
+                : ResponseEntity.ok(reports.revenue(range, state, city));
     }
 
-    private ResponseEntity<?> respond(String kind, LocalDate from, LocalDate to, String format,
-                                      Supplier<CsvExport> csv, Supplier<?> json) {
+    private static boolean isCsv(String format) {
         if ("csv".equalsIgnoreCase(format)) {
-            CsvExport export = csv.get();
-            ReportService.ReportRangeView range = reports.range(from, to);
-            String name = "parkease-" + kind + "-report-" + range.from() + "-to-" + range.to() + ".csv";
-            ResponseEntity.BodyBuilder response = ResponseEntity.ok().contentType(CSV)
-                    .header(HttpHeaders.CONTENT_DISPOSITION,
-                            ContentDisposition.attachment().filename(name).build().toString())
-                    .cacheControl(CacheControl.noStore());
-            if (export.truncated()) {
-                response.header(OwnerDashboardController.TRUNCATED_HEADER, "true");
-            }
-            return response.body(export.text());
+            return true;
         }
         if (!"json".equalsIgnoreCase(format)) {
             throw ApiException.badRequest("INVALID_PARAMETER", "format must be json or csv");
         }
-        return ResponseEntity.ok(json.get());
+        return false;
+    }
+
+    /** An optional id filter as the repository's "0 = all"; an id that is given must be positive. */
+    private static long filter(Long id, String name) {
+        if (id == null) {
+            return 0;
+        }
+        if (id <= 0) {
+            throw ApiException.badRequest("INVALID_PARAMETER", name + " must be a positive id");
+        }
+        return id;
+    }
+
+    private static ResponseEntity<String> csvResponse(String kind, ReportRange range, CsvExport export) {
+        String name = "parkease-" + kind + "-report-" + range.from() + "-to-" + range.to() + ".csv";
+        ResponseEntity.BodyBuilder response = ResponseEntity.ok().contentType(CSV)
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(name).build().toString())
+                .cacheControl(CacheControl.noStore());
+        if (export.truncated()) {
+            response.header(OwnerDashboardController.TRUNCATED_HEADER, "true");
+        }
+        return response.body(export.text());
     }
 }

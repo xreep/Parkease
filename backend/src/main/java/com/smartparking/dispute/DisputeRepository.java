@@ -38,6 +38,8 @@ public interface DisputeRepository extends JpaRepository<Dispute, Long> {
     @Query("select d from Dispute d where (:status is null or d.status = :status)")
     Page<Dispute> findForAdmin(@Param("status") DisputeStatus status, Pageable pageable);
 
+    boolean existsByIdAndBookingListingOwnerId(Long id, Long ownerId);
+
     @Query("select d.booking.id from Dispute d where d.id = :id")
     Optional<Long> findBookingIdById(@Param("id") Long id);
 
