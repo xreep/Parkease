@@ -1,5 +1,6 @@
 import { Suspense, useEffect } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
+import { DemoBanner } from '../DemoBanner'
 import { ErrorBoundary } from '../ErrorBoundary'
 import { RolePrefetch } from '../RolePrefetch'
 import { EmailVerificationBanner } from '../EmailVerificationBanner'
@@ -32,6 +33,7 @@ export function AppLayout() {
       </a>
       <ScrollToHash />
       <RolePrefetch />
+      <DemoBanner />
       <Navbar />
       <EmailVerificationBanner />
       <main id="main" tabIndex={-1} className="flex-1 outline-none">
