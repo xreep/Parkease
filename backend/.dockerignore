@@ -1,0 +1,15 @@
+# Keep the build context small and free of secrets and local state.
+target/
+uploads/
+.git
+.gitignore
+.idea/
+.vscode/
+*.iml
+.DS_Store
+.env
+.env.*
+!.env.example
+HELP.md
+Dockerfile
+.dockerignore
