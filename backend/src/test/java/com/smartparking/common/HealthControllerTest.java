@@ -19,6 +19,7 @@ class HealthControllerTest {
     void healthIsPublicAndUp() throws Exception {
         mvc.perform(get("/api/v1/health"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("UP"));
+                .andExpect(jsonPath("$.status").value("UP"))
+                .andExpect(jsonPath("$.demoMode").value(false));
     }
 }

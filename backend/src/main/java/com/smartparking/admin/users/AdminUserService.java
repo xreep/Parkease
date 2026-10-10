@@ -6,6 +6,7 @@ import com.smartparking.booking.BookingRepository;
 import com.smartparking.common.config.AppProperties;
 import com.smartparking.common.error.ApiException;
 import com.smartparking.common.security.AuthUser;
+import com.smartparking.common.seed.DemoMode;
 import com.smartparking.common.security.UserStatusCache;
 import com.smartparking.common.web.PageResponse;
 import com.smartparking.email.EmailTemplates;
@@ -42,6 +43,7 @@ public class AdminUserService {
     private final Notifier notifier;
     private final AppProperties app;
     private final Clock clock;
+    private final DemoMode demoMode;
 
     @Transactional(readOnly = true)
     public PageResponse<AdminUserDto> list(Role role, UserStatus status, String q, int page, int size) {
@@ -63,6 +65,9 @@ public class AdminUserService {
         }
         if (user.getStatus() == UserStatus.SUSPENDED) {
             throw ApiException.conflict("INVALID_STATUS", "This account is already suspended");
+        }
+        if (demoMode.isLockedAccount(user.getEmail())) {
+            throw ApiException.conflict("CANNOT_SUSPEND", "This is a shared demo account and cannot be suspended");
         }
         String reason = rawReason.trim();
         user.setStatus(UserStatus.SUSPENDED);

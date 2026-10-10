@@ -76,6 +76,10 @@ photo and owner document. In production, use Cloudinary.
 Without it the backend still starts, but logs `CLOUDINARY_URL is not set ... ephemeral` and falls back to local disk.
 Photos are public Cloudinary URLs; owner documents are private and served through short-lived signed links.
 
+**Owner verification documents can be PDFs.** Cloudinary blocks delivery of PDF and ZIP files on new accounts by
+default: in the Cloudinary console go to **Settings -> Security** and tick **Allow delivery of PDF and ZIP files**.
+Without it the admin's "open document" link for a PDF answers with an error (images still work).
+
 ## 3. Razorpay test keys
 
 Do this before Render: the production profile will not boot without the keys.
@@ -122,10 +126,27 @@ instance (then use 587).
    | `MAIL_HOST`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM` | optional, step 4; leave `MAIL_HOST` empty to only log e-mails |
 
    `SPRING_PROFILES_ACTIVE` is already `prod,demo` in `render.yaml`. `prod` switches on the hardened settings;
-   `demo` seeds the demo accounts, about 250 listings and about 500 bookings on the first start (idempotent, it never
+   `demo` seeds the demo accounts, about 100 listings and about 500 bookings on the first start (idempotent, it never
    touches other rows). For a clean database use `prod` only and delete `DEMO_PASSWORD`. Note on the demo data: its
    historical payments exist only in the database, so refunds on them go through the built-in mock provider, while
    payments you make on the deployed site go through Razorpay and are refunded there. Mixed provider history is expected.
+
+   **What demo mode does** (all of it only while the `demo` profile is active):
+   - On **every start** the showcase logins (`admin@`, `owner@`, `driver@`, `owner.north@` ... `@parkease.dev`) are reset:
+     password taken from `DEMO_PASSWORD`, status active, e-mail verified, owners verified (`owner.pending@` stays pending
+     on purpose). The platform settings (fee, GST, hold and approval windows, price guidelines) go back to their
+     defaults. So a visitor who changed something on the shared demo cannot break it for long: restart the service.
+   - **Rotating `DEMO_PASSWORD`** takes effect on the next restart (the dashboard restarts the service when you save
+     the variable); the old password stops working and open sessions of those accounts end. Only the `@parkease.dev`
+     logins are rewritten; the generated demo people at `@example.com` keep the password they were seeded with.
+   - Those showcase logins **cannot change their password** (`403 DEMO_ACCOUNT_LOCKED`) or be suspended by an admin
+     (`409 CANNOT_SUSPEND`). Visitors' own accounts behave normally.
+   - **Mail** to `@example.com` and `@parkease.dev` addresses is dropped (logged at INFO: `Demo mode: not sending ...`);
+     real visitors' addresses still receive mail.
+   - `GET /api/v1/health` returns `{"status":"UP","demoMode":true}`; the frontend uses `demoMode` to show a demo banner.
+   - **Demo data dates are fixed at the first seed** (bookings are placed relative to "now" once). After weeks the
+     "upcoming" bookings are in the past. To refresh, point `DB_URL` at a new Neon branch or database and restart: the
+     seeder fills it again relative to the new "now". Deleting the old branch afterwards frees its storage.
 
    `CORS_ALLOWED_ORIGINS` is optional: in production CORS allows exactly `FRONTEND_URL` unless you set a comma
    separated list of exact `https://` origins.
@@ -148,8 +169,15 @@ states the mode: `Forwarded headers: strategy=native, internal-proxies=...`.
 
 If Render's proxies turn out to be outside those ranges, all visitors would share the proxy's address (and its
 rate-limit budget; see the post-deploy check). Set `INTERNAL_PROXIES` in the Render dashboard to a regular expression
-matched against the *whole* peer address, for example `203\\.0\\.113\\.\\d{1,3}|10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}`
-(the value replaces the default, so keep the private ranges you still want). Do not use `.*`: that would let anyone
+matched against the *whole* peer address, for example
+
+```
+203\.0\.113\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}
+```
+
+You must paste exactly that form, single backslashes, into the dashboard field: environment values are taken literally, so
+doubling the backslashes would make the pattern match nothing. The value replaces the default, so keep the private
+ranges you still want. Do not use `.*`: that would let anyone
 spoof their address.
 
 **What the backend refuses to start without** (the log names every problem at once): a `JWT_SECRET` that is not base64,
@@ -206,6 +234,8 @@ Open the Vercel URL, then:
 - [ ] Log in as `owner@parkease.dev`: dashboard and earnings load; upload a photo to a draft listing and confirm that
       its URL starts with `https://res.cloudinary.com/`.
 - [ ] Log in as `admin@parkease.dev`: stats and the moderation queues load.
+- [ ] As admin, open an **owner verification document that is a PDF** (Admin -> Verification -> the pending owner ->
+      open document): it must display. An error here means Cloudinary's "Allow delivery of PDF and ZIP files" is off (step 2).
 - [ ] Reload a deep link (for example `/search`) on Vercel: it opens the app, not a 404.
 - [ ] Response headers on an API call include `Strict-Transport-Security`, `X-Content-Type-Options` and
       `X-Frame-Options`.
@@ -234,14 +264,15 @@ Open the Vercel URL, then:
       address is limited, open the site from another network (phone on mobile data): it must still work. If `client=`
       shows a proxy address, or the other network is limited too, the proxy is not recognised as internal: set
       `INTERNAL_PROXIES` (step 5).
+
 ## 10. Troubleshooting
 
 | Symptom | Cause and fix |
 |---|---|
-| First request after a quiet period takes 30-60 s or times out | Render's free web service sleeps after 15 minutes without traffic and cold-starts a JVM. Open the health URL a minute before a demo, or ping `/actuator/health` every 10 minutes from a free monitor such as UptimeRobot. |
+| First request after a quiet period takes 30-60 s or times out | Render's free web service sleeps after 15 minutes without traffic and cold-starts a JVM. Warm it up only shortly before a demo: open `/api/v1/health` a minute or two beforehand and wait for `UP`. Do not ping it around the clock from a monitor, which would use up the free instance hours for no benefit. |
 | Render deploy fails with `Unsafe production configuration` | The log lists each problem (secret, DB, URLs). Fix the named variables in the dashboard and redeploy. |
 | `RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET must be set in production` | Production has no mock payments. Add the test keys (step 3). |
-| `Could not resolve placeholder 'DEMO_PASSWORD'` | Set `DEMO_PASSWORD` or drop `demo` from `SPRING_PROFILES_ACTIVE`. |
+| `DEMO_PASSWORD must be set when the demo profile is active (every seeded account logs in with it)` | Set `DEMO_PASSWORD` or drop `demo` from `SPRING_PROFILES_ACTIVE`. |
 | Browser console: CORS error | `FRONTEND_URL` / `CORS_ALLOWED_ORIGINS` does not exactly match the origin in the address bar (scheme, subdomain, no trailing slash). A preview deployment URL on Vercel is a different origin. |
 | Browser console: CSP violation | The backend host is not `*.onrender.com`; edit `connect-src` / `img-src` in `frontend/vercel.json`. |
 | `429 Too Many Requests` (`RATE_LIMITED`) | Per-IP limits: auth 10/min, public search/listing/quote/availability/reviews 120/min, uploads and disputes 20/min, payment verification 30/min. `Retry-After` says how long to wait. If every visitor is throttled together, the backend sees one address for all of them: the proxy is not in `INTERNAL_PROXIES` (step 5); the log line `Rate limited client=...` shows which address it used. |

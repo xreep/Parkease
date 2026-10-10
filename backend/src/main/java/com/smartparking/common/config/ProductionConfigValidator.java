@@ -2,6 +2,7 @@ package com.smartparking.common.config;
 
 import com.smartparking.common.security.JwtProperties;
 import com.smartparking.email.AppMailProperties;
+import com.smartparking.payment.PaymentProperties;
 import com.smartparking.storage.StorageProperties;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -33,14 +34,16 @@ public class ProductionConfigValidator {
     private final AppProperties app;
     private final StorageProperties storage;
     private final AppMailProperties mail;
+    private final PaymentProperties payments;
     private final Environment environment;
 
     public ProductionConfigValidator(JwtProperties jwt, AppProperties app, StorageProperties storage,
-                                     AppMailProperties mail, Environment environment) {
+                                     AppMailProperties mail, PaymentProperties payments, Environment environment) {
         this.jwt = jwt;
         this.app = app;
         this.storage = storage;
         this.mail = mail;
+        this.payments = payments;
         this.environment = environment;
     }
 
@@ -52,6 +55,7 @@ public class ProductionConfigValidator {
                 binder.bind("app", AppProperties.class).orElse(new AppProperties(null, null, 0, 0)),
                 binder.bind("app.storage", StorageProperties.class).orElse(new StorageProperties(null, null, null)),
                 binder.bind("app.mail", AppMailProperties.class).orElse(new AppMailProperties(null, 0, null, null, null)),
+                binder.bind("app.payments", PaymentProperties.class).orElse(new PaymentProperties(null, false)),
                 environment);
     }
 
@@ -78,6 +82,8 @@ public class ProductionConfigValidator {
             problems.add("FRONTEND_URL must be set to the https URL of the frontend");
         } else if (!app.frontendUrl().startsWith("https://")) {
             problems.add("FRONTEND_URL must be an https URL (it is used in e-mailed links)");
+        } else if (!isBareOrigin(app.frontendUrl())) {
+            problems.add("FRONTEND_URL must be just the origin, https://host[:port] with no trailing slash or path");
         }
 
         List<String> origins = app.corsAllowedOrigins();
@@ -85,6 +91,9 @@ public class ProductionConfigValidator {
             problems.add("CORS_ALLOWED_ORIGINS (or FRONTEND_URL) must name the frontend origin");
         } else if (origins.stream().anyMatch(o -> !o.startsWith("https://") || o.contains("*"))) {
             problems.add("CORS_ALLOWED_ORIGINS must list exact https origins (no http, no wildcards)");
+        } else if (!origins.stream().allMatch(ProductionConfigValidator::isBareOrigin)) {
+            problems.add("CORS_ALLOWED_ORIGINS entries must be just origins, https://host[:port] with no trailing "
+                    + "slash or path (the browser never sends one, so it would never match)");
         }
         return problems;
     }
@@ -121,6 +130,15 @@ public class ProductionConfigValidator {
             warnings.add("CLOUDINARY_URL is not set: uploads go to local disk, which is ephemeral on most hosts "
                     + "(Render redeploys and restarts lose every photo and owner document)");
         }
+        if (!StringUtils.hasText(storage.cloudinaryUrl()) && isLocalhost(storage.publicBaseUrl())) {
+            warnings.add("PUBLIC_BASE_URL still points at localhost while uploads are stored locally: links to "
+                    + "photos would only work on this machine (set it to this service's public https URL)");
+        }
+        if (payments == null || payments.razorpayOrEmpty().webhookSecret() == null
+                || !StringUtils.hasText(payments.razorpayOrEmpty().webhookSecret())) {
+            warnings.add("RAZORPAY_WEBHOOK_SECRET is not set: payment webhooks cannot be verified, so payments "
+                    + "confirmed only by Razorpay's callback (not by the browser) will not be applied");
+        }
         String dbUrl = databaseUrl();
         if (!isBlank(dbUrl) && !dbUrl.contains("sslmode=require") && !dbUrl.contains("//localhost")
                 && !dbUrl.contains("//127.0.0.1")) {
@@ -141,5 +159,19 @@ public class ProductionConfigValidator {
     /** Missing, empty, or a placeholder such as ${JWT_SECRET} that nothing filled in. */
     private static boolean isBlank(String value) {
         return !StringUtils.hasText(value) || value.trim().startsWith("${");
+    }
+
+    private static boolean isBareOrigin(String value) {
+        try {
+            java.net.URI uri = java.net.URI.create(value.trim());
+            return uri.getHost() != null && (uri.getPath() == null || uri.getPath().isEmpty())
+                    && uri.getQuery() == null && uri.getFragment() == null && uri.getUserInfo() == null;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    private static boolean isLocalhost(String url) {
+        return StringUtils.hasText(url) && (url.contains("//localhost") || url.contains("//127.0.0.1"));
     }
 }
