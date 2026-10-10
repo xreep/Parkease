@@ -3,6 +3,8 @@ package com.smartparking.payment;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Limit;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -14,6 +16,12 @@ public interface RefundRepository extends JpaRepository<Refund, Long> {
     Optional<Refund> findByProviderPaymentId(String providerPaymentId);
 
     List<Refund> findByPaymentId(Long paymentId);
+
+    @Query(value = """
+            select r from Refund r join fetch r.payment p join fetch p.booking
+            where (:status is null or r.status = :status)
+            """, countQuery = "select count(r) from Refund r where (:status is null or r.status = :status)")
+    Page<Refund> adminSearch(@Param("status") RefundStatus status, Pageable pageable);
 
     /** Booking behind the refund with this provider refund id, without loading (or locking) any entity. */
     @Query("select r.payment.booking.id from Refund r where r.providerRefundId = :providerRefundId")

@@ -92,6 +92,27 @@ public final class EmailTemplates {
                 "View booking", link);
     }
 
+    public static EmailMessage bookingCancelledByAdmin(User driver, Booking booking, String reason, String refundLine,
+                                                       String link) {
+        return build(driver, "Booking cancelled – ParkEase",
+                "Your booking was cancelled by ParkEase. Reason: " + reason + "\n\n" + details(booking) + "\n\n"
+                        + refundLine, "View booking", link);
+    }
+
+    public static EmailMessage bookingCancelledByAdminForOwner(User owner, Booking booking, String reason,
+                                                               String link) {
+        return build(owner, "Booking cancelled by ParkEase – ParkEase",
+                "A booking for your parking was cancelled by ParkEase. Reason: " + reason + "\n\n"
+                        + ownerDetails(booking), "View bookings", link);
+    }
+
+    public static EmailMessage payoutSent(User owner, String amount, int count, String reference, String link) {
+        return build(owner, "Payout sent – ParkEase",
+                "We have sent you ₹" + amount + " for " + count + (count == 1 ? " booking" : " bookings")
+                        + ".\nPayout reference: " + reference,
+                "View earnings", link);
+    }
+
     /** Booking emails read lazy associations of {@code booking}; build them inside a transaction. */
     public static EmailMessage bookingConfirmed(User driver, Booking booking, String link) {
         return build(driver, "Booking confirmed – ParkEase",
