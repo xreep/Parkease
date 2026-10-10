@@ -9,7 +9,9 @@ services:
     region: singapore          # closest to India; keep Neon in a nearby region too (ap-southeast-1)
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
-    healthCheckPath: /actuator/health
+    # Liveness only: static answer, no database access (so the check never wakes a suspended Neon database).
+    # /actuator/health also checks the database; use it by hand as a readiness check.
+    healthCheckPath: /api/v1/health
     autoDeploy: true
     envVars:
       # Hosted demo: production hardening plus the seeded demo accounts, listings and bookings.
@@ -17,6 +19,7 @@ services:
       - key: SPRING_PROFILES_ACTIVE
         value: prod,demo
       # Render sets PORT itself (10000); the app listens on it.
+      # Optional: INTERNAL_PROXIES (regex of proxy addresses whose X-Forwarded-For is believed), see docs/DEPLOYMENT.md.
 
       # --- Database (Neon). DB_URL = jdbc:postgresql://<host>/<db>?sslmode=require ---
       - key: DB_URL

@@ -159,4 +159,18 @@ class ProductionConfigValidatorTest {
         assertThat(new Config().db("jdbc:postgresql://localhost:5432/db").build().warnings())
                 .noneMatch(w -> w.contains("sslmode"));
     }
+
+    @Test
+    void everySecretCommittedInTheDevAndTestConfigIsOnTheRefusedList() throws Exception {
+        String dev = java.nio.file.Files.readString(java.nio.file.Path.of("src/main/resources/application-dev.yml"));
+        String test = java.nio.file.Files.readString(java.nio.file.Path.of("src/test/resources/application-test.yml"));
+        java.util.regex.Matcher devSecret = java.util.regex.Pattern
+                .compile("secret: \\$\\{JWT_SECRET:([^}]+)}").matcher(dev);
+        java.util.regex.Matcher testSecret = java.util.regex.Pattern.compile("secret: (\\S+)").matcher(test);
+
+        assertThat(devSecret.find()).as("dev secret default").isTrue();
+        assertThat(testSecret.find()).as("test secret").isTrue();
+        assertThat(ProductionConfigValidator.KNOWN_SECRETS)
+                .contains(devSecret.group(1).trim(), testSecret.group(1).trim());
+    }
 }

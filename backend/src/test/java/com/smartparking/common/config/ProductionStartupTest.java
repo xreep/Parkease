@@ -70,8 +70,7 @@ class ProductionStartupTest {
         try (ConfigurableApplicationContext context = run(ProductionConfigValidatorTest.strongSecret())) {
             assertThat(context.isRunning()).isTrue();
             assertThat(context.getEnvironment().getProperty("app.security.hsts", Boolean.class)).isTrue();
-            assertThat(context.getEnvironment().getProperty("app.security.trust-forwarded-for", Boolean.class))
-                    .isTrue();
+            assertThat(context.getEnvironment().getProperty("server.forward-headers-strategy")).isEqualTo("native");
             // CORS follows FRONTEND_URL unless CORS_ALLOWED_ORIGINS overrides it
             assertThat(context.getEnvironment().getProperty("app.cors-allowed-origins"))
                     .isEqualTo("https://parkease.example.com");

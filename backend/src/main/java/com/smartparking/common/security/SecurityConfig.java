@@ -69,8 +69,7 @@ public class SecurityConfig {
                     });
                 })
                 .addFilterBefore(new RateLimitFilter(
-                                RateLimitRules.standard(app.authRateLimitPerMinute(), security.rateLimit()),
-                                new ClientIpResolver(security.trustForwardedFor(), security.trustedProxyHops())),
+                                RateLimitRules.standard(app.authRateLimitPerMinute(), security.rateLimit())),
                         UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(new RequestSizeLimitFilter(security.maxJsonBodyBytes()),
                         UsernamePasswordAuthenticationFilter.class)

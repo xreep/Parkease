@@ -3,6 +3,7 @@ package com.smartparking.common.security;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import io.github.bucket4j.Bucket;
+import io.github.bucket4j.ConsumptionProbe;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -10,6 +11,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
@@ -20,20 +23,20 @@ import org.springframework.web.filter.OncePerRequestFilter;
  */
 public class RateLimitFilter extends OncePerRequestFilter {
 
+    private static final Logger log = LoggerFactory.getLogger(RateLimitFilter.class);
+
     private record Limiter(RateLimitRule rule, Cache<String, Bucket> buckets) {
     }
 
     private final List<Limiter> limiters;
-    private final ClientIpResolver clientIps;
 
-    public RateLimitFilter(List<RateLimitRule> rules, ClientIpResolver clientIps) {
+    public RateLimitFilter(List<RateLimitRule> rules) {
         this.limiters = rules.stream()
                 .map(rule -> new Limiter(rule, Caffeine.newBuilder()
                         .expireAfterAccess(Duration.ofMinutes(2))
-                        .maximumSize(100_000)
+                        .maximumSize(20_000)
                         .build()))
                 .toList();
-        this.clientIps = clientIps;
     }
 
     @Override
@@ -48,9 +51,16 @@ public class RateLimitFilter extends OncePerRequestFilter {
             if (!limiter.rule().matches().test(request)) {
                 continue;
             }
-            Bucket bucket = limiter.buckets().get(clientIps.resolve(request), ip -> newBucket(limiter.rule()));
-            if (!bucket.tryConsume(1)) {
-                response.setHeader("Retry-After", "60");
+            // getRemoteAddr() is already the real client when the connection came from a trusted proxy: Tomcat's
+            // RemoteIpValve (server.forward-headers-strategy=native) applies X-Forwarded-For only for internal proxies.
+            String client = request.getRemoteAddr();
+            Bucket bucket = limiter.buckets().get(client, ip -> newBucket(limiter.rule()));
+            ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
+            if (!probe.isConsumed()) {
+                long seconds = Math.max(1, Math.min(60, (probe.getNanosToWaitForRefill() + 999_999_999L) / 1_000_000_000L));
+                log.info("Rate limited client={} rule={} method={} path={}", client, limiter.rule().name(),
+                        request.getMethod(), request.getRequestURI());
+                response.setHeader("Retry-After", Long.toString(seconds));
                 SecurityProblemWriter.write(response, 429, "Too Many Requests", "RATE_LIMITED",
                         limiter.rule().message());
                 return;

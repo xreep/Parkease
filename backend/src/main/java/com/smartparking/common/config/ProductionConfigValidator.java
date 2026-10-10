@@ -25,7 +25,7 @@ public class ProductionConfigValidator {
     private static final Logger log = LoggerFactory.getLogger(ProductionConfigValidator.class);
 
     /** Secrets committed to application-dev.yml and application-test.yml: public, so never acceptable in prod. */
-    private static final Set<String> KNOWN_SECRETS = Set.of(
+    static final Set<String> KNOWN_SECRETS = Set.of(
             "ZGV2LW9ubHktand0LXNlY3JldC1zbWFydC1wYXJraW5nLXBsYXRmb3JtLTIwMjYh",
             "dGVzdC1vbmx5LWp3dC1zZWNyZXQtc21hcnQtcGFya2luZy1wbGF0Zm9ybS0yMDI2");
 

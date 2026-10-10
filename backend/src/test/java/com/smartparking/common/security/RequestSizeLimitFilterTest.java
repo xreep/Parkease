@@ -108,4 +108,40 @@ class RequestSizeLimitFilterTest {
 
         assertThat(body.get()).hasSize(100);
     }
+
+    private static MockHttpServletRequest chunked(int bytes) {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/auth/login") {
+            @Override
+            public long getContentLengthLong() {
+                return -1;
+            }
+
+            @Override
+            public int getContentLength() {
+                return -1;
+            }
+        };
+        request.setContentType("application/json");
+        request.setCharacterEncoding("UTF-8");
+        request.setContent("x".repeat(bytes).getBytes(StandardCharsets.UTF_8));
+        return request;
+    }
+
+    @Test
+    void theReaderIsLimitedToo() throws Exception {
+        AtomicReference<HttpServletRequest> seen = new AtomicReference<>();
+        filter.doFilter(chunked(150), new MockHttpServletResponse(), (req, res) -> seen.set((HttpServletRequest) req));
+
+        assertThatThrownBy(() -> seen.get().getReader().read(new char[200]))
+                .isInstanceOf(RequestTooLargeException.class);
+    }
+
+    @Test
+    void aReaderWithinTheLimitReadsNormally() throws Exception {
+        AtomicReference<String> body = new AtomicReference<>();
+        filter.doFilter(chunked(100), new MockHttpServletResponse(), (req, res) ->
+                body.set(new String(((HttpServletRequest) req).getReader().readLine())));
+
+        assertThat(body.get()).hasSize(100);
+    }
 }

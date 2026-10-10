@@ -16,9 +16,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 /** The real filter chain with small limits: public search is cut off per IP with a 429 problem and Retry-After. */
 @IntegrationTest
-@TestPropertySource(properties = {
-        "app.security.rate-limit.public-per-minute=3",
-        "app.security.trust-forwarded-for=true"})
+@TestPropertySource(properties = "app.security.rate-limit.public-per-minute=3")
 class PublicRateLimitTest {
 
     @Autowired
@@ -39,7 +37,7 @@ class PublicRateLimitTest {
 
         mvc.perform(get("/api/v1/search?lat=12.97&lng=77.59").with(from("198.51.100.1")))
                 .andExpect(status().isTooManyRequests())
-                .andExpect(header().string(HttpHeaders.RETRY_AFTER, "60"))
+                .andExpect(header().string(HttpHeaders.RETRY_AFTER, org.hamcrest.Matchers.matchesPattern("[1-9][0-9]?|60")))
                 .andExpect(jsonPath("$.code").value("RATE_LIMITED"))
                 .andExpect(jsonPath("$.status").value(429));
 
@@ -58,19 +56,6 @@ class PublicRateLimitTest {
                         .header(HttpHeaders.ORIGIN, "http://localhost:5173"))
                 .andExpect(status().isTooManyRequests())
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "http://localhost:5173"));
-    }
-
-    @Test
-    void forwardedForIsHonouredWhenTrusted() throws Exception {
-        for (int i = 0; i < 3; i++) {
-            mvc.perform(get("/api/v1/search?lat=12.97&lng=77.59").with(from("10.0.0.1")).header("X-Forwarded-For", "203.0.113.50"))
-                    .andExpect(status().isOk());
-        }
-
-        mvc.perform(get("/api/v1/search?lat=12.97&lng=77.59").with(from("10.0.0.1")).header("X-Forwarded-For", "203.0.113.50"))
-                .andExpect(status().isTooManyRequests());
-        mvc.perform(get("/api/v1/search?lat=12.97&lng=77.59").with(from("10.0.0.1")).header("X-Forwarded-For", "203.0.113.51"))
-                .andExpect(status().isOk());
     }
 
     @Test

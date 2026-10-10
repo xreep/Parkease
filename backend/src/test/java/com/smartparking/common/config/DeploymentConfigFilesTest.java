@@ -61,16 +61,54 @@ class DeploymentConfigFilesTest {
         PropertySource<?> prod = load("application-prod.yml");
 
         assertThat(prod.getProperty("app.security.hsts")).isEqualTo(true);
-        assertThat(prod.getProperty("app.security.trust-forwarded-for")).isEqualTo(true);
         assertThat(prod.getProperty("spring.datasource.hikari.maximum-pool-size")).isEqualTo(5);
+        // Neon suspends idle compute and drops connections: keep none idle, retire them well inside its timeouts
+        assertThat(prod.getProperty("spring.datasource.hikari.minimum-idle")).isEqualTo(0);
+        assertThat(prod.getProperty("spring.datasource.hikari.idle-timeout")).isEqualTo(120000);
+        assertThat(prod.getProperty("spring.datasource.hikari.max-lifetime")).isEqualTo(240000);
         assertThat(prod.getProperty("app.payments.mock-enabled")).isEqualTo(false);
         assertThat(prod.getProperty("app.frontend-url")).isEqualTo("${FRONTEND_URL}");
         assertThat(prod.getProperty("app.cors-allowed-origins")).isEqualTo("${CORS_ALLOWED_ORIGINS:${FRONTEND_URL}}");
         assertThat(prod.getProperty("app.jwt.secret")).isEqualTo("${JWT_SECRET}");
-        // Render/Neon: forwarded headers are read by the rate limiter itself, not rewritten by the container
-        assertThat(prod.getProperty("server.forward-headers-strategy")).isEqualTo("none");
+        // Render's proxy: Tomcat's RemoteIpValve resolves the client address, configurable via INTERNAL_PROXIES
+        assertThat(prod.getProperty("server.forward-headers-strategy")).isEqualTo("native");
+        assertThat((String) prod.getProperty("server.tomcat.remoteip.internal-proxies"))
+                .startsWith("${INTERNAL_PROXIES:").contains("10\\.").contains("100\\.6[4-9]");
         // graceful shutdown for rolling deploys
         assertThat(prod.getProperty("server.shutdown")).isEqualTo("graceful");
         assertThat(prod.getProperty("logging.level.root")).isEqualTo("INFO");
+    }
+
+    @Test
+    void theSecurityPropertiesNoLongerHaveAForwardedForSwitch() throws Exception {
+        assertThat(load("application.yml").getProperty("app.security.trust-forwarded-for")).isNull();
+        assertThat(load("application.yml").getProperty("app.security.trusted-proxy-hops")).isNull();
+        assertThat(load("application-prod.yml").getProperty("app.security.trust-forwarded-for")).isNull();
+    }
+
+    @Test
+    void renderChecksALivenessEndpointThatDoesNotTouchTheDatabase() throws Exception {
+        java.nio.file.Path root = java.nio.file.Path.of("..");
+        String render = java.nio.file.Files.readString(root.resolve("render.yaml"));
+        String dockerfile = java.nio.file.Files.readString(root.resolve("backend/Dockerfile"));
+
+        assertThat(render).contains("healthCheckPath: /api/v1/health").doesNotContain("healthCheckPath: /actuator");
+        assertThat(dockerfile).contains("/api/v1/health").contains("-Dmaven.test.skip=true");
+    }
+
+    @Test
+    void theDefaultInternalProxyPatternCoversPrivateRangesOnly() throws Exception {
+        String value = (String) load("application-prod.yml").getProperty("server.tomcat.remoteip.internal-proxies");
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
+                value.substring("${INTERNAL_PROXIES:".length(), value.length() - 1));
+
+        for (String internal : java.util.List.of("10.0.0.1", "10.201.3.4", "172.16.0.9", "172.31.255.1", "192.168.1.1",
+                "100.64.0.1", "100.127.9.9", "127.0.0.1", "169.254.1.1", "::1", "fd12:3456::1", "fe80::1")) {
+            assertThat(pattern.matcher(internal).matches()).as(internal).isTrue();
+        }
+        for (String external : java.util.List.of("203.0.113.5", "8.8.8.8", "172.32.0.1", "172.15.0.1", "100.128.0.1",
+                "100.63.0.1", "11.0.0.1", "192.169.0.1", "2001:db8::1")) {
+            assertThat(pattern.matcher(external).matches()).as(external).isFalse();
+        }
     }
 }
