@@ -31,7 +31,7 @@ function booking(holdMs = 9 * 60_000 + 30_000): BookingDetailDto {
     totalAmount: 89.44, createdAt: '2026-10-09T08:00:00Z', address: 'FC Road, Shivajinagar', lat: 18.5, lng: 73.8, slotLabel: 'A-3',
     pricingMode: 'HOURLY', pricingBreakdown: '2 hours', baseAmount: 80, platformFee: 8, gstAmount: 1.44, refundAmount: 0,
     holdExpiresAt: new Date(Date.now() + holdMs).toISOString(), approvalDeadline: null, confirmedAt: null, cancelReason: null,
-    cancelledBy: null, paymentStatus: 'CREATED', invoiceNumber: null, autoApprove: true, ownerFirstName: 'Priya', reviewable: false, review: null, events: [],
+    cancelledBy: null, paymentStatus: 'CREATED', invoiceNumber: null, autoApprove: true, ownerFirstName: 'Priya', reviewable: false, review: null, disputes: [], disputable: false, events: [],
   }
 }
 

@@ -4,6 +4,7 @@ import type { BookingEventDto, BookingStatus, PaymentProvider, PaymentStatus } f
 import { invalidateBookingQueries } from './bookings'
 import { blobProblem, filenameFrom, saveBlob } from './download'
 import { errorMessage, toProblem } from './errors'
+import type { DisputeSummary } from './disputes'
 import type { Page } from './owner'
 import type { OwnerEarningDto } from './ownerDashboard'
 import type { BookingActor } from './bookings'
@@ -173,19 +174,7 @@ export type AdminBookingSummary = {
   createdAt: string
 }
 
-export type DisputeCategory = 'NO_ACCESS' | 'SLOT_OCCUPIED' | 'OVERSTAY' | 'DAMAGE' | 'PAYMENT' | 'OTHER'
-export type DisputeStatus = 'OPEN' | 'UNDER_REVIEW' | 'RESOLVED'
-
-export type AdminDisputeSummary = {
-  id: number
-  bookingId: number
-  bookingCode: string
-  listingTitle: string
-  category: DisputeCategory
-  status: DisputeStatus
-  createdAt: string
-  resolvedAt: string | null
-}
+export type AdminDisputeSummary = DisputeSummary
 
 export type RefundStatus = 'PENDING' | 'PROCESSED' | 'FAILED'
 

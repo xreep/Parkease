@@ -6,6 +6,7 @@ const tabs = [
   { to: '/driver/bookings', label: 'Bookings' },
   { to: '/driver/payments', label: 'Payments' },
   { to: '/driver/vehicles', label: 'Vehicles' },
+  { to: '/driver/disputes', label: 'Help' },
 ]
 
 export function DriverLayout() {
