@@ -234,6 +234,10 @@ class OwnerBookingControllerTest {
                 .containsExactly("Booking request declined – ParkEase");
         assertThat(emails.lastTo(DRIVER_EMAIL).textBody())
                 .contains("Gate is closed that day", "A full refund of ₹67.08 is on its way");
+        // one email and one in-app notification for the whole rejection, the refund line included
+        assertThat(jdbc.queryForList("select n.type from notifications n join users u on u.id = n.user_id "
+                + "where u.email = ? and n.type in ('BOOKING_DECLINED', 'BOOKING_REFUNDED')", String.class,
+                DRIVER_EMAIL)).containsExactly("BOOKING_DECLINED");
 
         assertThat(jdbc.queryForList("select to_status from booking_events where booking_id = ? order by id",
                 String.class, id)).containsSubsequence("AWAITING_APPROVAL", "REJECTED");
