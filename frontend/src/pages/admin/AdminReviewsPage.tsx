@@ -125,7 +125,7 @@ export function AdminReviewsPage() {
                       {review.hidden && <Badge tone="red">Hidden</Badge>}
                     </span>
                     <span className="block text-sm font-normal text-slate-600 dark:text-slate-400">{review.listingTitle}</span>
-                    <span className="block font-mono text-xs font-normal text-slate-500">{review.bookingCode}</span>
+                    <span className="block font-mono text-xs font-normal text-slate-500 dark:text-slate-400">{review.bookingCode}</span>
                   </>
                 }
                 extra={<ReviewActions review={review} onHide={() => setHiding(review)} onChanged={refresh} />}

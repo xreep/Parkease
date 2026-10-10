@@ -71,7 +71,7 @@ function ReferenceForm({
       <div className="space-y-1 text-sm">
         <p>Record a payout you’ve made outside ParkEase (using the owner’s payout details on file). This doesn’t move money.</p>
         <p>{`Pay ${owner.ownerName} ${formatINR(total)} for ${plural(count, 'earning', 'earnings')}.`}</p>
-        <p className="text-slate-500">{payoutLine(owner)}</p>
+        <p className="text-slate-500 dark:text-slate-400">{payoutLine(owner)}</p>
       </div>
       <FormError message={formError} />
       <TextField label="Payment reference" hint="The UPI or bank transaction id" error={errors.reference?.message} {...register('reference')} />
@@ -135,7 +135,7 @@ function OwnerCard({ owner }: { owner: PayoutOwner }) {
         </div>
         <div className="text-sm sm:text-right">
           <p className="text-xl font-bold">{formatINR(owner.pendingAmount)}</p>
-          <p className="text-slate-500">{plural(owner.earningsCount, 'earning', 'earnings')}</p>
+          <p className="text-slate-500 dark:text-slate-400">{plural(owner.earningsCount, 'earning', 'earnings')}</p>
           {owner.disputedAmount > 0 && (
             <p className="font-medium text-amber-700 dark:text-amber-400">{`${formatINR(owner.disputedAmount)} held for open disputes`}</p>
           )}
@@ -179,7 +179,7 @@ function OwnerCard({ owner }: { owner: PayoutOwner }) {
                     <div className="min-w-0 flex-1">
                       <p className="font-mono font-semibold">{e.bookingCode}</p>
                       <p className="break-words">{e.listingTitle}</p>
-                      <p className="text-xs text-slate-500">{formatWindow(e.startTime, e.endTime)}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{formatWindow(e.startTime, e.endTime)}</p>
                       {e.disputed && <p id={`held-${e.id}`} className="text-xs font-medium text-amber-700 dark:text-amber-400">Held for an open dispute</p>}
                     </div>
                     <p className="font-semibold tabular-nums">{formatINR(e.net)}</p>

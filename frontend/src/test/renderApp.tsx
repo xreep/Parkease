@@ -4,12 +4,12 @@ import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import App from '../App'
 import { AuthProvider } from '../auth/AuthProvider'
-import { preloadPages } from '../lib/lazyPage'
 import { ThemeProvider } from '../theme/ThemeProvider'
+import { preloadPages } from './eagerLazyPage'
 
 // Route pages load lazily in the app. Loading them all once up front lets `renderApp` keep rendering a page
 // synchronously, so tests can use plain queries instead of waiting out a Suspense fallback on every render.
-// (`App.lazy.test.tsx` renders without this helper to cover the lazy path itself.)
+// (`App.lazy.test.tsx` renders without this helper, with the real `lazyPage`, to cover the lazy path itself.)
 await preloadPages()
 
 export function renderApp(

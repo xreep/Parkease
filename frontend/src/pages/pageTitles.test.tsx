@@ -112,4 +112,49 @@ describe('page titles', () => {
     await screen.findByRole('heading', { name: 'Maharashtra' })
     expect(document.title).toBe('ParkEase — Parking in Maharashtra')
   })
+
+  it('puts the booking code in the title of a booking once loaded (driver and admin)', async () => {
+    tokenStore.set('a', 'r')
+    mock.onGet('/me').reply(200, users.DRIVER)
+    mock.onGet('/bookings/91').reply(200, { ...bookingStub, bookingCode: 'PE-8KQ2M4' })
+    renderApp('/driver/bookings/91')
+    await screen.findByText('PE-8KQ2M4')
+    expect(document.title).toBe('ParkEase — Booking PE-8KQ2M4')
+  })
+
+  it('puts the booking code in the title of the admin booking page', async () => {
+    tokenStore.set('a', 'r')
+    mock.onGet('/me').reply(200, users.ADMIN)
+    mock.onGet('/admin/bookings/91').reply(200, {
+      ...bookingStub, bookingCode: 'PE-8KQ2M4', driverName: 'Rahul', driverEmail: 'r@example.com', ownerName: 'Priya',
+      refundableRemaining: 0, payment: null, refunds: [],
+    })
+    renderApp('/admin/bookings/91')
+    await waitFor(() => expect(document.title).toBe('ParkEase — Admin · Booking PE-8KQ2M4'))
+  })
+
+  it.each([
+    ['/driver/disputes/4', 'DRIVER', '/me', '/disputes/4', 'ParkEase — Problem with PE-8KQ2M4'],
+    ['/owner/disputes/4', 'OWNER', '/me', '/owner/disputes/4', 'ParkEase — Dispute on PE-8KQ2M4'],
+    ['/admin/disputes/4', 'ADMIN', '/me', '/admin/disputes/4', 'ParkEase — Admin · Dispute on PE-8KQ2M4'],
+  ] as const)('puts the booking code in the title of %s', async (path, role, _me, api_, title) => {
+    tokenStore.set('a', 'r')
+    mock.onGet('/me').reply(200, users[role])
+    mock.onGet(api_).reply(200, {
+      id: 4, bookingId: 91, bookingCode: 'PE-8KQ2M4', listingTitle: 'Metro Hub Parking', category: 'NO_ACCESS', status: 'OPEN',
+      createdAt: '2026-10-09T08:00:00Z', resolvedAt: null, description: 'The gate was locked', raisedByName: 'Rahul', ownerResponse: null,
+      ownerRespondedAt: null, resolution: null, resolutionAmount: null, adminNotes: null, refundableRemaining: 0,
+    })
+    renderApp(path)
+    await waitFor(() => expect(document.title).toBe(title))
+  })
 })
+
+const bookingStub = {
+  id: 91, status: 'CONFIRMED', listingId: 7, listingTitle: 'Metro Hub Parking', cityName: 'Pune', coverPhotoUrl: null,
+  startTime: '2026-10-12T04:30:00Z', endTime: '2026-10-12T06:30:00Z', vehicleType: 'FOUR_WHEELER', plateNumber: 'MH12AB1234',
+  totalAmount: 89.44, createdAt: '2026-10-09T08:00:00Z', address: 'FC Road', lat: 18.5, lng: 73.8, slotLabel: 'A-3',
+  pricingMode: 'HOURLY', pricingBreakdown: '2 hours', baseAmount: 80, platformFee: 8, gstAmount: 1.44, refundAmount: 0,
+  holdExpiresAt: null, approvalDeadline: null, confirmedAt: null, cancelReason: null, cancelledBy: null, paymentStatus: 'CAPTURED',
+  invoiceNumber: null, autoApprove: true, ownerFirstName: 'Priya', reviewable: false, review: null, disputes: [], disputable: false, events: [],
+}

@@ -38,7 +38,7 @@ function Facts({ rows }: { rows: [string, ReactNode][] }) {
     <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
       {rows.map(([label, value]) => (
         <div key={label} className="contents">
-          <dt className="text-slate-500">{label}</dt>
+          <dt className="text-slate-500 dark:text-slate-400">{label}</dt>
           <dd className="min-w-0 break-words text-right sm:text-left">{value}</dd>
         </div>
       ))}
@@ -148,7 +148,7 @@ function BookingContent({ booking }: { booking: AdminBookingDetail }) {
                     <StatusBadge kind="refund" status={r.status} />
                   </p>
                   <p>{r.reason}</p>
-                  <p className="text-xs text-slate-500">{`${r.attempts} ${r.attempts === 1 ? 'attempt' : 'attempts'} · ${formatDateTime(r.createdAt)}`}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{`${r.attempts} ${r.attempts === 1 ? 'attempt' : 'attempts'} · ${formatDateTime(r.createdAt)}`}</p>
                 </li>
               ))}
             </ul>
@@ -164,7 +164,7 @@ function BookingContent({ booking }: { booking: AdminBookingDetail }) {
                 <li key={d.id} className="flex flex-wrap items-center gap-2">
                   <Link to={`/admin/disputes/${d.id}`} className={linkClass}>{DISPUTE_CATEGORY_LABELS[d.category]}</Link>
                   <StatusBadge kind="dispute" status={d.status} />
-                  <span className="text-xs text-slate-500">{formatDateTime(d.createdAt)}</span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">{formatDateTime(d.createdAt)}</span>
                 </li>
               ))}
             </ul>
@@ -180,7 +180,7 @@ function BookingContent({ booking }: { booking: AdminBookingDetail }) {
                   {BOOKING_STATUS_LABELS[e.toStatus]}
                 </p>
                 {e.note && <p>{e.note}</p>}
-                <p className="text-xs text-slate-500">{`${ACTOR_LABELS[e.actor]} · ${formatDateTime(e.at)}`}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{`${ACTOR_LABELS[e.actor]} · ${formatDateTime(e.at)}`}</p>
               </li>
             ))}
           </ul>
@@ -202,11 +202,11 @@ function BookingContent({ booking }: { booking: AdminBookingDetail }) {
 }
 
 export function AdminBookingDetailPage() {
-  usePageTitle('Admin · Booking details')
   const { id } = useParams()
   const numeric = Number(id)
   const valid = Number.isInteger(numeric) && numeric > 0
   const { data, error, isPending } = useAdminBooking(valid ? numeric : undefined)
+  usePageTitle(data ? `Admin · Booking ${data.bookingCode}` : 'Admin · Booking details')
 
   if (!valid) return <FormError message="Booking not found" />
   if (isPending) return <Loading />

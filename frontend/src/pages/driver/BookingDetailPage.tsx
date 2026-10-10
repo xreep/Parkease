@@ -185,7 +185,7 @@ function ReviewPanel({ booking }: { booking: BookingDetailDto }) {
             {review.comment ? (
               <p className="whitespace-pre-line break-words">{review.comment}</p>
             ) : (
-              <p className="text-slate-500">No comment</p>
+              <p className="text-slate-500 dark:text-slate-400">No comment</p>
             )}
             <OwnerReply review={review} />
           </div>
@@ -221,7 +221,7 @@ function DisputesPanel({ booking }: { booking: BookingDetailDto }) {
             </Link>
             <span className="flex items-center gap-2">
               <StatusBadge kind="dispute" status={d.status} />
-              <span className="text-xs text-slate-500">{formatDateTime(d.createdAt)}</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">{formatDateTime(d.createdAt)}</span>
             </span>
           </li>
         ))}
@@ -253,7 +253,7 @@ function BookingContent({ booking, isNew }: { booking: BookingDetailDto; isNew: 
         <div className="min-w-0 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge kind="booking" status={booking.status} />
-            <span className="text-sm text-slate-500">Booking code</span>
+            <span className="text-sm text-slate-500 dark:text-slate-400">Booking code</span>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <p className="break-all font-mono text-3xl font-bold tracking-wider">{booking.bookingCode}</p>
@@ -350,10 +350,10 @@ function BookingContent({ booking, isNew }: { booking: BookingDetailDto; isNew: 
 }
 
 export function BookingDetailPage() {
-  usePageTitle('Booking details')
   const { id } = useParams()
   const [params] = useSearchParams()
   const { data, error, isPending } = useBooking(id, true, true)
+  usePageTitle(data ? `Booking ${data.bookingCode}` : 'Booking details')
 
   if (isPending) {
     return (

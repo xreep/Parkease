@@ -27,7 +27,7 @@ export function StatePage() {
   return (
     <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6">
       <Link to="/#browse" className="text-sm font-medium text-brand-700 hover:underline dark:text-brand-400">← All states</Link>
-      <p className="mt-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
+      <p className="mt-4 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
         {state.type === 'UT' ? 'Union territory' : 'State'}
       </p>
       <h1 className="text-3xl font-bold tracking-tight">{state.name}</h1>
@@ -43,7 +43,7 @@ export function StatePage() {
               <MapPin className="mt-0.5 h-5 w-5 text-brand-600" />
               <div>
                 <p className="font-semibold group-hover:text-brand-700 dark:group-hover:text-brand-400">{city.name}</p>
-                <p className="text-xs text-slate-500">{city.lat.toFixed(3)}°N, {city.lng.toFixed(3)}°E</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{city.lat.toFixed(3)}°N, {city.lng.toFixed(3)}°E</p>
               </div>
             </div>
             {city.capital && (

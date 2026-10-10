@@ -10,7 +10,7 @@ export function OwnerReply({ review }: { review: ReviewDto }) {
     <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800/60">
       <p className="font-medium">Reply from the owner</p>
       <p className="mt-1 whitespace-pre-line break-words">{review.ownerReply}</p>
-      {review.ownerRepliedAt && <p className="mt-1 text-xs text-slate-500">{formatDateTime(review.ownerRepliedAt)}</p>}
+      {review.ownerRepliedAt && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{formatDateTime(review.ownerRepliedAt)}</p>}
     </div>
   )
 }
@@ -36,12 +36,12 @@ export function ReviewCard({
           <p className="break-words font-semibold">{heading ?? review.authorName}</p>
           <Stars value={review.rating} />
         </div>
-        <p className="text-xs text-slate-500">{formatDateTime(review.createdAt)}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{formatDateTime(review.createdAt)}</p>
       </div>
       {review.comment ? (
         <p className="mt-3 whitespace-pre-line break-words text-sm">{review.comment}</p>
       ) : (
-        <p className="mt-3 text-sm text-slate-500">No comment</p>
+        <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">No comment</p>
       )}
       <OwnerReply review={review} />
       {extra}

@@ -102,7 +102,7 @@ export function CancelBookingDialog({
               </p>
             )}
             {result.detail && <p className="text-slate-600 dark:text-slate-400">{result.detail}</p>}
-            {preview.policy && <p className="text-xs text-slate-500">{REFUND_NOTE}</p>}
+            {preview.policy && <p className="text-xs text-slate-500 dark:text-slate-400">{REFUND_NOTE}</p>}
           </div>
         ) : null}
         {preview?.cancellable && (

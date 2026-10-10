@@ -2,11 +2,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import MockAdapter from 'axios-mock-adapter'
 import { MemoryRouter } from 'react-router-dom'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { AuthProvider } from './auth/AuthProvider'
 import { api } from './lib/api'
 import { ThemeProvider } from './theme/ThemeProvider'
+
+// The real lazy loading: the test setup swaps in an eager stand-in for every other test file.
+vi.unmock('./lib/lazyPage')
 
 // Deliberately not `renderApp`: that helper preloads every route so ordinary page tests can use plain queries.
 // Here the route chunks are still unloaded, as on a first visit.
@@ -48,7 +51,7 @@ describe('route code splitting', () => {
     // A listing payload without its photos array makes the page throw while rendering.
     mock.onGet('/listings/7').reply(200, { id: 7, title: 'Broken' })
     mock.onGet('/listings/7/quote').reply(200, { available: false, reason: null, freeSlots: 0, totalSlots: 0, quote: null })
-    const spy = (await import('vitest')).vi.spyOn(console, 'error').mockImplementation(() => {})
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
       renderUnloaded('/listings/7')
 

@@ -80,7 +80,7 @@ function ListingCard({ listing, onChanged, onDelete }: { listing: ListingSummary
             <h3 className="font-semibold">{listing.title}</h3>
             <StatusBadge kind="listing" status={listing.status} />
           </div>
-          <p className="text-sm text-slate-500">{`${listing.cityName}, ${listing.stateName}`}</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{`${listing.cityName}, ${listing.stateName}`}</p>
           <p className="text-sm text-slate-700 dark:text-slate-300">
             <span>{listing.pricePerHour === null ? 'No price yet' : `${formatINR(listing.pricePerHour)}/hr`}</span>
             {' · '}
@@ -151,7 +151,7 @@ export function MyListingsPage() {
           {data.totalPages > 1 && (
             <div className="flex items-center justify-between gap-3">
               <Button type="button" variant="secondary" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</Button>
-              <p className="text-sm text-slate-500">{`Page ${page + 1} of ${data.totalPages}`}</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{`Page ${page + 1} of ${data.totalPages}`}</p>
               <Button type="button" variant="secondary" disabled={page + 1 >= data.totalPages} onClick={() => setPage(page + 1)}>Next</Button>
             </div>
           )}

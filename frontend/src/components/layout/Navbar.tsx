@@ -4,6 +4,7 @@ import { Menu, X } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuth } from '../../auth/AuthProvider'
 import { homeFor } from '../../auth/types'
+import { LoginPage, SearchPage } from '../../pages/lazyPages'
 import { Logo } from './Logo'
 import { NotificationBell } from './NotificationBell'
 import { ThemeToggle } from './ThemeToggle'
@@ -15,6 +16,12 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
       ? 'text-brand-700 dark:text-brand-400'
       : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white',
   )
+
+/** Hovering or focusing a link starts fetching its page's chunk, so the click that follows finds it already there. */
+const warm = (page: { preload: () => Promise<void> }) => ({
+  onMouseEnter: () => void page.preload(),
+  onFocus: () => void page.preload(),
+})
 
 export function Navbar() {
   const { user, logout } = useAuth()
@@ -30,7 +37,7 @@ export function Navbar() {
   const links = (
     <>
       <NavLink to="/" end className={linkClass} onClick={() => setOpen(false)}>Home</NavLink>
-      <NavLink to="/search" className={linkClass} onClick={() => setOpen(false)}>Find parking</NavLink>
+      <NavLink to="/search" className={linkClass} onClick={() => setOpen(false)} {...warm(SearchPage)}>Find parking</NavLink>
       {user ? (
         <>
           <NavLink to={homeFor(user.role)} end className={linkClass} onClick={() => setOpen(false)}>Dashboard</NavLink>
@@ -49,7 +56,7 @@ export function Navbar() {
           >
             List your space
           </Link>
-          <NavLink to="/login" className={linkClass} onClick={() => setOpen(false)}>Log in</NavLink>
+          <NavLink to="/login" className={linkClass} onClick={() => setOpen(false)} {...warm(LoginPage)}>Log in</NavLink>
           <Link
             to="/register"
             onClick={() => setOpen(false)}

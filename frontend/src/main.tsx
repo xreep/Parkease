@@ -6,8 +6,12 @@ import { Toaster } from 'sonner'
 import './index.css'
 import App from './App'
 import { AuthProvider } from './auth/AuthProvider'
+import { installPreloadErrorHandler } from './lib/chunkError'
 import { createQueryClient } from './lib/queryClient'
 import { ThemeProvider } from './theme/ThemeProvider'
+
+// A lazy chunk that is gone after a new deploy: reload once to pick up the new build (see lib/chunkError.ts).
+installPreloadErrorHandler()
 
 const queryClient = createQueryClient()
 

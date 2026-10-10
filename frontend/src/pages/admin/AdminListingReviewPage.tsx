@@ -113,10 +113,10 @@ function ReviewContent({ detail }: { detail: AdminListingDetail }) {
           <Button type="button" loading={reinstating} onClick={() => void reinstate()}>Reinstate</Button>
         )}
       </div>
-      {listing.submittedAt && <p className="-mt-4 text-sm text-slate-500">{`Submitted ${formatDateTime(listing.submittedAt)}`}</p>}
+      {listing.submittedAt && <p className="-mt-4 text-sm text-slate-500 dark:text-slate-400">{`Submitted ${formatDateTime(listing.submittedAt)}`}</p>}
 
       {listing.photos.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 dark:border-slate-700">No photos</p>
+        <p className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 dark:text-slate-400 dark:border-slate-700">No photos</p>
       ) : (
         <ul aria-label="Photos" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {listing.photos.map((p, i) => (
@@ -133,7 +133,7 @@ function ReviewContent({ detail }: { detail: AdminListingDetail }) {
         <Section title="Location">
           <p>{LISTING_TYPE_LABELS[listing.listingType]}</p>
           <p>{formatAddress(listing)}</p>
-          {listing.description && <p className="text-slate-500">{listing.description}</p>}
+          {listing.description && <p className="text-slate-500 dark:text-slate-400">{listing.description}</p>}
           <div className="pt-2">
             <LocationPicker value={{ lat: listing.lat, lng: listing.lng }} center={{ lat: listing.lat, lng: listing.lng }} zoom={15} onChange={noop} readOnly />
           </div>

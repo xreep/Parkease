@@ -132,7 +132,7 @@ export function SearchForm({ initial, compact = false, onSubmit }: Props) {
       <Button type="submit" className={clsx(compact ? 'lg:mt-[1.65rem]' : 'sm:col-span-2')}>
         Search parking
       </Button>
-      {!browserIsIst() && <p className="col-span-full -mt-2 text-xs text-slate-500">{IST_HINT}</p>}
+      {!browserIsIst() && <p className="col-span-full -mt-2 text-xs text-slate-500 dark:text-slate-400">{IST_HINT}</p>}
     </form>
   )
 }

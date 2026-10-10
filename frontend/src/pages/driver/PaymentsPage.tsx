@@ -56,7 +56,7 @@ function PaymentCard({ payment }: { payment: DriverPaymentDto }) {
         </div>
         <p className="break-words font-semibold">{payment.listingTitle}</p>
         {payment.paidAt && <p className="text-sm text-slate-600 dark:text-slate-400">{formatDateTime(payment.paidAt)}</p>}
-        {payment.invoiceNumber && <p className="text-xs text-slate-500">{`Invoice ${payment.invoiceNumber}`}</p>}
+        {payment.invoiceNumber && <p className="text-xs text-slate-500 dark:text-slate-400">{`Invoice ${payment.invoiceNumber}`}</p>}
       </div>
       <div className="flex flex-col gap-2 sm:items-end">
         <p className="text-lg font-bold">{formatINR(payment.amount)}</p>

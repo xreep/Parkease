@@ -1,5 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { configure } from '@testing-library/react'
+import { vi } from 'vitest'
 
 import { isAxiosError } from 'axios'
 import MockAdapter from 'axios-mock-adapter'
@@ -25,3 +26,10 @@ MockAdapter.prototype.adapter = function adapter(this: MockAdapter) {
 // exceed for pages that fetch several things. Four seconds only changes tests that would otherwise fail; the
 // per-test limit (testTimeout) is set in vite.config.ts and stays well above this.
 configure({ asyncUtilTimeout: 4000 })
+
+// Route pages load lazily in the app. Tests get the eager stand-in (see ./eagerLazyPage); files that test the real
+// thing call `vi.unmock('<path>/lib/lazyPage')`.
+vi.mock('../lib/lazyPage', async () => {
+  const { lazyPage } = await import('./eagerLazyPage')
+  return { lazyPage }
+})

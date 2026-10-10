@@ -58,7 +58,7 @@ function AuditTable({ actions }: { actions: AdminAction[] }) {
             <p className="break-all font-mono text-xs font-semibold">{a.action}</p>
             <p>{target(a)}</p>
             {a.details && <p className="break-words text-slate-600 dark:text-slate-400">{a.details}</p>}
-            <p className="text-xs text-slate-500">{`${a.adminName} · ${formatDateTime(a.createdAt)}`}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{`${a.adminName} · ${formatDateTime(a.createdAt)}`}</p>
           </li>
         ))}
       </ul>

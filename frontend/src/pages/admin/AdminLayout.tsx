@@ -54,7 +54,7 @@ function AdminNav() {
       <div className="flex min-w-max gap-4">
         {sections.map((section) => (
           <div key={section.label}>
-            <p aria-hidden className="hidden px-3 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 sm:block">
+            <p aria-hidden className="hidden px-3 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 sm:block">
               {section.label}
             </p>
             <ul className="flex gap-1">

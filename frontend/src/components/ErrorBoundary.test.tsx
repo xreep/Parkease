@@ -50,4 +50,43 @@ describe('ErrorBoundary', () => {
     rerender(<ErrorBoundary resetKey="/b"><Bomb explode={false} /></ErrorBoundary>)
     expect(screen.getByText('All fine')).toBeInTheDocument()
   })
+
+  describe('after a new deploy (a chunk of the old build is gone)', () => {
+    const reload = vi.fn()
+    const original = window.location
+    const ChunkBomb = () => {
+      throw new TypeError('Failed to fetch dynamically imported module: https://x.test/assets/Page-abc.js')
+    }
+
+    beforeEach(() => {
+      sessionStorage.clear()
+      reload.mockClear()
+      Object.defineProperty(window, 'location', { configurable: true, value: { ...original, reload } })
+    })
+    afterEach(() => Object.defineProperty(window, 'location', { configurable: true, value: original }))
+
+    it('reloads once on its own and says a new version is available', () => {
+      render(<ErrorBoundary><ChunkBomb /></ErrorBoundary>)
+
+      expect(reload).toHaveBeenCalledOnce()
+      expect(screen.getByRole('heading', { name: 'A new version of ParkEase is available' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument()
+      expect(document.title).toBe('ParkEase — New version available')
+    })
+
+    it('does not loop: with a reload already done it only offers the Reload button', async () => {
+      sessionStorage.setItem('pe_chunk_reload', String(Date.now()))
+      render(<ErrorBoundary><ChunkBomb /></ErrorBoundary>)
+
+      expect(reload).not.toHaveBeenCalled()
+      await userEvent.click(screen.getByRole('button', { name: 'Reload' }))
+      expect(reload).toHaveBeenCalledOnce()
+    })
+
+    it('does not treat an ordinary crash as a new version', () => {
+      render(<ErrorBoundary><Bomb explode /></ErrorBoundary>)
+      expect(reload).not.toHaveBeenCalled()
+      expect(screen.getByRole('heading', { name: 'Something went wrong' })).toBeInTheDocument()
+    })
+  })
 })

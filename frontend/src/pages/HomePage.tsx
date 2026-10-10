@@ -42,7 +42,7 @@ function StateGrid({ title, states }: { title: string; states: StateSummary[] })
             className="group rounded-xl border border-slate-200 bg-white p-4 transition hover:-translate-y-0.5 hover:border-brand-500 hover:shadow-md dark:border-slate-800 dark:bg-slate-900"
           >
             <span className="block font-semibold group-hover:text-brand-700 dark:group-hover:text-brand-400">{s.name}</span>
-            <span className="mt-1 block text-xs text-slate-500">
+            <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
               Capital: {s.capitalName} · {s.cityCount} {s.cityCount === 1 ? 'city' : 'cities'}
             </span>
           </Link>
@@ -121,7 +121,7 @@ export function HomePage() {
               <span className="grid h-10 w-10 place-items-center rounded-lg bg-brand-100 text-brand-700 dark:bg-brand-900/50 dark:text-brand-300">
                 <Icon className="h-5 w-5" />
               </span>
-              <p className="mt-4 text-xs font-semibold text-slate-500">STEP {i + 1}</p>
+              <p className="mt-4 text-xs font-semibold text-slate-500 dark:text-slate-400">STEP {i + 1}</p>
               <h3 className="mt-1 font-semibold">{title}</h3>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{body}</p>
             </div>
@@ -134,7 +134,7 @@ export function HomePage() {
           <div>
             <h2 className="text-2xl font-bold tracking-tight">Browse across India</h2>
             {states && (
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                 {stateList.length} states, {utList.length} union territories and {cityTotal} cities.
               </p>
             )}

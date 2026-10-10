@@ -103,7 +103,7 @@ function ReportTable<Row extends BaseRow, Totals>({
             <p className="font-semibold">{`${row.cityName}, ${row.stateName}`}</p>
             <dl className="grid grid-cols-2 gap-2 text-sm">
               {columns.map((c) => (
-                <div key={c.header}><dt className="text-xs text-slate-500">{c.header}</dt><dd>{c.cell(row)}</dd></div>
+                <div key={c.header}><dt className="text-xs text-slate-500 dark:text-slate-400">{c.header}</dt><dd>{c.cell(row)}</dd></div>
               ))}
             </dl>
           </li>
@@ -112,7 +112,7 @@ function ReportTable<Row extends BaseRow, Totals>({
           <p className="font-semibold">Total</p>
           <dl className="grid grid-cols-2 gap-2 text-sm">
             {columns.map((c) => (
-              <div key={c.header}><dt className="text-xs text-slate-500">{c.header}</dt><dd className="font-semibold">{c.total(totals)}</dd></div>
+              <div key={c.header}><dt className="text-xs text-slate-500 dark:text-slate-400">{c.header}</dt><dd className="font-semibold">{c.total(totals)}</dd></div>
             ))}
           </dl>
         </li>

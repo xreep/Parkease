@@ -56,7 +56,7 @@ export function AdminBookingsPage() {
           <TextField label="To" type="date" value={to} min={from || undefined} onChange={(e) => filter(setTo)(e.target.value)} />
           <StateCityFilter value={place} onChange={filter(setPlace)} />
         </div>
-        <p className="text-xs text-slate-500">Pick a city to filter by place — the state only narrows the city list.</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">Pick a city to filter by place — the state only narrows the city list.</p>
       </div>
 
       {isPending ? (
@@ -86,16 +86,16 @@ export function AdminBookingsPage() {
                     </td>
                     <td className="px-3 py-2">
                       <p className="break-words">{b.listingTitle}</p>
-                      <p className="text-xs text-slate-500">{b.cityName}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{b.cityName}</p>
                     </td>
                     <td className="px-3 py-2">
                       <p>{b.driverName}</p>
-                      <p className="break-all text-xs text-slate-500">{b.driverEmail}</p>
+                      <p className="break-all text-xs text-slate-500 dark:text-slate-400">{b.driverEmail}</p>
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400">{formatWindow(b.startTime, b.endTime)}</td>
                     <td className="px-3 py-2 text-right tabular-nums">
                       <p>{formatINR(b.totalAmount)}</p>
-                      {b.refundAmount > 0 && <p className="text-xs text-slate-500">{`Refunded ${formatINR(b.refundAmount)}`}</p>}
+                      {b.refundAmount > 0 && <p className="text-xs text-slate-500 dark:text-slate-400">{`Refunded ${formatINR(b.refundAmount)}`}</p>}
                     </td>
                     <td className="px-3 py-2">{b.paymentStatus ? <StatusBadge kind="payment" status={b.paymentStatus} /> : '—'}</td>
                   </tr>

@@ -21,7 +21,7 @@ export function StepFooter({ listingId, backStep, onContinue, blockedHint = null
         Back
       </Button>
       <div className="flex items-center gap-3">
-        {blockedHint && <p className="text-sm text-slate-500">{blockedHint}</p>}
+        {blockedHint && <p className="text-sm text-slate-500 dark:text-slate-400">{blockedHint}</p>}
         {onContinue ? (
           <Button type="button" disabled={blockedHint !== null || disabled} onClick={onContinue}>Continue</Button>
         ) : (

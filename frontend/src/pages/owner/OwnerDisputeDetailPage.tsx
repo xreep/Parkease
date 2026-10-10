@@ -63,9 +63,9 @@ function ResponseSection({ dispute }: { dispute: Dispute }) {
 }
 
 export function OwnerDisputeDetailPage() {
-  usePageTitle('Dispute details')
   const { id } = useParams()
   const query = useOwnerDispute(parseId(id))
+  usePageTitle(query.data ? `Dispute on ${query.data.bookingCode}` : 'Dispute details')
   return (
     <div className="space-y-4">
       <Link to="/owner/disputes" className="text-sm font-medium text-brand-700 hover:underline dark:text-brand-400">← Disputes</Link>
