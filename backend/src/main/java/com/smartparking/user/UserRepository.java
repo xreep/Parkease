@@ -1,5 +1,6 @@
 package com.smartparking.user;
 
+import java.time.Instant;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -12,6 +13,13 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmail(String email);
 
     boolean existsByEmail(String email);
+
+    long countByRole(Role role);
+
+    long countByStatus(UserStatus status);
+
+    /** Accounts of the role created in [from, to). */
+    long countByRoleAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(Role role, Instant from, Instant to);
 
     /** Just the account status, for the per-request suspension check. */
     @Query("select u.status from User u where u.id = :id")
