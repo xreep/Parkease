@@ -96,14 +96,15 @@ describe('admin locations', () => {
 
     await u.click(dialog.getByRole('button', { name: 'Add city' }))
     expect(await dialog.findByText('Enter the city name')).toBeInTheDocument()
-    expect(dialog.getByText('Latitude must be between -90 and 90')).toBeInTheDocument()
-    expect(dialog.getByText('Longitude must be between -180 and 180')).toBeInTheDocument()
+    expect(dialog.getByText('Latitude must be between 6 and 38')).toBeInTheDocument()
+    expect(dialog.getByText('Longitude must be between 68 and 98')).toBeInTheDocument()
 
-    await u.type(dialog.getByLabelText('Name'), 'Nashik')
-    await u.type(dialog.getByLabelText('Latitude'), '120')
+    await u.type(dialog.getByLabelText('Name'), 'N')
+    await u.type(dialog.getByLabelText('Latitude'), '45')
     await u.type(dialog.getByLabelText('Longitude'), '73.7')
     await u.click(dialog.getByRole('button', { name: 'Add city' }))
-    expect(await dialog.findByText('Latitude must be between -90 and 90')).toBeInTheDocument()
+    expect(await dialog.findByText('Latitude must be between 6 and 38')).toBeInTheDocument()
+    expect(dialog.getByText('Use at least 2 characters')).toBeInTheDocument()
     expect(mock.history.post).toHaveLength(0)
   })
 
@@ -147,6 +148,61 @@ describe('admin locations', () => {
     await u.click(dialog.getByRole('button', { name: 'Add city' }))
     expect(await dialog.findByText('That city already exists in this state')).toBeInTheDocument()
     expect(toast.success).not.toHaveBeenCalled()
+  })
+
+  it('adds a state', async () => {
+    mock.onPost('/admin/states').reply(201, { ...states[0], id: 3, name: 'Goa', code: 'GA', slug: 'goa', capitalName: 'Panaji', citiesCount: 0 })
+    const u = userEvent.setup()
+    renderApp('/admin/locations')
+    await screen.findByRole('table', { name: 'Cities in Maharashtra' })
+
+    await u.click(screen.getByRole('button', { name: 'Add state' }))
+    const dialog = within(await screen.findByRole('dialog', { name: 'Add a state' }))
+    await u.click(dialog.getByRole('button', { name: 'Add state' }))
+    expect(await dialog.findByText('Enter the state name')).toBeInTheDocument()
+    expect(dialog.getByText('Use 2 to 5 letters')).toBeInTheDocument()
+    expect(dialog.getByText('Enter the capital')).toBeInTheDocument()
+    await u.type(dialog.getByLabelText('Name'), 'Goa')
+    await u.type(dialog.getByLabelText('Code'), 'GA')
+    await u.selectOptions(dialog.getByLabelText('Type'), 'State')
+    await u.type(dialog.getByLabelText('Capital'), 'Panaji')
+    await u.click(dialog.getByRole('button', { name: 'Add state' }))
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Goa added'))
+    expect(JSON.parse(mock.history.post[0].data)).toEqual({ name: 'Goa', code: 'GA', type: 'STATE', capitalName: 'Panaji' })
+  })
+
+  it('edits the selected state', async () => {
+    mock.onPatch('/admin/states/1').reply(200, { ...states[0], capitalName: 'Pune' })
+    const u = userEvent.setup()
+    renderApp('/admin/locations')
+    await screen.findByRole('table', { name: 'Cities in Maharashtra' })
+
+    await u.click(screen.getByRole('button', { name: 'Edit Maharashtra' }))
+    const dialog = within(await screen.findByRole('dialog', { name: 'Edit Maharashtra' }))
+    expect(dialog.getByLabelText('Name')).toHaveValue('Maharashtra')
+    expect(dialog.queryByLabelText('Code')).not.toBeInTheDocument()
+    await u.clear(dialog.getByLabelText('Capital'))
+    await u.type(dialog.getByLabelText('Capital'), 'Pune')
+    await u.click(dialog.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Maharashtra updated'))
+    expect(JSON.parse(mock.history.patch[0].data)).toEqual({ name: 'Maharashtra', type: 'STATE', capitalName: 'Pune' })
+  })
+
+  it('shows the server message when a state cannot be added', async () => {
+    mock.onPost('/admin/states').reply(409, { code: 'STATE_EXISTS', detail: 'A state with this code exists' })
+    const u = userEvent.setup()
+    renderApp('/admin/locations')
+    await screen.findByRole('table', { name: 'Cities in Maharashtra' })
+    await u.click(screen.getByRole('button', { name: 'Add state' }))
+    const dialog = within(await screen.findByRole('dialog'))
+    await u.type(dialog.getByLabelText('Name'), 'Goa')
+    await u.type(dialog.getByLabelText('Code'), 'MH')
+    await u.type(dialog.getByLabelText('Capital'), 'Panaji')
+    await u.click(dialog.getByRole('button', { name: 'Add state' }))
+
+    expect(await dialog.findByText('A state with this code exists')).toBeInTheDocument()
   })
 
   it('shows the server message when the states fail to load', async () => {

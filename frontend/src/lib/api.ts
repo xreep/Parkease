@@ -87,10 +87,13 @@ api.interceptors.response.use(
         onSessionExpired?.()
       }
     }
-    // A suspended account is refused everywhere, public reads included: end the session and say why.
-    if (error.response?.status === 403 && !isAuthCall && tokenStore.getAccess()) {
+    // A suspended account is refused everywhere, public reads included: end the session and say why. Only for the
+    // token that is still the stored one, so a late answer to an old request can't sign out a fresh login, and the
+    // first of several parallel answers is the only one that acts.
+    if (error.response?.status === 403 && original && !isAuthCall) {
+      const sent = bearerToken(original)
       const body = error.response.data as { code?: string; detail?: string } | undefined
-      if (body?.code === 'ACCOUNT_SUSPENDED') {
+      if (sent !== null && sent === tokenStore.getAccess() && body?.code === 'ACCOUNT_SUSPENDED') {
         tokenStore.clear()
         onSessionExpired?.()
         toast.error(body.detail ?? 'Your account has been suspended.')

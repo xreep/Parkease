@@ -16,8 +16,11 @@ import { TextField } from '../../components/ui/TextField'
 import {
   CITY_TIER_LABELS,
   createCity,
+  createState,
   invalidateLocations,
   updateCity,
+  updateState,
+  type StateBody,
   useAdminCities,
   useAdminStates,
   type AdminCity,
@@ -34,9 +37,10 @@ const inRange = (min: number, max: number) => (v: string) => {
 }
 
 const schema = z.object({
-  name: z.string().trim().min(1, 'Enter the city name').max(100, 'Use at most 100 characters'),
-  lat: z.string().refine(inRange(-90, 90), 'Latitude must be between -90 and 90'),
-  lng: z.string().refine(inRange(-180, 180), 'Longitude must be between -180 and 180'),
+  name: z.string().trim().min(1, 'Enter the city name').min(2, 'Use at least 2 characters').max(100, 'Use at most 100 characters'),
+  // The server only takes places inside India's bounding box.
+  lat: z.string().refine(inRange(6, 38), 'Latitude must be between 6 and 38'),
+  lng: z.string().refine(inRange(68, 98), 'Longitude must be between 68 and 98'),
   tier: z.enum(['1', '2', '3']),
   active: z.boolean(),
 })
@@ -106,7 +110,65 @@ function CityForm({ state, city, onDone, onClose }: { state: AdminState; city: A
   )
 }
 
-function CitiesPanel({ state }: { state: AdminState }) {
+const stateSchema = z.object({
+  name: z.string().trim().min(1, 'Enter the state name').min(2, 'Use at least 2 characters').max(100, 'Use at most 100 characters'),
+  code: z.string().trim().regex(/^[A-Za-z]{2,5}$/, 'Use 2 to 5 letters'),
+  type: z.enum(['STATE', 'UT']),
+  capitalName: z.string().trim().min(1, 'Enter the capital').min(2, 'Use at least 2 characters').max(150, 'Use at most 150 characters'),
+})
+// Editing leaves the code alone, so its check must not block the form.
+const stateEditSchema = stateSchema.extend({ code: z.string() })
+type StateValues = z.infer<typeof stateSchema>
+
+function StateForm({ state, onDone, onClose }: { state: AdminState | null; onDone: () => void; onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const [formError, setFormError] = useState<string | null>(null)
+  const { register, handleSubmit, setError, formState: { errors, isSubmitting } } = useForm<StateValues>({
+    resolver: zodResolver(state ? stateEditSchema : stateSchema),
+    defaultValues: state
+      ? { name: state.name, code: state.code, type: state.type, capitalName: state.capitalName }
+      : { name: '', code: '', type: 'STATE', capitalName: '' },
+  })
+
+  async function submit(values: StateValues) {
+    setFormError(null)
+    const body: StateBody = { name: values.name, type: values.type, capitalName: values.capitalName }
+    try {
+      if (state) await updateState(state.id, body)
+      else await createState({ ...body, code: values.code.toUpperCase() })
+      toast.success(`${body.name} ${state ? 'updated' : 'added'}`)
+      await invalidateLocations(queryClient)
+      onDone()
+    } catch (error) {
+      const problem = toProblem(error)
+      const general: string[] = []
+      for (const fe of problem.fieldErrors) {
+        if (['name', 'code', 'type', 'capitalName'].includes(fe.field)) setError(fe.field as keyof StateValues, { message: fe.message })
+        else general.push(fe.message)
+      }
+      if (problem.fieldErrors.length === 0 || general.length > 0) setFormError(general.length > 0 ? general.join(' ') : problem.detail)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit(submit)} noValidate className="space-y-4">
+      <FormError message={formError} />
+      <TextField label="Name" error={errors.name?.message} {...register('name')} />
+      {!state && <TextField label="Code" hint="2 to 5 letters, e.g. MH" autoComplete="off" error={errors.code?.message} {...register('code')} />}
+      <Select label="Type" error={errors.type?.message} {...register('type')}>
+        <option value="STATE">State</option>
+        <option value="UT">Union territory</option>
+      </Select>
+      <TextField label="Capital" error={errors.capitalName?.message} {...register('capitalName')} />
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="secondary" disabled={isSubmitting} onClick={onClose}>Cancel</Button>
+        <Button type="submit" loading={isSubmitting}>{state ? 'Save changes' : 'Add state'}</Button>
+      </div>
+    </form>
+  )
+}
+
+function CitiesPanel({ state, onEditState }: { state: AdminState; onEditState: () => void }) {
   const [page, setPage] = useState(0)
   const [editing, setEditing] = useState<{ city: AdminCity | null } | null>(null)
   const { data, error, isPending, isPlaceholderData } = useAdminCities(state.id, page)
@@ -115,7 +177,10 @@ function CitiesPanel({ state }: { state: AdminState }) {
     <section className="min-w-0 space-y-4" aria-label={`Cities in ${state.name}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="font-semibold">{`Cities in ${state.name}`}</h3>
-        <Button type="button" onClick={() => setEditing({ city: null })}>Add city</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="secondary" aria-label={`Edit ${state.name}`} onClick={onEditState}>Edit state</Button>
+          <Button type="button" onClick={() => setEditing({ city: null })}>Add city</Button>
+        </div>
       </div>
 
       {isPending ? (
@@ -169,11 +234,15 @@ function CitiesPanel({ state }: { state: AdminState }) {
 export function AdminLocationsPage() {
   const { data: states, error, isPending } = useAdminStates()
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [stateDialog, setStateDialog] = useState<{ state: AdminState | null } | null>(null)
   const selected = states?.find((s) => s.id === selectedId) ?? states?.[0]
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold">Locations</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-xl font-semibold">Locations</h2>
+        <Button type="button" variant="secondary" onClick={() => setStateDialog({ state: null })}>Add state</Button>
+      </div>
       {isPending ? (
         <Loading />
       ) : error ? (
@@ -203,8 +272,13 @@ export function AdminLocationsPage() {
               )
             })}
           </ul>
-          <CitiesPanel key={selected.id} state={selected} />
+          <CitiesPanel key={selected.id} state={selected} onEditState={() => setStateDialog({ state: selected })} />
         </div>
+      )}
+      {stateDialog && (
+        <Dialog open title={stateDialog.state ? `Edit ${stateDialog.state.name}` : 'Add a state'} onClose={() => setStateDialog(null)}>
+          <StateForm state={stateDialog.state} onDone={() => setStateDialog(null)} onClose={() => setStateDialog(null)} />
+        </Dialog>
       )}
     </div>
   )

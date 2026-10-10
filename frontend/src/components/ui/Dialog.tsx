@@ -103,11 +103,13 @@ export type ReasonDialogProps = {
   maxLength?: number
   /** Shown above the reason field: what the reason is for (e.g. which booking). */
   summary?: ReactNode
+  /** The dismiss button's text (default "Cancel"); use it when "Cancel" would read as the action itself. */
+  cancelLabel?: string
 }
 
 type ReasonFormProps = Omit<ReasonDialogProps, 'open' | 'title'> & { onBusyChange: (busy: boolean) => void }
 
-function ReasonForm({ confirmLabel, onConfirm, onClose, onBusyChange, helper, maxLength = DEFAULT_REASON_MAX, summary }: ReasonFormProps) {
+function ReasonForm({ confirmLabel, onConfirm, onClose, onBusyChange, helper, maxLength = DEFAULT_REASON_MAX, summary, cancelLabel = 'Cancel' }: ReasonFormProps) {
   const [formError, setFormError] = useState<string | null>(null)
   const schema = useMemo(() => makeReasonSchema(maxLength), [maxLength])
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<ReasonValues>({
@@ -133,7 +135,7 @@ function ReasonForm({ confirmLabel, onConfirm, onClose, onBusyChange, helper, ma
       <FormError message={formError} />
       <TextArea label="Reason" rows={4} hint={helper} error={errors.reason?.message} {...register('reason')} />
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="secondary" disabled={isSubmitting} onClick={onClose}>Cancel</Button>
+        <Button type="button" variant="secondary" disabled={isSubmitting} onClick={onClose}>{cancelLabel}</Button>
         <Button type="submit" variant="danger" loading={isSubmitting}>{confirmLabel}</Button>
       </div>
     </form>
@@ -141,11 +143,11 @@ function ReasonForm({ confirmLabel, onConfirm, onClose, onBusyChange, helper, ma
 }
 
 /** Asks for a required reason (max 500 chars unless `maxLength`). The form remounts on each open, so it starts empty. */
-export function ReasonDialog({ open, title, confirmLabel, onConfirm, onClose, helper, maxLength, summary }: ReasonDialogProps) {
+export function ReasonDialog({ open, title, confirmLabel, onConfirm, onClose, helper, maxLength, summary, cancelLabel }: ReasonDialogProps) {
   const [busy, setBusy] = useState(false)
   return (
     <Dialog open={open} title={title} onClose={onClose} busy={busy}>
-      <ReasonForm confirmLabel={confirmLabel} onConfirm={onConfirm} onClose={onClose} onBusyChange={setBusy} helper={helper} maxLength={maxLength} summary={summary} />
+      <ReasonForm confirmLabel={confirmLabel} onConfirm={onConfirm} onClose={onClose} onBusyChange={setBusy} helper={helper} maxLength={maxLength} summary={summary} cancelLabel={cancelLabel} />
     </Dialog>
   )
 }

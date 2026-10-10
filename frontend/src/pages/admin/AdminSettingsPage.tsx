@@ -9,7 +9,7 @@ import { Loading } from '../../components/admin/common'
 import { Button } from '../../components/ui/Button'
 import { Dialog } from '../../components/ui/Dialog'
 import { TextField } from '../../components/ui/TextField'
-import { saveSettings, useAdminSettings, type PlatformSettings, type PriceGuideline } from '../../lib/admin'
+import { invalidateAdminActivity, saveSettings, useAdminSettings, type PlatformSettings, type PriceGuideline } from '../../lib/admin'
 import { toProblem } from '../../lib/errors'
 
 const MAX_HOURLY = 100_000
@@ -28,6 +28,10 @@ const bounded = (min: number, max: number, message: string, whole = false) =>
     return Number.isFinite(n) && n >= min && n <= max && (!whole || Number.isInteger(n))
   }, message)
 
+/** A percentage in range with at most two decimals (the server keeps two). */
+const percent = (max: number, label: string) =>
+  bounded(0, max, `${label} must be between 0 and ${max}`).refine((v) => !/\.\d{3,}/.test(v), `${label} can have at most 2 decimals`)
+
 const hourly = z.string().trim().refine((v) => {
   if (v === '' || !/^\d+(\.\d{1,2})?$/.test(v)) return false
   const n = Number(v)
@@ -35,8 +39,8 @@ const hourly = z.string().trim().refine((v) => {
 }, `Enter an amount above ₹0, up to ₹${MAX_HOURLY.toLocaleString('en-IN')}`)
 
 const schema = z.object({
-  platformFeePercent: bounded(0, 50, 'Fee must be between 0 and 50'),
-  gstPercent: bounded(0, 28, 'GST must be between 0 and 28'),
+  platformFeePercent: percent(50, 'Fee'),
+  gstPercent: percent(28, 'GST'),
   holdMinutes: bounded(5, 60, 'Hold must be between 5 and 60 minutes', true),
   approvalHours: bounded(1, 24, 'Approval window must be between 1 and 24 hours', true),
   requestMinLeadMinutes: bounded(0, 240, 'Lead time must be between 0 and 240 minutes', true),
@@ -104,6 +108,7 @@ function SettingsForm({ settings }: { settings: PlatformSettings }) {
     try {
       const saved = await saveSettings(toSettings(pending))
       queryClient.setQueryData(['admin', 'settings'], saved)
+      void invalidateAdminActivity(queryClient)
       reset(toValues(saved))
       toast.success('Settings saved')
     } catch (error) {

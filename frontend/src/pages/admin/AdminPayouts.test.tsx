@@ -151,6 +151,25 @@ describe('admin payouts', () => {
     expect(toast.success).not.toHaveBeenCalled()
   })
 
+  it('disables the confirmation when the selection is gone after a refresh', async () => {
+    mock.onGet('/admin/payouts').reply(200, owners)
+    let loads = 0
+    mock.onGet('/admin/payouts/5/earnings').reply(() => [200, loads++ === 0 ? [earning(1, 500)] : []])
+    mock.onPost('/admin/payouts/mark-paid').reply(409, { code: 'NOTHING_TO_PAY', detail: 'nope' })
+    const u = userEvent.setup()
+    renderApp('/admin/payouts')
+    const earnings = await expandRavi(u)
+    await u.click(await earnings.findByRole('checkbox', { name: 'PE-EARN001' }))
+    await u.click(earnings.getByRole('button', { name: /Mark selected as paid/ }))
+    const dialog = within(await screen.findByRole('dialog'))
+    await u.type(dialog.getByLabelText('Payment reference'), 'UTR123456789')
+
+    await u.click(dialog.getByRole('button', { name: 'Mark as paid' }))
+
+    expect(await dialog.findByText('There is nothing to pay: those earnings are no longer pending payout.')).toBeInTheDocument()
+    await waitFor(() => expect(dialog.getByRole('button', { name: 'Mark as paid' })).toBeDisabled())
+  })
+
   it('shows the server message when the earnings fail to load', async () => {
     mock.onGet('/admin/payouts').reply(200, owners)
     mock.onGet('/admin/payouts/5/earnings').reply(500, { code: 'INTERNAL', detail: 'Earnings are down' })

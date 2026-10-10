@@ -11,6 +11,7 @@ import { ReasonDialog } from '../../components/ui/Dialog'
 import { Pagination } from '../../components/ui/Pagination'
 import { Select } from '../../components/ui/Select'
 import { Badge, StatusBadge } from '../../components/ui/StatusBadge'
+import { invalidateAdminActivity } from '../../lib/admin'
 import {
   activateUser,
   mapAdminError,
@@ -23,11 +24,11 @@ import {
   type UserStatus,
 } from '../../lib/adminManage'
 import { errorMessage } from '../../lib/errors'
-import { formatDateTime } from '../../lib/format'
+import { formatDateTime, plural } from '../../lib/format'
+import { stepBackIfEmpty, withPageReset } from '../../lib/usePaging'
 
 const ROLE_LABELS: Record<UserRole, string> = { DRIVER: 'Driver', OWNER: 'Owner', ADMIN: 'Admin' }
 const ROLE_TONES = { DRIVER: 'sky', OWNER: 'amber', ADMIN: 'slate' } as const
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 const fullName = (u: AdminUser) => `${u.firstName} ${u.lastName}`
 
 function UserRow({ user, isSelf, onSuspend, onChanged }: { user: AdminUser; isSelf: boolean; onSuspend: () => void; onChanged: () => Promise<void> }) {
@@ -96,14 +97,10 @@ export function AdminUsersPage() {
   const filters: UserFilters = { ...(role && { role }), ...(status && { status }), ...(q && { q }) }
   const { data, error, isPending, isPlaceholderData } = useAdminUsers(filters, page)
 
-  // The last row of a later page was handled elsewhere: step back instead of showing an empty page.
-  if (data !== undefined && data.content.length === 0 && page > 0) setPage(page - 1)
+  stepBackIfEmpty(page, setPage, data?.content, isPlaceholderData)
 
   const refresh = () =>
-    Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] }),
-      queryClient.invalidateQueries({ queryKey: ['admin', 'stats'] }),
-    ]).then(() => undefined)
+    Promise.all([queryClient.invalidateQueries({ queryKey: ['admin', 'users'] }), invalidateAdminActivity(queryClient)]).then(() => undefined)
 
   async function confirmSuspend(reason: string) {
     if (!suspending) return
@@ -117,10 +114,7 @@ export function AdminUsersPage() {
     await refresh()
   }
 
-  const filter = <T,>(set: (value: T) => void) => (value: T) => {
-    set(value)
-    setPage(0)
-  }
+  const filter = withPageReset(setPage)
 
   return (
     <div className="space-y-6">
@@ -138,7 +132,7 @@ export function AdminUsersPage() {
           <option value="ACTIVE">Active</option>
           <option value="SUSPENDED">Suspended</option>
         </Select>
-        <SearchBox label="Search users" placeholder="Name, email or phone" onSearch={filter(setQ)} className="sm:col-span-2 lg:col-span-1" />
+        <SearchBox label="Search users" placeholder="Name or email" onSearch={filter(setQ)} className="sm:col-span-2 lg:col-span-1" />
       </div>
 
       {isPending ? (

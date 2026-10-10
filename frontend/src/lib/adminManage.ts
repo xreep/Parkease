@@ -1,8 +1,9 @@
 import { keepPreviousData, useQuery, type QueryClient } from '@tanstack/react-query'
+import { invalidateAdminActivity } from './admin'
 import { api } from './api'
 import type { BookingEventDto, BookingStatus, PaymentProvider, PaymentStatus } from './bookings'
 import { invalidateBookingQueries } from './bookings'
-import { blobProblem, filenameFrom, saveBlob } from './download'
+import { downloadCsv } from './download'
 import { errorMessage, toProblem } from './errors'
 import type { DisputeSummary } from './disputes'
 import type { Page } from './owner'
@@ -128,6 +129,11 @@ export const CITY_TIER_LABELS: Record<CityTier, string> = {
   3: 'Tier 3 · Other',
 }
 
+export type StateBody = { name: string; type: AdminState['type']; capitalName: string }
+
+export const createState = async (body: StateBody & { code: string }) => (await api.post<AdminState>('/admin/states', body)).data
+export const updateState = async (id: number, body: StateBody) => (await api.patch<AdminState>(`/admin/states/${id}`, body)).data
+
 export const getAdminStates = async () => (await api.get<AdminState[]>('/admin/states')).data
 export const listAdminCities = async (stateId: number, page: number) =>
   (await api.get<Page<AdminCity>>('/admin/cities', { params: { stateId, page, size: 100 } })).data
@@ -150,9 +156,10 @@ export function useAdminCities(stateId: number | undefined, page: number) {
 
 /** City changes also reach the public location lists and the states' counts. */
 export function invalidateLocations(queryClient: QueryClient) {
-  return Promise.all(
-    [['admin', 'cities'], ['admin', 'states'], ['states'], ['state'], ['city']].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
-  ).then(() => undefined)
+  return Promise.all([
+    ...[['admin', 'cities'], ['admin', 'states'], ['states'], ['state'], ['city']].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+    invalidateAdminActivity(queryClient),
+  ]).then(() => undefined)
 }
 
 // ---- Bookings ----
@@ -239,7 +246,8 @@ export const CANCELLABLE_STATUSES: BookingStatus[] = ['PENDING_PAYMENT', 'AWAITI
 
 export function invalidateAdminBookings(queryClient: QueryClient) {
   return Promise.all([
-    ...['bookings', 'booking', 'payments', 'refunds', 'payouts', 'stats'].map((key) => queryClient.invalidateQueries({ queryKey: ['admin', key] })),
+    ...['bookings', 'booking', 'payments', 'refunds', 'payouts'].map((key) => queryClient.invalidateQueries({ queryKey: ['admin', key] })),
+    invalidateAdminActivity(queryClient),
     invalidateBookingQueries(queryClient),
   ]).then(() => undefined)
 }
@@ -320,15 +328,7 @@ export const listPayoutEarnings = async (ownerId: number) =>
 export const markPaid = async (body: MarkPaidBody) => (await api.post<MarkPaidResult>('/admin/payouts/mark-paid', body)).data
 
 /** The pending payouts as a CSV (the server names the file); `truncated` when it cut the export at its row limit. */
-export async function downloadPayoutsCsv(): Promise<{ truncated: boolean }> {
-  try {
-    const response = await api.get<Blob>('/admin/payouts', { params: { format: 'csv' }, responseType: 'blob' })
-    saveBlob(response.data, filenameFrom(response.headers['content-disposition']) ?? 'payouts.csv')
-    return { truncated: String(response.headers['x-truncated']).toLowerCase() === 'true' }
-  } catch (error) {
-    throw await blobProblem(error)
-  }
-}
+export const downloadPayoutsCsv = () => downloadCsv('/admin/payouts', {}, 'payouts.csv')
 
 export function useAdminPayouts() {
   return useQuery({ queryKey: ['admin', 'payouts'], queryFn: listPayouts })

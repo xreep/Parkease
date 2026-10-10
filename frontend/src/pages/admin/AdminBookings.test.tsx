@@ -103,6 +103,21 @@ describe('admin bookings', () => {
       }))
     })
 
+    it('says the state only narrows the city list, and does not filter by itself', async () => {
+      mock.onGet('/admin/bookings').reply(200, page([summary(1)]))
+      const u = userEvent.setup()
+      renderApp('/admin/bookings')
+      await screen.findByRole('table', { name: 'Bookings' })
+      expect(screen.getByText('Pick a city to filter by place — the state only narrows the city list.')).toBeInTheDocument()
+      const before = calls().length
+
+      await screen.findByRole('option', { name: 'Maharashtra' })
+      await u.selectOptions(screen.getByLabelText('State'), 'Maharashtra')
+
+      await screen.findByRole('option', { name: 'Pune' })
+      expect(calls()).toHaveLength(before)
+    })
+
     it('shows an empty state and server errors', async () => {
       mock.onGet('/admin/bookings').replyOnce(200, page([]))
       mock.onGet('/admin/bookings').reply(500, { code: 'INTERNAL', detail: 'Bookings are down' })
@@ -166,6 +181,7 @@ describe('admin bookings', () => {
 
       await u.click(await screen.findByRole('button', { name: 'Cancel booking' }))
       const dialog = within(await screen.findByRole('dialog', { name: 'Cancel this booking?' }))
+      expect(dialog.getByRole('button', { name: 'Keep booking' })).toBeInTheDocument()
       expect(dialog.getByText('₹250')).toBeInTheDocument()
       expect(dialog.getByText(/will be refunded/)).toBeInTheDocument()
       await u.type(dialog.getByLabelText('Reason'), 'Owner unreachable')

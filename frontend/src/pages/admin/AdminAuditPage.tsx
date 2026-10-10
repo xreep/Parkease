@@ -5,13 +5,21 @@ import { Empty, Loading } from '../../components/admin/common'
 import { Button } from '../../components/ui/Button'
 import { Pagination } from '../../components/ui/Pagination'
 import { Select } from '../../components/ui/Select'
-import { TextField } from '../../components/ui/TextField'
 import { useAdminAudit, type AdminAction, type AuditFilters } from '../../lib/admin'
 import { errorMessage } from '../../lib/errors'
 import { formatDateTime } from '../../lib/format'
+import { stepBackIfEmpty } from '../../lib/usePaging'
 
 const TARGET_TYPES = ['USER', 'OWNER', 'LISTING', 'REVIEW', 'STATE', 'CITY', 'BOOKING', 'DISPUTE', 'REFUND', 'PAYOUT', 'SETTINGS']
 const label = (type: string) => type.charAt(0) + type.slice(1).toLowerCase()
+
+/** What the server records, so the filter can only ask for actions that exist. */
+const ACTIONS = [
+  'OWNER_VERIFIED', 'OWNER_REJECTED', 'LISTING_APPROVED', 'LISTING_REJECTED', 'LISTING_SUSPENDED', 'LISTING_REINSTATED',
+  'USER_SUSPENDED', 'USER_ACTIVATED', 'REVIEW_HIDDEN', 'REVIEW_UNHIDDEN', 'STATE_CREATED', 'STATE_UPDATED', 'CITY_CREATED',
+  'CITY_UPDATED', 'BOOKING_CANCELLED', 'REFUND_RETRIED', 'PAYOUT_MARKED_PAID', 'DISPUTE_UNDER_REVIEW', 'DISPUTE_RESOLVED',
+  'SETTINGS_UPDATED',
+]
 
 /** "USER 7"; settings changes have no target id, shown as a dash. */
 const target = (a: AdminAction) => `${a.targetType} ${a.targetId ?? '—'}`
@@ -63,6 +71,7 @@ export function AdminAuditPage() {
   const [applied, setApplied] = useState<AuditFilters>({})
   const [page, setPage] = useState(0)
   const { data, error, isPending, isPlaceholderData } = useAdminAudit(applied, page)
+  stepBackIfEmpty(page, setPage, data?.content, isPlaceholderData)
 
   function apply(next: AuditFilters) {
     setApplied(next)
@@ -85,7 +94,12 @@ export function AdminAuditPage() {
       <h2 className="text-xl font-semibold">Audit log</h2>
 
       <form onSubmit={submit} className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto_auto]">
-        <TextField label="Action" value={action} placeholder="e.g. USER_SUSPENDED" onChange={(e) => setAction(e.target.value)} />
+        <Select label="Action" value={action} onChange={(e) => setAction(e.target.value)}>
+          <option value="">All actions</option>
+          {ACTIONS.map((a) => (
+            <option key={a} value={a}>{label(a.replace(/_/g, ' '))}</option>
+          ))}
+        </Select>
         <Select label="Target type" value={targetType} onChange={(e) => setTargetType(e.target.value)}>
           <option value="">All types</option>
           {TARGET_TYPES.map((t) => (

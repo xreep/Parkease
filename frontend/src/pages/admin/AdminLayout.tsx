@@ -1,5 +1,6 @@
 import clsx from 'clsx'
-import { NavLink, Outlet } from 'react-router-dom'
+import { useEffect, useRef } from 'react'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 
 type NavItem = { to: string; label: string; end?: boolean }
 
@@ -41,8 +42,14 @@ const sections: { label: string; items: NavItem[] }[] = [
 ]
 
 function AdminNav() {
+  const ref = useRef<HTMLElement>(null)
+  const { pathname } = useLocation()
+  // On a phone the strip scrolls sideways: keep the current section's tab in view.
+  useEffect(() => {
+    ref.current?.querySelector<HTMLElement>('[aria-current="page"]')?.scrollIntoView?.({ inline: 'center', block: 'nearest' })
+  }, [pathname])
   return (
-    <nav aria-label="Sections" className="-mx-4 overflow-x-auto border-b border-slate-200 px-4 dark:border-slate-800 sm:mx-0 sm:px-0">
+    <nav ref={ref} aria-label="Sections" className="-mx-4 overflow-x-auto border-b border-slate-200 px-4 dark:border-slate-800 sm:mx-0 sm:px-0">
       <div className="flex min-w-max gap-4">
         {sections.map((section) => (
           <div key={section.label}>

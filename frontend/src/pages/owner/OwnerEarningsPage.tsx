@@ -1,7 +1,6 @@
 import clsx from 'clsx'
 import { Download } from 'lucide-react'
 import { useState } from 'react'
-import { toast } from 'sonner'
 import { FormError } from '../../components/AuthCard'
 import { Button } from '../../components/ui/Button'
 import { Pagination } from '../../components/ui/Pagination'
@@ -19,6 +18,7 @@ import {
   type OwnerEarningDto,
 } from '../../lib/ownerDashboard'
 import { formatWindow } from '../../lib/time'
+import { useCsvExport } from '../../lib/useCsvExport'
 
 const STATUSES = Object.keys(EARNING_STATUS_LABELS) as EarningStatus[]
 
@@ -97,8 +97,6 @@ export function OwnerEarningsPage() {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [page, setPage] = useState(0)
-  const [exporting, setExporting] = useState(false)
-  const [exportError, setExportError] = useState<string | null>(null)
   const filters = { ...(status && { status }), ...(from && { from }), ...(to && { to }) }
   const { data, error, isPending, isPlaceholderData } = useOwnerEarnings(filters, page)
 
@@ -107,29 +105,18 @@ export function OwnerEarningsPage() {
     setPage(0)
   }
 
-  async function exportCsv() {
-    setExporting(true)
-    setExportError(null)
-    try {
-      const { truncated } = await downloadEarningsCsv(filters)
-      if (truncated) toast.warning('Only the newest 10,000 rows were exported — narrow the dates.')
-    } catch (e) {
-      setExportError(errorMessage(e))
-    } finally {
-      setExporting(false)
-    }
-  }
+  const csv = useCsvExport(() => downloadEarningsCsv(filters), 'Only the newest 10,000 rows were exported — narrow the dates.')
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-semibold">Earnings</h2>
-        <Button type="button" variant="secondary" loading={exporting} onClick={() => void exportCsv()}>
-          {!exporting && <Download aria-hidden className="h-4 w-4" />}
+        <Button type="button" variant="secondary" loading={csv.exporting} onClick={() => void csv.run()}>
+          {!csv.exporting && <Download aria-hidden className="h-4 w-4" />}
           Download CSV
         </Button>
       </div>
-      <FormError message={exportError} />
+      <FormError message={csv.error} />
 
       <div className="grid gap-3 sm:grid-cols-3">
         <Select label="Status" value={status} onChange={(e) => filter(setStatus)(e.target.value as EarningStatus | '')}>

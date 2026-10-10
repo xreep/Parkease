@@ -193,6 +193,7 @@ function BookingContent({ booking }: { booking: AdminBookingDetail }) {
         open={cancelling}
         title="Cancel this booking?"
         confirmLabel="Cancel booking"
+        cancelLabel="Keep booking"
         maxLength={300}
         summary={<CancelSummary booking={booking} />}
         onConfirm={cancel}

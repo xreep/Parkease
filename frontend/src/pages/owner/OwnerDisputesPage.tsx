@@ -6,11 +6,13 @@ import { Pagination } from '../../components/ui/Pagination'
 import { Select } from '../../components/ui/Select'
 import { DISPUTE_STATUS_LABELS, useOwnerDisputes, type DisputeStatus } from '../../lib/disputes'
 import { errorMessage } from '../../lib/errors'
+import { stepBackIfEmpty } from '../../lib/usePaging'
 
 export function OwnerDisputesPage() {
   const [status, setStatus] = useState<DisputeStatus | ''>('')
   const [page, setPage] = useState(0)
-  const { data, error, isPending } = useOwnerDisputes(status || undefined, page)
+  const { data, error, isPending, isPlaceholderData } = useOwnerDisputes(status || undefined, page)
+  stepBackIfEmpty(page, setPage, data?.content, isPlaceholderData)
 
   return (
     <div className="space-y-6">
