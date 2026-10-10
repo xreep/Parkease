@@ -1,4 +1,5 @@
 import axios, { isAxiosError, type AxiosError, type InternalAxiosRequestConfig } from 'axios'
+import { toast } from 'sonner'
 import { tokenStore } from './tokenStore'
 
 export const api = axios.create({
@@ -84,6 +85,15 @@ api.interceptors.response.use(
       if ('expired' in result) {
         tokenStore.clear()
         onSessionExpired?.()
+      }
+    }
+    // A suspended account is refused everywhere, public reads included: end the session and say why.
+    if (error.response?.status === 403 && !isAuthCall && tokenStore.getAccess()) {
+      const body = error.response.data as { code?: string; detail?: string } | undefined
+      if (body?.code === 'ACCOUNT_SUSPENDED') {
+        tokenStore.clear()
+        onSessionExpired?.()
+        toast.error(body.detail ?? 'Your account has been suspended.')
       }
     }
     return Promise.reject(error)

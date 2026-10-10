@@ -21,6 +21,13 @@ import { PaymentsPage } from './pages/driver/PaymentsPage'
 import { DriverHomePage } from './pages/driver/DriverHomePage'
 import { DriverLayout } from './pages/driver/DriverLayout'
 import { VehiclesPage } from './pages/driver/VehiclesPage'
+import { AdminBookingDetailPage } from './pages/admin/AdminBookingDetailPage'
+import { AdminBookingsPage } from './pages/admin/AdminBookingsPage'
+import { AdminLocationsPage } from './pages/admin/AdminLocationsPage'
+import { AdminPaymentsPage } from './pages/admin/AdminPaymentsPage'
+import { AdminPayoutsPage } from './pages/admin/AdminPayoutsPage'
+import { AdminReviewsPage } from './pages/admin/AdminReviewsPage'
+import { AdminUsersPage } from './pages/admin/AdminUsersPage'
 import { AdminHomePage } from './pages/admin/AdminHomePage'
 import { AdminAuditPage } from './pages/admin/AdminAuditPage'
 import { AdminLayout } from './pages/admin/AdminLayout'
@@ -81,6 +88,13 @@ export default function App() {
           <Route path="owners" element={<OwnerQueuePage />} />
           <Route path="listings" element={<ListingQueuePage />} />
           <Route path="listings/:id" element={<AdminListingReviewPage />} />
+          <Route path="bookings" element={<AdminBookingsPage />} />
+          <Route path="bookings/:id" element={<AdminBookingDetailPage />} />
+          <Route path="payments" element={<AdminPaymentsPage />} />
+          <Route path="payouts" element={<AdminPayoutsPage />} />
+          <Route path="users" element={<AdminUsersPage />} />
+          <Route path="reviews" element={<AdminReviewsPage />} />
+          <Route path="locations" element={<AdminLocationsPage />} />
           <Route path="reports" element={<AdminReportsPage />} />
           <Route path="settings" element={<AdminSettingsPage />} />
           <Route path="audit" element={<AdminAuditPage />} />

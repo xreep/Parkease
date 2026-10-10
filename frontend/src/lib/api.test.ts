@@ -1,7 +1,10 @@
 import MockAdapter from 'axios-mock-adapter'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { toast } from 'sonner'
 import { api, setSessionExpiredHandler } from './api'
 import { tokenStore } from './tokenStore'
+
+vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
 
 describe('api client', () => {
   let mock: MockAdapter
@@ -48,6 +51,33 @@ describe('api client', () => {
 
     expect(tokenStore.getAccess()).toBeNull()
     expect(onExpired).toHaveBeenCalled()
+  })
+
+  it('ends the session and shows the message when the account is suspended, even on a public read', async () => {
+    tokenStore.set('a1', 'r1')
+    const expired = vi.fn()
+    setSessionExpiredHandler(expired)
+    mock.onGet('/states').reply(403, { code: 'ACCOUNT_SUSPENDED', detail: 'Your account is suspended' })
+
+    await expect(api.get('/states')).rejects.toMatchObject({ response: { status: 403 } })
+
+    expect(tokenStore.getAccess()).toBeNull()
+    expect(tokenStore.getRefresh()).toBeNull()
+    expect(expired).toHaveBeenCalledTimes(1)
+    expect(toast.error).toHaveBeenCalledWith('Your account is suspended')
+    expect(mock.history.post).toHaveLength(0)
+  })
+
+  it('keeps the session on other 403 answers', async () => {
+    tokenStore.set('a1', 'r1')
+    const expired = vi.fn()
+    setSessionExpiredHandler(expired)
+    mock.onGet('/admin/queues').reply(403, { code: 'FORBIDDEN', detail: 'Not allowed' })
+
+    await expect(api.get('/admin/queues')).rejects.toBeDefined()
+
+    expect(tokenStore.getAccess()).toBe('a1')
+    expect(expired).not.toHaveBeenCalled()
   })
 
   it('does not try to refresh failed auth calls', async () => {

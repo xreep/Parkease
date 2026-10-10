@@ -13,6 +13,9 @@ import { formatDateTime } from '../../lib/format'
 const TARGET_TYPES = ['USER', 'OWNER', 'LISTING', 'REVIEW', 'STATE', 'CITY', 'BOOKING', 'DISPUTE', 'REFUND', 'PAYOUT', 'SETTINGS']
 const label = (type: string) => type.charAt(0) + type.slice(1).toLowerCase()
 
+/** "USER 7"; settings changes have no target id, shown as a dash. */
+const target = (a: AdminAction) => `${a.targetType} ${a.targetId ?? '—'}`
+
 function AuditTable({ actions }: { actions: AdminAction[] }) {
   return (
     <>
@@ -32,7 +35,7 @@ function AuditTable({ actions }: { actions: AdminAction[] }) {
                 <td className="whitespace-nowrap px-3 py-2 text-slate-600 dark:text-slate-400">{formatDateTime(a.createdAt)}</td>
                 <td className="px-3 py-2">{a.adminName}</td>
                 <td className="px-3 py-2 font-mono text-xs">{a.action}</td>
-                <td className="whitespace-nowrap px-3 py-2">{`${a.targetType} ${a.targetId}`}</td>
+                <td className="whitespace-nowrap px-3 py-2">{target(a)}</td>
                 <td className="break-words px-3 py-2 text-slate-600 dark:text-slate-400">{a.details ?? '—'}</td>
               </tr>
             ))}
@@ -44,7 +47,7 @@ function AuditTable({ actions }: { actions: AdminAction[] }) {
         {actions.map((a) => (
           <li key={a.id} className="space-y-1 rounded-2xl border border-slate-200 bg-white p-4 text-sm dark:border-slate-800 dark:bg-slate-900">
             <p className="break-all font-mono text-xs font-semibold">{a.action}</p>
-            <p>{`${a.targetType} ${a.targetId}`}</p>
+            <p>{target(a)}</p>
             {a.details && <p className="break-words text-slate-600 dark:text-slate-400">{a.details}</p>}
             <p className="text-xs text-slate-500">{`${a.adminName} · ${formatDateTime(a.createdAt)}`}</p>
           </li>
