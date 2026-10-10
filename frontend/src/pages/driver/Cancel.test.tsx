@@ -297,6 +297,17 @@ describe('driver cancellation', () => {
     expect(await screen.findByText('Cancelled by the owner: Space is closed')).toBeInTheDocument()
   })
 
+  it('says ParkEase cancelled it, with the reason', async () => {
+    mock.onGet('/bookings/91').replyOnce(200, booking({ status: 'CANCELLED', cancelledBy: 'ADMIN', cancelReason: 'Owner unreachable' }))
+    const { unmount } = renderApp('/driver/bookings/91')
+    expect(await screen.findByText('Cancelled by ParkEase: Owner unreachable')).toBeInTheDocument()
+    unmount()
+
+    mock.onGet('/bookings/91').reply(200, booking({ status: 'CANCELLED', cancelledBy: 'ADMIN', cancelReason: null }))
+    renderApp('/driver/bookings/91')
+    expect(await screen.findByText('Cancelled by ParkEase')).toBeInTheDocument()
+  })
+
   it('marks an active booking in the list and on the dashboard', async () => {
     const { id, bookingCode, status, listingId, listingTitle, cityName, coverPhotoUrl, startTime, endTime, vehicleType, plateNumber, totalAmount, createdAt } =
       booking({ status: 'ACTIVE' })

@@ -57,6 +57,9 @@ export type Dispute = DisputeSummary & {
   resolutionAmount: number | null
   adminNotes: string | null
   refundableRemaining: number | null
+  /** Admin only: where the booking's owner earning stands, and what it is worth to the owner. */
+  earningStatus?: 'HELD' | 'PENDING_PAYOUT' | 'PAID' | 'REVERSED' | null
+  earningNet?: number | null
 }
 
 export type ResolveBody = { resolution: DisputeResolution; amount?: number; notes: string }

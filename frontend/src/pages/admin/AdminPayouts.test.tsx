@@ -5,8 +5,7 @@ import MockAdapter from 'axios-mock-adapter'
 import { toast } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { api } from '../../lib/api'
-import type { PayoutOwner } from '../../lib/adminManage'
-import type { OwnerEarningDto } from '../../lib/ownerDashboard'
+import type { PayoutEarning, PayoutOwner } from '../../lib/adminManage'
 import { tokenStore } from '../../lib/tokenStore'
 import { renderApp } from '../../test/renderApp'
 
@@ -15,14 +14,14 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: v
 const admin = { id: 1, name: 'Admin User', email: 'admin@parkease.dev', phone: null, role: 'ADMIN', emailVerified: true, avatarUrl: null }
 
 const owners: PayoutOwner[] = [
-  { ownerId: 5, ownerName: 'Ravi Kumar', ownerEmail: 'ravi@example.com', pendingAmount: 1500, earningsCount: 3, payoutMethod: 'UPI', payoutMasked: 'ra***@okhdfc' },
-  { ownerId: 6, ownerName: 'Meera Nair', ownerEmail: 'meera@example.com', pendingAmount: 400, earningsCount: 1, payoutMethod: 'BANK', payoutMasked: 'XXXX1234 · HDFC0001234' },
-  { ownerId: 7, ownerName: 'Sam Joseph', ownerEmail: 'sam@example.com', pendingAmount: 90, earningsCount: 1, payoutMethod: null, payoutMasked: null },
+  { ownerId: 5, ownerName: 'Ravi Kumar', ownerEmail: 'ravi@example.com', pendingAmount: 1500, earningsCount: 3, payoutMethod: 'UPI', payoutMasked: 'ra***@okhdfc', disputedAmount: 0 },
+  { ownerId: 6, ownerName: 'Meera Nair', ownerEmail: 'meera@example.com', pendingAmount: 400, earningsCount: 1, payoutMethod: 'BANK', payoutMasked: 'XXXX1234 · HDFC0001234', disputedAmount: 0 },
+  { ownerId: 7, ownerName: 'Sam Joseph', ownerEmail: 'sam@example.com', pendingAmount: 90, earningsCount: 1, payoutMethod: null, payoutMasked: null, disputedAmount: 0 },
 ]
 
-const earning = (id: number, net: number): OwnerEarningDto => ({
+const earning = (id: number, net: number, disputed = false): PayoutEarning => ({
   id, bookingId: 100 + id, bookingCode: `PE-EARN00${id}`, listingTitle: 'FC Road Parking', startTime: '2026-10-05T04:30:00Z',
-  endTime: '2026-10-05T06:30:00Z', gross: net + 20, commission: 20, net, status: 'PENDING_PAYOUT', paidAt: null, payoutReference: null,
+  endTime: '2026-10-05T06:30:00Z', gross: net + 20, commission: 20, net, status: 'PENDING_PAYOUT', paidAt: null, payoutReference: null, disputed,
 })
 
 describe('admin payouts', () => {
@@ -65,6 +64,63 @@ describe('admin payouts', () => {
     expect(meera.getByText('Bank · XXXX1234 · HDFC0001234')).toBeInTheDocument()
     expect(within(screen.getByRole('article', { name: 'Sam Joseph' })).getByText('No payout details yet')).toBeInTheDocument()
     expect(screen.getByText('Total pending: ₹1,990')).toBeInTheDocument()
+  })
+
+  it('says how much is held for open disputes', async () => {
+    mock.onGet('/admin/payouts').reply(200, [{ ...owners[0], disputedAmount: 300 }, owners[1]])
+    renderApp('/admin/payouts')
+
+    expect(within(await screen.findByRole('article', { name: 'Ravi Kumar' })).getByText('₹300 held for open disputes')).toBeInTheDocument()
+    expect(within(screen.getByRole('article', { name: 'Meera Nair' })).queryByText(/held for open disputes/)).not.toBeInTheDocument()
+  })
+
+  it('does not let disputed earnings be selected, with a hint why', async () => {
+    mock.onGet('/admin/payouts').reply(200, owners)
+    mock.onGet('/admin/payouts/5/earnings').reply(200, [earning(1, 500), earning(2, 600, true)])
+    const u = userEvent.setup()
+    renderApp('/admin/payouts')
+    const earnings = await expandRavi(u)
+
+    const held = await earnings.findByRole('checkbox', { name: 'PE-EARN002' })
+    expect(held).toBeDisabled()
+    expect(earnings.getByRole('checkbox', { name: 'PE-EARN001' })).toBeEnabled()
+    expect(earnings.getByText('Held for an open dispute')).toBeInTheDocument()
+    expect(held).toHaveAccessibleDescription('Held for an open dispute')
+
+    await u.click(earnings.getByRole('checkbox', { name: 'Select all' }))
+    expect(earnings.getByRole('checkbox', { name: 'PE-EARN001' })).toBeChecked()
+    expect(held).not.toBeChecked()
+    expect(earnings.getByRole('button', { name: 'Mark selected as paid (1 · ₹500)' })).toBeEnabled()
+  })
+
+  it('explains EARNING_DISPUTED and reloads', async () => {
+    mock.onGet('/admin/payouts').reply(200, owners)
+    mock.onPost('/admin/payouts/mark-paid').reply(409, { code: 'EARNING_DISPUTED', detail: 'nope' })
+    const u = userEvent.setup()
+    renderApp('/admin/payouts')
+    const earnings = await expandRavi(u)
+    await u.click(await earnings.findByRole('checkbox', { name: 'Select all' }))
+    await u.click(earnings.getByRole('button', { name: /Mark selected as paid/ }))
+    const dialog = within(await screen.findByRole('dialog'))
+    await u.type(dialog.getByLabelText('Payment reference'), 'UTR123456789')
+    const before = listCalls().length
+
+    await u.click(dialog.getByRole('button', { name: 'Mark as paid' }))
+
+    expect(await dialog.findByText('Some of those earnings are held for an open dispute. Resolve it first.')).toBeInTheDocument()
+    await waitFor(() => expect(listCalls().length).toBeGreaterThan(before))
+  })
+
+  it('words the confirmation as recording an outside payout', async () => {
+    mock.onGet('/admin/payouts').reply(200, owners)
+    const u = userEvent.setup()
+    renderApp('/admin/payouts')
+    const earnings = await expandRavi(u)
+    await u.click(await earnings.findByRole('checkbox', { name: 'Select all' }))
+    await u.click(earnings.getByRole('button', { name: /Mark selected as paid/ }))
+
+    const dialog = within(await screen.findByRole('dialog'))
+    expect(dialog.getByText('Record a payout you’ve made outside ParkEase (using the owner’s payout details on file). This doesn’t move money.')).toBeInTheDocument()
   })
 
   it('shows an empty state and server errors', async () => {

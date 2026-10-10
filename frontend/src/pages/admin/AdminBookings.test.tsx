@@ -21,7 +21,7 @@ const summary = (id: number, overrides: Partial<AdminBookingSummary> = {}): Admi
 
 const detail = (id: number, overrides: Partial<AdminBookingDetail> = {}): AdminBookingDetail => ({
   ...summary(id),
-  listingId: 9, slotLabel: 'A-01', baseAmount: 250, platformFee: 25, gstAmount: 25, cancelReason: null, cancelledBy: null,
+  listingId: 9, slotLabel: 'A-01', refundableRemaining: 300, baseAmount: 250, platformFee: 25, gstAmount: 25, cancelReason: null, cancelledBy: null,
   payment: {
     id: 70, provider: 'RAZORPAY', providerOrderId: 'order_ABC', providerPaymentId: 'pay_XYZ', status: 'CAPTURED', amount: 300,
     capturedAt: '2026-10-09T05:01:00Z',
@@ -173,7 +173,7 @@ describe('admin bookings', () => {
     })
 
     it('cancels after showing the refund that will be issued (paid minus refunded)', async () => {
-      mock.onGet('/admin/bookings/1').replyOnce(200, detail(1, { refundAmount: 50 }))
+      mock.onGet('/admin/bookings/1').replyOnce(200, detail(1, { refundAmount: 50, refundableRemaining: 250 }))
       mock.onGet('/admin/bookings/1').reply(200, detail(1, { status: 'CANCELLED', refundAmount: 300, cancelReason: 'Owner unreachable', cancelledBy: 'ADMIN' }))
       mock.onPost('/admin/bookings/1/cancel').reply(200, detail(1, { status: 'CANCELLED', refundAmount: 300 }))
       const u = userEvent.setup()
@@ -193,14 +193,47 @@ describe('admin bookings', () => {
       expect(screen.getByText('Owner unreachable')).toBeInTheDocument()
     })
 
-    it('says nothing is refunded when nothing was paid', async () => {
-      mock.onGet('/admin/bookings/1').reply(200, detail(1, { status: 'PENDING_PAYMENT', payment: null, paymentStatus: null }))
+    it('uses the refundable amount from the server, not its own sum', async () => {
+      mock.onGet('/admin/bookings/1').reply(200, detail(1, { refundAmount: 0, refundableRemaining: 120 }))
       const u = userEvent.setup()
       renderApp('/admin/bookings/1')
 
       await u.click(await screen.findByRole('button', { name: 'Cancel booking' }))
 
-      expect(within(await screen.findByRole('dialog')).getByText('Nothing has been paid, so no refund will be issued.')).toBeInTheDocument()
+      expect(within(await screen.findByRole('dialog')).getByText('₹120')).toBeInTheDocument()
+    })
+
+    it('says everything was already refunded when nothing is left', async () => {
+      mock.onGet('/admin/bookings/1').reply(200, detail(1, { refundAmount: 300, refundableRemaining: 0 }))
+      const u = userEvent.setup()
+      renderApp('/admin/bookings/1')
+
+      await u.click(await screen.findByRole('button', { name: 'Cancel booking' }))
+
+      expect(within(await screen.findByRole('dialog')).getByText('Everything paid has already been refunded.')).toBeInTheDocument()
+    })
+
+    it('releases the hold when the payment was only created', async () => {
+      mock.onGet('/admin/bookings/1').reply(200, detail(1, {
+        status: 'PENDING_PAYMENT', refundableRemaining: 0,
+        payment: { id: 70, provider: 'RAZORPAY', providerOrderId: 'order_ABC', providerPaymentId: null, status: 'CREATED', amount: 300, capturedAt: null },
+      }))
+      const u = userEvent.setup()
+      renderApp('/admin/bookings/1')
+
+      await u.click(await screen.findByRole('button', { name: 'Cancel booking' }))
+
+      expect(within(await screen.findByRole('dialog')).getByText('Nothing has been paid — the hold will be released.')).toBeInTheDocument()
+    })
+
+    it('says nothing is refunded when nothing was paid', async () => {
+      mock.onGet('/admin/bookings/1').reply(200, detail(1, { status: 'PENDING_PAYMENT', payment: null, paymentStatus: null, refundableRemaining: 0 }))
+      const u = userEvent.setup()
+      renderApp('/admin/bookings/1')
+
+      await u.click(await screen.findByRole('button', { name: 'Cancel booking' }))
+
+      expect(within(await screen.findByRole('dialog')).getByText('Nothing has been paid — the hold will be released.')).toBeInTheDocument()
     })
 
     it('does not offer cancelling a finished booking', async () => {

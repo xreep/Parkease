@@ -12,7 +12,6 @@ import {
   CANCELLABLE_STATUSES,
   invalidateAdminBookings,
   mapAdminError,
-  refundOnCancel,
   useAdminBooking,
   type AdminBookingDetail,
 } from '../../lib/adminManage'
@@ -47,7 +46,9 @@ function Facts({ rows }: { rows: [string, ReactNode][] }) {
 }
 
 function CancelSummary({ booking }: { booking: AdminBookingDetail }) {
-  const refund = refundOnCancel(booking)
+  const refund = booking.refundableRemaining
+  const unpaid = booking.payment === null || booking.payment.status === 'CREATED'
+  if (unpaid) return <p className="text-sm">Nothing has been paid — the hold will be released.</p>
   if (refund > 0) {
     return (
       <p className="text-sm">
@@ -55,11 +56,7 @@ function CancelSummary({ booking }: { booking: AdminBookingDetail }) {
       </p>
     )
   }
-  return (
-    <p className="text-sm">
-      {booking.payment ? 'Everything paid has already been refunded, so no further refund will be issued.' : 'Nothing has been paid, so no refund will be issued.'}
-    </p>
-  )
+  return <p className="text-sm">Everything paid has already been refunded.</p>
 }
 
 function BookingContent({ booking }: { booking: AdminBookingDetail }) {

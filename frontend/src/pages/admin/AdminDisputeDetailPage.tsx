@@ -85,6 +85,11 @@ function ResolveForm({ dispute, onClose, onBusyChange }: { dispute: Dispute; onC
   return (
     <form onSubmit={handleSubmit(submit)} noValidate className="space-y-4">
       <FormError message={formError} />
+      {dispute.earningStatus === 'PAID' && dispute.earningNet != null && (
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+          {`The owner has already been paid ${formatINR(dispute.earningNet)} for this booking; a refund now is a platform cost.`}
+        </p>
+      )}
       <fieldset className="space-y-2">
         <legend className="text-sm font-medium text-slate-700 dark:text-slate-300">Resolution</legend>
         {RESOLUTIONS.map((r) => (

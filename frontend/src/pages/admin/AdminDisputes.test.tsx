@@ -20,7 +20,7 @@ const summary = (id: number, overrides: Partial<DisputeSummary> = {}): DisputeSu
 
 const dispute = (id: number, overrides: Partial<Dispute> = {}): Dispute => ({
   ...summary(id), description: 'The gate was locked and nobody answered', raisedByName: 'Rahul Verma', ownerResponse: 'I was away',
-  ownerRespondedAt: '2026-10-07T08:00:00Z', resolution: null, resolutionAmount: null, adminNotes: null, refundableRemaining: 300, ...overrides,
+  ownerRespondedAt: '2026-10-07T08:00:00Z', resolution: null, resolutionAmount: null, adminNotes: null, refundableRemaining: 300, earningStatus: 'HELD', earningNet: 500, ...overrides,
 })
 
 const page = <T,>(content: T[]) => ({ content, page: 0, size: 20, totalElements: content.length, totalPages: 1 })
@@ -150,6 +150,24 @@ describe('admin disputes', () => {
     await u.click(dialog.getByRole('button', { name: 'Resolve report' }))
     await waitFor(() => expect(mock.history.post).toHaveLength(1))
     expect(JSON.parse(mock.history.post[0].data)).toEqual({ resolution: 'REFUND_PARTIAL', amount: 120.5, notes: 'Part of it' })
+  })
+
+  it('warns that the owner has already been paid', async () => {
+    mock.onGet('/admin/disputes/1').reply(200, dispute(1, { earningStatus: 'PAID', earningNet: 500 }))
+    const u = userEvent.setup()
+    renderApp('/admin/disputes/1')
+    const dialog = await openResolve(u)
+
+    expect(dialog.getByText('The owner has already been paid ₹500 for this booking; a refund now is a platform cost.')).toBeInTheDocument()
+  })
+
+  it('does not warn while the earning is still held or pending', async () => {
+    mock.onGet('/admin/disputes/1').reply(200, dispute(1, { earningStatus: 'PENDING_PAYOUT' }))
+    const u = userEvent.setup()
+    renderApp('/admin/disputes/1')
+    const dialog = await openResolve(u)
+
+    expect(dialog.queryByText(/already been paid/)).not.toBeInTheDocument()
   })
 
   it('says the notes stay in the admin record', async () => {

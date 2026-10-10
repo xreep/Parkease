@@ -68,9 +68,9 @@ function ReferenceForm({
   return (
     <form onSubmit={handleSubmit(submit)} noValidate className="space-y-4">
       <div className="space-y-1 text-sm">
+        <p>Record a payout you’ve made outside ParkEase (using the owner’s payout details on file). This doesn’t move money.</p>
         <p>{`Pay ${owner.ownerName} ${formatINR(total)} for ${plural(count, 'earning', 'earnings')}.`}</p>
         <p className="text-slate-500">{payoutLine(owner)}</p>
-        <p className="text-slate-500">Transfer the money outside ParkEase first; this only records it and tells the owner.</p>
       </div>
       <FormError message={formError} />
       <TextField label="Payment reference" hint="The UPI or bank transaction id" error={errors.reference?.message} {...register('reference')} />
@@ -91,9 +91,10 @@ function OwnerCard({ owner }: { owner: PayoutOwner }) {
   const { data, error, isPending } = usePayoutEarnings(expanded ? owner.ownerId : undefined)
 
   // Only earnings still listed count, so a refetch that drops some never leaves a stale id selected.
-  const chosen = (data ?? []).filter((e) => selected.has(e.id))
+  const chosen = (data ?? []).filter((e) => !e.disputed && selected.has(e.id))
   const total = Math.round(chosen.reduce((sum, e) => sum + e.net, 0) * 100) / 100
-  const allSelected = data !== undefined && data.length > 0 && chosen.length === data.length
+  const payable = (data ?? []).filter((e) => !e.disputed)
+  const allSelected = payable.length > 0 && chosen.length === payable.length
 
   const refresh = () =>
     Promise.all([
@@ -134,6 +135,9 @@ function OwnerCard({ owner }: { owner: PayoutOwner }) {
         <div className="text-sm sm:text-right">
           <p className="text-xl font-bold">{formatINR(owner.pendingAmount)}</p>
           <p className="text-slate-500">{plural(owner.earningsCount, 'earning', 'earnings')}</p>
+          {owner.disputedAmount > 0 && (
+            <p className="font-medium text-amber-700 dark:text-amber-400">{`${formatINR(owner.disputedAmount)} held for open disputes`}</p>
+          )}
         </div>
       </div>
       <Button type="button" variant="secondary" className="px-3 py-1.5" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)}>
@@ -155,7 +159,7 @@ function OwnerCard({ owner }: { owner: PayoutOwner }) {
                   type="checkbox"
                   className="h-4 w-4 rounded border-slate-300"
                   checked={allSelected}
-                  onChange={() => setSelected(allSelected ? new Set() : new Set(data.map((e) => e.id)))}
+                  onChange={() => setSelected(allSelected ? new Set() : new Set(payable.map((e) => e.id)))}
                 />
                 Select all
               </label>
@@ -165,7 +169,9 @@ function OwnerCard({ owner }: { owner: PayoutOwner }) {
                     <input
                       type="checkbox"
                       aria-label={e.bookingCode}
-                      className="mt-1 h-4 w-4 rounded border-slate-300"
+                      aria-describedby={e.disputed ? `held-${e.id}` : undefined}
+                      disabled={e.disputed}
+                      className="mt-1 h-4 w-4 rounded border-slate-300 disabled:opacity-50"
                       checked={selected.has(e.id)}
                       onChange={() => toggle(e.id)}
                     />
@@ -173,6 +179,7 @@ function OwnerCard({ owner }: { owner: PayoutOwner }) {
                       <p className="font-mono font-semibold">{e.bookingCode}</p>
                       <p className="break-words">{e.listingTitle}</p>
                       <p className="text-xs text-slate-500">{formatWindow(e.startTime, e.endTime)}</p>
+                      {e.disputed && <p id={`held-${e.id}`} className="text-xs font-medium text-amber-700 dark:text-amber-400">Held for an open dispute</p>}
                     </div>
                     <p className="font-semibold tabular-nums">{formatINR(e.net)}</p>
                   </li>
