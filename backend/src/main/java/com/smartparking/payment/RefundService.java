@@ -27,7 +27,10 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** Refunds captured payments through the provider. The single place that creates {@link Refund} rows. */
+/**
+ * Refunds captured payments through the provider that took them (see {@link PaymentProviders}). The single place
+ * that creates {@link Refund} rows.
+ */
 @Service
 public class RefundService {
 
@@ -48,7 +51,7 @@ public class RefundService {
     static final String UNVERIFIED_NOTE = "Could not check the provider's existing refunds — retrying";
     static final String EXHAUSTED_NOTE = "Refund failed after " + MAX_ATTEMPTS + " attempts — manual action needed";
 
-    private final PaymentProvider provider;
+    private final PaymentProviders providers;
     private final RefundRepository refunds;
     private final PaymentRepository payments;
     private final BookingLocks locks;
@@ -58,10 +61,10 @@ public class RefundService {
     private final AppProperties app;
     private final TransactionTemplate tx;
 
-    public RefundService(PaymentProvider provider, RefundRepository refunds, PaymentRepository payments,
+    public RefundService(PaymentProviders providers, RefundRepository refunds, PaymentRepository payments,
                          BookingLocks locks, OwnerEarningRepository earnings, BookingEvents events,
                          Notifier notifier, AppProperties app, PlatformTransactionManager txManager) {
-        this.provider = provider;
+        this.providers = providers;
         this.refunds = refunds;
         this.payments = payments;
         this.locks = locks;
@@ -165,7 +168,7 @@ public class RefundService {
         List<Refund> ours = refunds.findByPaymentId(payment.getId()).stream()
                 .filter(r -> r.getProviderPaymentId() == null)
                 .toList();
-        List<ProviderRefund> orphans = provider.fetchRefunds(payment.getPaymentId()).stream()
+        List<ProviderRefund> orphans = providers.forPayment(payment).fetchRefunds(payment.getPaymentId()).stream()
                 .filter(candidate -> candidate.status() != RefundStatus.FAILED)
                 .filter(candidate -> ours.stream().noneMatch(row -> candidate.refundId().equals(row.getProviderRefundId())
                         || (row.getProviderRefundId() == null && isOurs(candidate, row))))
@@ -261,8 +264,9 @@ public class RefundService {
      */
     private void issue(Refund refund, String providerPaymentId, String reason) {
         try {
-            ProviderRefund result = provider.refund(providerPaymentId, toPaise(refund.getAmount()), reason,
-                    idempotencyKey(refund), receipt(refund), notes(refund));
+            ProviderRefund result = providers.forPayment(refund.getPayment()).refund(providerPaymentId,
+                    toPaise(refund.getAmount()),
+                    reason, idempotencyKey(refund), receipt(refund), notes(refund));
             refund.setProviderRefundId(result.refundId());
             refund.setStatus(result.status());
         } catch (ApiException e) {
@@ -435,7 +439,8 @@ public class RefundService {
                 return false;
             }
             ProviderRefund result = found.adopted() != null ? found.adopted()
-                    : provider.refund(providerPaymentId, toPaise(refund.getAmount()), refund.getReason(),
+                    : providers.forPayment(payment).refund(providerPaymentId, toPaise(refund.getAmount()),
+                            refund.getReason(),
                             idempotencyKey(refund), receipt(refund), notes(refund));
             refund.setProviderRefundId(result.refundId());
             refund.setStatus(result.status());
@@ -483,7 +488,7 @@ public class RefundService {
         List<Refund> siblings = refunds.findByPaymentId(refund.getPayment().getId()).stream()
                 .filter(other -> !other.getId().equals(refund.getId()))
                 .toList();
-        for (ProviderRefund candidate : provider.fetchRefunds(providerPaymentId)) {
+        for (ProviderRefund candidate : providers.forPayment(refund.getPayment()).fetchRefunds(providerPaymentId)) {
             if (candidate.status() == RefundStatus.FAILED) {
                 continue;
             }

@@ -77,6 +77,8 @@ class DemoActivitySeederTest {
     @Autowired PricingService pricing;
     @Autowired PlatformSettings settings;
     @Autowired PlatformTransactionManager txManager;
+    @Autowired org.springframework.core.env.Environment environment;
+    @Autowired com.smartparking.booking.BookingJobs jobs;
 
     Clock clock;
     Instant now;
@@ -115,7 +117,7 @@ class DemoActivitySeederTest {
     }
 
     private DemoActivitySeeder activitySeeder() {
-        return new DemoActivitySeeder(jdbc, em, pricing, settings, passwordEncoder, storage, clock, PASSWORD);
+        return new DemoActivitySeeder(jdbc, em, txManager, pricing, settings, passwordEncoder, storage, clock, environment, PASSWORD);
     }
 
     private long count(String sql, Object... args) {
@@ -608,6 +610,119 @@ class DemoActivitySeederTest {
         assertThat(revenue.signum()).isPositive();
         assertThat(refunds).isEqualByComparingTo(refunded);
         assertThat(gmv).isEqualByComparingTo(paid.subtract(refunded));
+    }
+
+    // ---- timeline details --------------------------------------------------------------------------------------
+
+    @Test
+    void everyStatusCarriesTheTimestampsItNeeds() {
+        // confirmed_at: set once the booking was paid and (for requests) approved; completed_at: only completed ones.
+        assertThat(count("select count(*) from bookings where status in ('CONFIRMED','ACTIVE','COMPLETED')"
+                + " and confirmed_at is null")).isZero();
+        assertThat(count("select count(*) from bookings where status in ('AWAITING_APPROVAL','REJECTED','EXPIRED')"
+                + " and confirmed_at is not null")).isZero();
+        assertThat(count("select count(*) from bookings where (status = 'COMPLETED') <> (completed_at is not null)"))
+                .isZero();
+        assertThat(count("select count(*) from bookings where status = 'COMPLETED' and completed_at < end_time"))
+                .isZero();
+        assertThat(count("select count(*) from bookings where status in ('CANCELLED','REJECTED')"
+                + " and (cancelled_by is null)")).isZero();
+        assertThat(count("select count(*) from bookings where status not in ('CANCELLED','REJECTED')"
+                + " and cancelled_by is not null")).isZero();
+        // A request has a deadline only while it waits (approving clears it), a hold only while it is unpaid.
+        assertThat(count("select count(*) from bookings where status in ('CONFIRMED','ACTIVE','COMPLETED')"
+                + " and approval_deadline is not null")).isZero();
+        assertThat(count("select count(*) from bookings where status = 'AWAITING_APPROVAL'"
+                + " and approval_deadline is null")).isZero();
+        assertThat(count("select count(*) from bookings where hold_expires_at is not null and status <> 'EXPIRED'"))
+                .isZero();
+    }
+
+    @Test
+    void everyBookingsHistoryIsAnUnbrokenChainEndingAtItsStatus() {
+        Map<Long, String> statusOf = new HashMap<>();
+        jdbc.query("select id, status from bookings", rs -> {
+            statusOf.put(rs.getLong(1), rs.getString(2));
+        });
+        Map<Long, String> last = new HashMap<>();
+        Map<Long, Timestamp> lastAt = new HashMap<>();
+        jdbc.query("select booking_id, from_status, to_status, created_at from booking_events order by booking_id, id",
+                rs -> {
+                    long id = rs.getLong(1);
+                    String from = rs.getString(2);
+                    String previous = last.get(id);
+                    if (previous == null) {
+                        assertThat(from).as("first event of booking %d", id).isNull();
+                    } else {
+                        assertThat(from).as("chain of booking %d", id).isEqualTo(previous);
+                        assertThat(rs.getTimestamp(4)).as("order of booking %d", id).isAfterOrEqualTo(lastAt.get(id));
+                    }
+                    last.put(id, rs.getString(3));
+                    lastAt.put(id, rs.getTimestamp(4));
+                });
+        assertThat(last.keySet()).isEqualTo(statusOf.keySet());
+        statusOf.forEach((id, status) -> assertThat(last.get(id)).as("last event of booking %d", id).isEqualTo(status));
+    }
+
+    @Test
+    void reportsAreRaisedWithinTheWindowAfterTheBookingEnded() {
+        assertThat(count("select count(*) from disputes d join bookings b on b.id = d.booking_id"
+                + " where d.created_at < b.completed_at or d.created_at > b.completed_at + interval '7 days'"))
+                .isZero();
+        assertThat(count("select count(*) from disputes d join bookings b on b.id = d.booking_id"
+                + " where d.resolved_at is not null and d.resolved_at < d.created_at")).isZero();
+    }
+
+    @Test
+    void ownersAreNeverPaidForABookingWhileItsReportIsUnresolvedOrBeforeItWasResolved() {
+        assertThat(count("select count(*) from owner_earnings e join disputes d on d.booking_id = e.booking_id"
+                + " where e.status = 'PAID' and (d.status <> 'RESOLVED' or e.paid_at < d.resolved_at)")).isZero();
+        assertThat(count("select count(*) from owner_earnings e join disputes d on d.booking_id = e.booking_id"
+                + " where d.status <> 'RESOLVED' and e.status = 'PENDING_PAYOUT'")).isGreaterThanOrEqualTo(3);
+        // Payouts follow the end of the booking by at least a day.
+        assertThat(count("select count(*) from owner_earnings e join bookings b on b.id = e.booking_id"
+                + " where e.status = 'PAID' and b.status = 'COMPLETED' and e.paid_at < b.completed_at + interval '1 day'"))
+                .isZero();
+    }
+
+    @Test
+    void requestsWaitNoLongerThanTheApprovalWindow() {
+        long windowSeconds = settings.approvalHours() * 3600L;
+        assertThat(count("select count(*) from bookings where status = 'AWAITING_APPROVAL' and created_at < ?",
+                Timestamp.from(now.minusSeconds(windowSeconds)))).isZero();
+        assertThat(count("select count(*) from bookings where status = 'AWAITING_APPROVAL'"
+                + " and approval_deadline > start_time")).isZero();
+    }
+
+    @Test
+    void remindersAndNudgesThatTheJobsWouldHaveSentAreMarkedSent() {
+        Timestamp ts = Timestamp.from(now);
+        assertThat(count("select count(*) from bookings where status = 'CONFIRMED' and reminder_sent_at is null"
+                + " and start_time > ? and start_time <= ?", ts, Timestamp.from(now.plus(Duration.ofMinutes(60)))))
+                .isZero();
+        assertThat(count("select count(*) from bookings where status = 'AWAITING_APPROVAL'"
+                + " and approval_nudge_sent_at is null and approval_deadline > ? and approval_deadline <= ?", ts,
+                Timestamp.from(now.plus(Duration.ofMinutes(30))))).isZero();
+        assertThat(count("select count(*) from bookings where reminder_sent_at is not null"
+                + " and (reminder_sent_at >= start_time or reminder_sent_at > ?)", ts)).isZero();
+        assertThat(count("select count(*) from bookings where approval_nudge_sent_at is not null"
+                + " and (status <> 'AWAITING_APPROVAL' or approval_nudge_sent_at > ?)", ts)).isZero();
+    }
+
+    @Test
+    void theHourlyJobsFindNothingToDoOnFreshData() {
+        Map<String, Long> before = statusCounts();
+        long notifications = count("select count(*) from notifications");
+        long events = count("select count(*) from booking_events");
+
+        jobs.expireHolds();
+        jobs.autoRejectOverdue();
+        jobs.advanceLifecycle();
+        jobs.sendReminders();
+
+        assertThat(statusCounts()).isEqualTo(before);
+        assertThat(count("select count(*) from notifications")).isEqualTo(notifications);
+        assertThat(count("select count(*) from booking_events")).isEqualTo(events);
     }
 
     // ---- helpers --------------------------------------------------------------------------------------------

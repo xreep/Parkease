@@ -129,6 +129,10 @@ final class DemoModel {
     record RefundDraft(BigDecimal amount, Instant at, String reason, RefundNotice notice, BookingActor actor) {
     }
 
+    /** A closure of a whole listing (maintenance, a private event). */
+    record ListingBlock(Lst listing, Window window, String reason) {
+    }
+
     /** What happened to a booking, which fixes its whole money trail. */
     enum Outcome {
         COMPLETED, ACTIVE, CONFIRMED, AWAITING,
@@ -210,6 +214,7 @@ final class DemoModel {
         boolean disputed;
         Instant startedAt;
         Instant reminderSentAt;
+        Instant approvalNudgeSentAt;
         Instant updatedAt;
         /** Every refund of the payment, in time order: the booking's own one first, dispute refunds after. */
         final List<RefundDraft> refunds = new ArrayList<>();

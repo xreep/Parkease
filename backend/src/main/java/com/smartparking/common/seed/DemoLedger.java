@@ -10,6 +10,7 @@ import com.smartparking.common.seed.DemoModel.Person;
 import com.smartparking.common.seed.DemoModel.RefundDraft;
 import com.smartparking.common.util.Ist;
 import com.smartparking.dispute.DisputeCategory;
+import com.smartparking.dispute.DisputePolicy;
 import com.smartparking.dispute.DisputeResolution;
 import com.smartparking.dispute.DisputeStatus;
 import com.smartparking.earning.EarningStatus;
@@ -276,7 +277,9 @@ final class DemoLedger {
             text = DemoCatalog.DISPUTE_TEXTS.get(0);
         }
         long total = Duration.between(b.completedAt, now).getSeconds();
-        Instant raised = b.completedAt.plusSeconds((long) (total * (0.05 + rnd.nextDouble() * 0.25)));
+        // Reports can be raised until a week after the booking ended (DisputePolicy.WINDOW), not later.
+        long window = DisputePolicy.WINDOW.getSeconds() - 3600;
+        Instant raised = b.completedAt.plusSeconds(Math.min(window, (long) (total * (0.05 + rnd.nextDouble() * 0.25))));
         long untilNow = Duration.between(raised, now).getSeconds();
         Instant review = raised.plusSeconds((long) (untilNow * (0.10 + rnd.nextDouble() * 0.30)));
         Instant resolved = review.plusSeconds((long) (Duration.between(review, now).getSeconds()
@@ -344,6 +347,12 @@ final class DemoLedger {
                 case COMPLETED -> {
                     e.status = EarningStatus.PENDING_PAYOUT;
                     e.eligibleAt = b.completedAt;
+                    // A booking that was reported is paid only once the report is settled.
+                    for (DisputeDraft d : disputes) {
+                        if (d.booking() == b && d.resolvedAt() != null && d.resolvedAt().isAfter(e.eligibleAt)) {
+                            e.eligibleAt = d.resolvedAt();
+                        }
+                    }
                 }
                 case CANCELLED_DRIVER -> {
                     e.status = EarningStatus.PENDING_PAYOUT;
@@ -417,7 +426,7 @@ final class DemoLedger {
         last = b.paidAt;
         if (b.approvedAt != null) {
             event(b, BookingStatus.AWAITING_APPROVAL, BookingStatus.CONFIRMED, BookingActor.OWNER,
-                    "Approved by the owner", b.approvedAt);
+                    "Approved by owner", b.approvedAt);
             last = b.approvedAt;
         }
         switch (b.outcome) {
@@ -430,9 +439,6 @@ final class DemoLedger {
                     event(b, BookingStatus.ACTIVE, BookingStatus.COMPLETED, BookingActor.SYSTEM, "Parking time ended",
                             b.completedAt);
                     last = b.completedAt;
-                }
-                if (!b.paidAt.isAfter(b.start.minus(Duration.ofMinutes(62)))) {
-                    b.reminderSentAt = b.start.minusSeconds(55 * 60L + rnd.nextInt(300));
                 }
             }
             case REJECTED_OWNER, REJECTED_SYSTEM -> {
@@ -452,6 +458,7 @@ final class DemoLedger {
             }
             default -> { }
         }
+        markJobsAlreadyDone(b);
         for (RefundDraft r : b.refunds) {
             event(b, b.status(), b.status(), r.actor(), "Refund of " + MONEY + r.amount().toPlainString() + " issued",
                     r.at());
@@ -460,6 +467,31 @@ final class DemoLedger {
             }
         }
         b.updatedAt = last;
+    }
+
+    /**
+     * The per-minute jobs remind drivers an hour before the start and nudge owners half an hour before a request
+     * lapses. Where that moment has passed, the booking says it was done, so the first run after startup does not
+     * send a burst of messages for seeded bookings.
+     */
+    private void markJobsAlreadyDone(Bk b) {
+        Instant latest = now.minusSeconds(1);
+        if (b.confirmedAt != null && !b.outcome.isCancelled() && !b.outcome.isRejected()) {
+            Instant due = max(b.confirmedAt.plusSeconds(30), b.start.minusSeconds(3600 - rnd.nextInt(60)));
+            if (due.isBefore(b.start) && !due.isAfter(latest)) {
+                b.reminderSentAt = due;
+            }
+        }
+        if (b.outcome == Outcome.AWAITING) {
+            Instant due = max(b.paidAt.plusSeconds(30), b.approvalDeadline.minusSeconds(1800 - rnd.nextInt(60)));
+            if (due.isBefore(b.approvalDeadline) && !due.isAfter(latest)) {
+                b.approvalNudgeSentAt = due;
+            }
+        }
+    }
+
+    private static Instant max(Instant a, Instant b) {
+        return a.isAfter(b) ? a : b;
     }
 
     private void event(Bk b, BookingStatus from, BookingStatus to, BookingActor actor, String note, Instant at) {
@@ -577,6 +609,12 @@ final class DemoLedger {
                         "Your booking " + code + " at " + title + " was approved.", driverPath, b.approvedAt);
                 tell(owner, NotificationType.OWNER_NEW_BOOKING, "New booking",
                         "New booking " + code + " for " + title + ".", ownerPath, b.approvedAt);
+            }
+            if (b.approvalNudgeSentAt != null) {
+                tell(owner, NotificationType.OWNER_APPROVAL_REMINDER, "Respond to a booking request",
+                        "Booking request " + code + " for " + title + " expires at "
+                                + Ist.format(b.approvalDeadline) + ". Approve or decline it before then.", ownerPath,
+                        b.approvalNudgeSentAt);
             }
             if (b.reminderSentAt != null) {
                 tell(driver, NotificationType.BOOKING_STARTING_SOON, "Your parking starts soon",
