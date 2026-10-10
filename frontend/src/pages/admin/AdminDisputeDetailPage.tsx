@@ -24,6 +24,7 @@ import {
 } from '../../lib/disputes'
 import { errorMessage, toProblem } from '../../lib/errors'
 import { formatINR } from '../../lib/format'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const RESOLUTIONS: DisputeResolution[] = ['REFUND_FULL', 'REFUND_PARTIAL', 'NO_REFUND', 'WARNING']
 
@@ -169,6 +170,7 @@ function Content({ dispute }: { dispute: Dispute }) {
 }
 
 export function AdminDisputeDetailPage() {
+  usePageTitle('Admin · Dispute details')
   const { id } = useParams()
   const query = useAdminDispute(parseId(id))
   return (

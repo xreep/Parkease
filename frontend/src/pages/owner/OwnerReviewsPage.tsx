@@ -10,10 +10,12 @@ import { Badge } from '../../components/ui/StatusBadge'
 import { errorMessage } from '../../lib/errors'
 import { useMyListings } from '../../lib/owner'
 import { useOwnerReviews } from '../../lib/reviews'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const ALL = 'all'
 
 export function OwnerReviewsPage() {
+  usePageTitle('Owner reviews')
   const [listing, setListing] = useState<string>(ALL)
   const [page, setPage] = useState(0)
   const listingId = listing === ALL ? undefined : Number(listing)

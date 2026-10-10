@@ -23,6 +23,7 @@ import { errorMessage } from '../../lib/errors'
 import { formatINR, plural } from '../../lib/format'
 import { useCsvExport } from '../../lib/useCsvExport'
 import { formatWindow } from '../../lib/time'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const referenceSchema = z.object({
   reference: z.string().trim().min(3, 'Enter between 3 and 100 characters').max(100, 'Enter between 3 and 100 characters'),
@@ -203,6 +204,7 @@ function OwnerCard({ owner }: { owner: PayoutOwner }) {
 }
 
 export function AdminPayoutsPage() {
+  usePageTitle('Admin · Payouts')
   const { data, error, isPending } = useAdminPayouts()
   const csv = useCsvExport(downloadPayoutsCsv, 'The export was cut at the row limit.')
 

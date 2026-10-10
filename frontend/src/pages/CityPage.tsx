@@ -9,6 +9,7 @@ import { toProblem } from '../lib/errors'
 import { useCity, type City } from '../lib/locations'
 import { toSearchParams, useSearch, type SearchParams } from '../lib/search'
 import { NotFoundPage } from './NotFoundPage'
+import { usePageTitle } from '../lib/usePageTitle'
 
 const CITY_RADIUS_KM = 15
 
@@ -88,6 +89,7 @@ function CityResults({ city }: { city: City }) {
 export function CityPage() {
   const { stateSlug = '', citySlug = '' } = useParams()
   const { data: city, isPending, error } = useCity(stateSlug, citySlug)
+  usePageTitle(error && toProblem(error).status === 404 ? undefined : `Parking in ${city?.name ?? 'India'}`)
 
   if (error) {
     if (toProblem(error).status === 404) return <NotFoundPage />

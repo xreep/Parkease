@@ -9,9 +9,10 @@ import { errorMessage } from '../../lib/errors'
 import { VEHICLE_TYPE_LABELS, formatINR } from '../../lib/format'
 import { formatWindow } from '../../lib/time'
 import { useVehicles } from '../../lib/vehicles'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const primaryLink =
-  'inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700'
+  'inline-flex items-center justify-center rounded-lg bg-brand-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-800'
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -137,6 +138,7 @@ function StatsSection() {
 }
 
 export function DriverHomePage() {
+  usePageTitle('My parking')
   const { user } = useAuth()
   if (!user) return null
   return (

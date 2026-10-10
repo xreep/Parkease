@@ -176,7 +176,7 @@ export function PhotoManager({ listingId, photos, readOnly = false }: Props) {
               >
                 <img src={photo.url} alt={`Parking photo ${n}`} draggable={false} className="h-full w-full object-cover" />
                 {i === 0 && (
-                  <span className="absolute left-2 top-2 rounded-full bg-brand-600 px-2 py-0.5 text-xs font-semibold text-white">
+                  <span className="absolute left-2 top-2 rounded-full bg-brand-700 px-2 py-0.5 text-xs font-semibold text-white">
                     Cover
                   </span>
                 )}

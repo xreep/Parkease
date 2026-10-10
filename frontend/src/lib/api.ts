@@ -7,6 +7,7 @@ export const api = axios.create({
 })
 
 const SUSPENDED_MESSAGE = 'Your account has been suspended.'
+const SERVER_ERROR_MESSAGE = 'Something went wrong on our side. Please try again in a moment.'
 
 /** The problem body of a failed request, also when the request asked for a blob (a download). */
 async function problemBody(error: AxiosError): Promise<{ code?: string; detail?: string } | undefined> {
@@ -116,6 +117,12 @@ api.interceptors.response.use(
         onSessionExpired?.()
         toast.error(body.detail ?? SUSPENDED_MESSAGE)
       }
+    }
+    // A server fault (5xx) while loading something is nothing the user did, and pages only show a generic "could not
+    // load" for it: add one friendly toast (same id, so parallel failures show once). Writes are left to their own
+    // forms, which show the server's message inline.
+    if ((error.response?.status ?? 0) >= 500 && original?.method?.toLowerCase() === 'get') {
+      toast.error(SERVER_ERROR_MESSAGE, { id: 'server-error' })
     }
     return Promise.reject(error)
   },

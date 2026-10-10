@@ -15,9 +15,10 @@ import { useMyListings, useOwnerProfile, type OwnerProfile } from '../../lib/own
 import { STATS_RANGES, useOwnerStats, type OwnerStatsDto, type StatsRange } from '../../lib/ownerDashboard'
 import { ratingText } from '../../lib/reviews'
 import { formatShortDate, formatWindow } from '../../lib/time'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const primaryLink =
-  'inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700'
+  'inline-flex items-center justify-center rounded-lg bg-brand-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-800'
 const secondaryLink =
   'inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800'
 
@@ -243,6 +244,7 @@ function Overview() {
 }
 
 export function OwnerHomePage() {
+  usePageTitle('Owner dashboard')
   const { user } = useAuth()
   const profile = useOwnerProfile()
   if (!user) return null

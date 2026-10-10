@@ -16,6 +16,13 @@
   --color-brand-900: #064e3b;
 }
 
+/* slate-500 text is 4.25:1 on the dark page background, just under WCAG AA. In dark mode it takes slate-400's value
+   (5.7:1 or better on the dark surfaces), so the many `text-slate-500` captions stay readable without a dark
+   variant on each. Unlayered on purpose: it must win over the theme layer's :root value. */
+.dark {
+  --color-slate-500: #94a3b8;
+}
+
 @layer base {
   html {
     @apply bg-white text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;

@@ -226,4 +226,33 @@ describe('api client', () => {
     expect(tokenStore.getAccess()).toBe('fresh')
     expect(tokenStore.getRefresh()).toBe('r2')
   })
+
+  describe('server errors', () => {
+    beforeEach(() => vi.mocked(toast.error).mockClear())
+
+    it('shows one friendly toast when loading fails with a 5xx, however many requests fail together, and still rejects', async () => {
+      mock.onGet('/a').reply(500, { code: 'INTERNAL', detail: 'NullPointerException at Foo.java:12' })
+      mock.onGet('/b').reply(503)
+
+      const results = await Promise.allSettled([api.get('/a'), api.get('/b')])
+
+      expect(results.map((r) => r.status)).toEqual(['rejected', 'rejected'])
+      expect(toast.error).toHaveBeenCalledTimes(2)
+      const calls = vi.mocked(toast.error).mock.calls
+      expect(calls[0][0]).toBe('Something went wrong on our side. Please try again in a moment.')
+      // Same toast id both times, so sonner shows a single toast.
+      expect(calls[0][1]).toEqual({ id: 'server-error' })
+      expect(calls[1][1]).toEqual({ id: 'server-error' })
+    })
+
+    it('stays quiet for client errors, network failures and failed writes (their forms show the message inline)', async () => {
+      mock.onGet('/missing').reply(404, { code: 'NOT_FOUND' })
+      mock.onGet('/down').networkError()
+      mock.onPost('/save').reply(500, { code: 'INTERNAL', detail: 'Could not save' })
+
+      await Promise.allSettled([api.get('/missing'), api.get('/down'), api.post('/save', {})])
+
+      expect(toast.error).not.toHaveBeenCalled()
+    })
+  })
 })

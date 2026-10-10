@@ -7,10 +7,12 @@ import { useAuth } from '../../auth/AuthProvider'
 import type { User } from '../../auth/types'
 import { api } from '../../lib/api'
 import { errorMessage } from '../../lib/errors'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 type Status = { state: 'loading' } | { state: 'done' } | { state: 'failed'; message: string }
 
 export function VerifyEmailPage() {
+  usePageTitle('Verify your email')
   const [params] = useSearchParams()
   const token = params.get('token')
   const { user, setUser } = useAuth()

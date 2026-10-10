@@ -10,6 +10,7 @@ import { errorMessage } from '../../lib/errors'
 import { formatDateTime } from '../../lib/format'
 import type { ListingStatus } from '../../lib/owner'
 import { stepBackIfEmpty } from '../../lib/paging'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const FILTERS: { value: ListingStatus; label: string }[] = [
   { value: 'PENDING_REVIEW', label: 'Pending review' },
@@ -20,7 +21,7 @@ const FILTERS: { value: ListingStatus; label: string }[] = [
 ]
 
 const reviewLink =
-  'inline-flex items-center justify-center rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700'
+  'inline-flex items-center justify-center rounded-lg bg-brand-700 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-800'
 
 function ListingRow({ listing }: { listing: AdminListingSummary }) {
   return (
@@ -49,6 +50,7 @@ function ListingRow({ listing }: { listing: AdminListingSummary }) {
 }
 
 export function ListingQueuePage() {
+  usePageTitle('Admin · Listing queue')
   const [status, setStatus] = useState<ListingStatus>('PENDING_REVIEW')
   const [page, setPage] = useState(0)
   const { data, error, isPending } = useAdminListings(status, page)

@@ -9,6 +9,7 @@ import { useAdminAudit, type AdminAction, type AuditFilters } from '../../lib/ad
 import { errorMessage } from '../../lib/errors'
 import { formatDateTime } from '../../lib/format'
 import { stepBackIfEmpty } from '../../lib/paging'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const TARGET_TYPES = ['USER', 'OWNER', 'LISTING', 'REVIEW', 'STATE', 'CITY', 'BOOKING', 'DISPUTE', 'REFUND', 'SETTINGS']
 const label = (type: string) => type.charAt(0) + type.slice(1).toLowerCase()
@@ -66,6 +67,7 @@ function AuditTable({ actions }: { actions: AdminAction[] }) {
 }
 
 export function AdminAuditPage() {
+  usePageTitle('Admin · Audit log')
   const [action, setAction] = useState('')
   const [targetType, setTargetType] = useState('')
   const [applied, setApplied] = useState<AuditFilters>({})

@@ -12,6 +12,7 @@ import { saveBlob } from '../../lib/download'
 import { usePayments, type DriverPaymentDto } from '../../lib/driver'
 import { errorMessage } from '../../lib/errors'
 import { formatDateTime, formatINR } from '../../lib/format'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 function ReceiptButton({ payment }: { payment: DriverPaymentDto }) {
   const [busy, setBusy] = useState(false)
@@ -69,6 +70,7 @@ function PaymentCard({ payment }: { payment: DriverPaymentDto }) {
 }
 
 export function PaymentsPage() {
+  usePageTitle('Payments')
   const [page, setPage] = useState(0)
   const { data, error, isPending, isPlaceholderData } = usePayments(page)
 

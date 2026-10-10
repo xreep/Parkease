@@ -11,6 +11,7 @@ import { ViewTabs } from '../components/ui/ViewTabs'
 import { errorMessage } from '../lib/errors'
 import { useNotificationActions, useNotifications, useUnreadCount } from '../lib/notifications'
 import { useNow } from '../lib/useNow'
+import { usePageTitle } from '../lib/usePageTitle'
 
 type Filter = 'all' | 'unread'
 
@@ -20,6 +21,7 @@ const TABS: { value: Filter; label: string }[] = [
 ]
 
 export function NotificationsPage() {
+  usePageTitle('Notifications')
   const [filter, setFilter] = useState<Filter>('all')
   const [page, setPage] = useState(0)
   const { data, error, isPending, isPlaceholderData } = useNotifications(page, 20)

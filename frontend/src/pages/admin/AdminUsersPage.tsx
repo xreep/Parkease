@@ -26,6 +26,7 @@ import {
 import { errorMessage } from '../../lib/errors'
 import { formatDateTime, plural } from '../../lib/format'
 import { stepBackIfEmpty, withPageReset } from '../../lib/paging'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const ROLE_LABELS: Record<UserRole, string> = { DRIVER: 'Driver', OWNER: 'Owner', ADMIN: 'Admin' }
 const ROLE_TONES = { DRIVER: 'sky', OWNER: 'amber', ADMIN: 'slate' } as const
@@ -87,6 +88,7 @@ function UserRow({ user, isSelf, onSuspend, onChanged }: { user: AdminUser; isSe
 }
 
 export function AdminUsersPage() {
+  usePageTitle('Admin · Users')
   const queryClient = useQueryClient()
   const { user: me } = useAuth()
   const [role, setRole] = useState<UserRole | ''>('')

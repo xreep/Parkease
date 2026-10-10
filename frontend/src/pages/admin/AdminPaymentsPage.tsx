@@ -28,6 +28,7 @@ import { PAYMENT_STATUS_LABELS } from '../../lib/driver'
 import { errorMessage } from '../../lib/errors'
 import { formatDateTime, formatINR } from '../../lib/format'
 import { stepBackIfEmpty, withPageReset } from '../../lib/paging'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 type View = 'payments' | 'refunds'
 const TABS: { value: View; label: string }[] = [
@@ -213,6 +214,7 @@ function RefundsView() {
 }
 
 export function AdminPaymentsPage() {
+  usePageTitle('Admin · Payments')
   const [view, setView] = useState<View>('payments')
   return (
     <div className="space-y-6">

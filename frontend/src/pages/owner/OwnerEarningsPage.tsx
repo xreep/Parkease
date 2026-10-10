@@ -19,6 +19,7 @@ import {
 } from '../../lib/ownerDashboard'
 import { formatWindow } from '../../lib/time'
 import { useCsvExport } from '../../lib/useCsvExport'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const STATUSES = Object.keys(EARNING_STATUS_LABELS) as EarningStatus[]
 
@@ -93,6 +94,7 @@ function EarningsCards({ earnings }: { earnings: OwnerEarningDto[] }) {
 }
 
 export function OwnerEarningsPage() {
+  usePageTitle('Owner earnings')
   const [status, setStatus] = useState<EarningStatus | ''>('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')

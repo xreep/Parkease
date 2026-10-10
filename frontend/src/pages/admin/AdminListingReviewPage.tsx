@@ -12,6 +12,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { approveListing, invalidateAdminActivity, reinstateListing, rejectListing, suspendListing, useAdminListing, type AdminListingDetail } from '../../lib/admin'
 import { errorMessage } from '../../lib/errors'
 import { formatAddress, formatDateTime, LISTING_TYPE_LABELS } from '../../lib/format'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const linkClass = 'text-sm font-medium text-brand-700 hover:underline dark:text-brand-400'
 const noop = () => undefined
@@ -183,6 +184,7 @@ function ReviewContent({ detail }: { detail: AdminListingDetail }) {
 }
 
 export function AdminListingReviewPage() {
+  usePageTitle('Admin · Review listing')
   const { id } = useParams()
   const numeric = Number(id)
   const valid = Number.isInteger(numeric) && numeric > 0

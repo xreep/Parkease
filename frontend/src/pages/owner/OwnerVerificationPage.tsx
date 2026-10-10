@@ -21,6 +21,7 @@ import {
   type DocumentType,
   type OwnerProfile,
 } from '../../lib/owner'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const PROFILE_KEY = ['owner', 'profile']
 const EITHER_OR = 'Add a UPI ID, or a bank account with IFSC.'
@@ -214,6 +215,7 @@ function PayoutForm({ profile }: { profile: OwnerProfile }) {
 }
 
 export function OwnerVerificationPage() {
+  usePageTitle('Owner verification')
   const { data: profile, error, isPending } = useOwnerProfile()
   if (isPending) {
     return (
