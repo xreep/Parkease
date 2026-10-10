@@ -19,6 +19,7 @@ import com.smartparking.review.dto.ListingReviewsDto;
 import com.smartparking.review.dto.OwnerReviewDto;
 import com.smartparking.review.dto.ReviewDto;
 import com.smartparking.review.dto.ReviewSummaryDto;
+import com.smartparking.user.UserStatus;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
@@ -93,9 +94,7 @@ public class ReviewService {
             throw e;
         }
 
-        ReviewSummaryDto summary = summarize(listing.getId());
-        listing.setAvgRating(summary.avgRating());
-        listing.setReviewCount(summary.reviewCount());
+        refreshAggregates(listing);
 
         String link = app.frontendUrl() + OWNER_PATH;
         notifier.notify(listing.getOwner(), NotificationType.OWNER_NEW_REVIEW,
@@ -124,8 +123,9 @@ public class ReviewService {
     public ListingReviewsDto listForListing(Long listingId, int page, int size) {
         ParkingListing listing = listings.findById(listingId)
                 .filter(l -> l.getStatus() == ListingStatus.APPROVED || l.getStatus() == ListingStatus.PAUSED)
+                .filter(l -> l.getOwner().getStatus() == UserStatus.ACTIVE) // a suspended owner's listings are hidden
                 .orElseThrow(() -> ApiException.notFound("Listing not found"));
-        Page<Review> result = reviews.findByListingId(listing.getId(), paged(page, size));
+        Page<Review> result = reviews.findByListingIdAndHiddenAtIsNull(listing.getId(), paged(page, size));
         return new ListingReviewsDto(summarize(listing.getId()), new PageResponse<>(
                 result.getContent().stream().map(mapper::toDto).toList(), result.getNumber(), result.getSize(),
                 result.getTotalElements(), result.getTotalPages()));
@@ -163,7 +163,17 @@ public class ReviewService {
 
     // ---- shared ---------------------------------------------------------------------------------------------
 
-    /** Average (one decimal, HALF_UP), count and per-star distribution computed from the listing's review rows. */
+    /**
+     * Recomputes the listing's rating aggregates from its visible (not hidden) reviews. The caller holds the listing's
+     * row lock (see {@link ParkingListingRepository#findByIdForUpdate}), so concurrent changes cannot interleave.
+     */
+    public void refreshAggregates(ParkingListing listing) {
+        ReviewSummaryDto summary = summarize(listing.getId());
+        listing.setAvgRating(summary.avgRating());
+        listing.setReviewCount(summary.reviewCount());
+    }
+
+    /** Average (one decimal, HALF_UP), count and per-star distribution of the listing's visible review rows. */
     private ReviewSummaryDto summarize(Long listingId) {
         Map<String, Integer> distribution = new LinkedHashMap<>();
         for (int star = 1; star <= 5; star++) {

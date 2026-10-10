@@ -7,11 +7,12 @@ import { ReasonDialog } from '../../components/ui/Dialog'
 import { Pagination } from '../../components/ui/Pagination'
 import { Select } from '../../components/ui/Select'
 import { Spinner } from '../../components/ui/Spinner'
-import { getOwnerDocumentUrl, rejectOwner, useAdminOwners, verifyOwner, type AdminOwner } from '../../lib/admin'
+import { invalidateAdminActivity, getOwnerDocumentUrl, rejectOwner, useAdminOwners, verifyOwner, type AdminOwner } from '../../lib/admin'
 import { errorMessage } from '../../lib/errors'
 import { DOCUMENT_TYPE_LABELS, formatDateTime } from '../../lib/format'
 import { openInNewTab } from '../../lib/openDocument'
 import type { VerificationStatus } from '../../lib/owner'
+import { stepBackIfEmpty } from '../../lib/paging'
 
 const FILTERS: { value: VerificationStatus; label: string }[] = [
   { value: 'PENDING', label: 'Pending' },
@@ -88,13 +89,12 @@ export function OwnerQueuePage() {
   const [rejecting, setRejecting] = useState<AdminOwner | null>(null)
   const { data, error, isPending } = useAdminOwners(status, page)
 
-  // The last row of a later page was handled elsewhere: step back instead of showing an empty page.
-  if (data !== undefined && data.content.length === 0 && page > 0) setPage(page - 1)
+  stepBackIfEmpty(page, setPage, data?.content)
 
   const refresh = () =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: ['admin', 'owners'] }),
-      queryClient.invalidateQueries({ queryKey: ['admin', 'queues'] }),
+      invalidateAdminActivity(queryClient),
     ]).then(() => undefined)
 
   async function confirmReject(reason: string) {

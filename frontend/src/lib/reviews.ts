@@ -20,7 +20,8 @@ export type ReviewSummaryDto = {
 }
 
 export type ListingReviewsDto = { summary: ReviewSummaryDto; reviews: Page<ReviewDto> }
-export type OwnerReviewDto = ReviewDto & { listingId: number; listingTitle: string; bookingCode: string }
+/** `hidden`: ParkEase hid it; it no longer counts towards the rating. */
+export type OwnerReviewDto = ReviewDto & { listingId: number; listingTitle: string; bookingCode: string; hidden?: boolean }
 
 export const REVIEW_COMMENT_MAX = 1000
 export const REPLY_MAX = 500

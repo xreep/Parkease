@@ -9,7 +9,7 @@ import { Button } from '../../components/ui/Button'
 import { ReasonDialog } from '../../components/ui/Dialog'
 import { Spinner } from '../../components/ui/Spinner'
 import { StatusBadge } from '../../components/ui/StatusBadge'
-import { approveListing, rejectListing, useAdminListing, type AdminListingDetail } from '../../lib/admin'
+import { approveListing, invalidateAdminActivity, reinstateListing, rejectListing, suspendListing, useAdminListing, type AdminListingDetail } from '../../lib/admin'
 import { errorMessage } from '../../lib/errors'
 import { formatAddress, formatDateTime, LISTING_TYPE_LABELS } from '../../lib/format'
 
@@ -31,13 +31,44 @@ function ReviewContent({ detail }: { detail: AdminListingDetail }) {
   const queryClient = useQueryClient()
   const [approving, setApproving] = useState(false)
   const [rejecting, setRejecting] = useState(false)
+  const [suspending, setSuspending] = useState(false)
+  const [reinstating, setReinstating] = useState(false)
+
+  // Suspending and reinstating keep the admin on the page, which shows the new status.
+  const refresh = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['admin', 'listings'] }),
+      queryClient.invalidateQueries({ queryKey: ['admin', 'listing', listing.id] }),
+      queryClient.invalidateQueries({ queryKey: ['search'] }),
+      invalidateAdminActivity(queryClient),
+    ]).then(() => undefined)
+
+  async function suspend(reason: string) {
+    await suspendListing(listing.id, reason)
+    setSuspending(false)
+    toast.success('Listing suspended')
+    await refresh()
+  }
+
+  async function reinstate() {
+    setReinstating(true)
+    try {
+      await reinstateListing(listing.id)
+      toast.success('Listing reinstated')
+      await refresh()
+    } catch (error) {
+      toast.error(errorMessage(error))
+    } finally {
+      setReinstating(false)
+    }
+  }
 
   const finish = async (message: string) => {
     toast.success(message)
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['admin', 'listings'] }),
       queryClient.invalidateQueries({ queryKey: ['admin', 'listing', listing.id] }),
-      queryClient.invalidateQueries({ queryKey: ['admin', 'queues'] }),
+      invalidateAdminActivity(queryClient),
     ])
     navigate('/admin/listings')
   }
@@ -73,6 +104,12 @@ function ReviewContent({ detail }: { detail: AdminListingDetail }) {
             <Button type="button" loading={approving} disabled={rejecting} onClick={() => void approve()}>Approve</Button>
             <Button type="button" variant="danger" disabled={approving} onClick={() => setRejecting(true)}>Reject</Button>
           </div>
+        )}
+        {(listing.status === 'APPROVED' || listing.status === 'PAUSED') && (
+          <Button type="button" variant="danger" onClick={() => setSuspending(true)}>Suspend</Button>
+        )}
+        {listing.status === 'SUSPENDED' && (
+          <Button type="button" loading={reinstating} onClick={() => void reinstate()}>Reinstate</Button>
         )}
       </div>
       {listing.submittedAt && <p className="-mt-4 text-sm text-slate-500">{`Submitted ${formatDateTime(listing.submittedAt)}`}</p>}
@@ -132,6 +169,14 @@ function ReviewContent({ detail }: { detail: AdminListingDetail }) {
         confirmLabel="Reject"
         onConfirm={reject}
         onClose={() => setRejecting(false)}
+      />
+      <ReasonDialog
+        open={suspending}
+        title="Suspend this listing?"
+        confirmLabel="Suspend"
+        helper="The listing stops taking new bookings and the owner is told why. Existing bookings are honoured."
+        onConfirm={suspend}
+        onClose={() => setSuspending(false)}
       />
     </div>
   )

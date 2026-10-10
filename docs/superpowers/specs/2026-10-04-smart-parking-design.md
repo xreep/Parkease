@@ -308,3 +308,18 @@ Install Java 21 and PostgreSQL 16 (Homebrew). Optional accounts/keys: Razorpay (
 - **Owner calendar:** `GET /owner/calendar?listingId&from&to` (≤ 14 days): slots, live bookings and blocks for a week grid.
 - **Driver pages:** bookings tabs Upcoming / Active / Past / Cancelled (`view=upcoming|active|past|cancelled`); `GET /me/payments` (payments & receipts); `GET /me/stats` (bookings, amount spent net of refunds, hours parked, reviews pending).
 - **Charts:** small in-house SVG components (no chart library).
+
+## 22. Phase 7 Decisions (approved 2026-10-09)
+
+- **Schema (one migration, V15):** `platform_settings` (key/value), `admin_actions` audit log, `disputes` (§5), `reviews.hidden_at/hidden_reason`, `cities.tier` (1 = metro, 2 = capital/large, 3 = other; seeded) and `cities.active`.
+- **Settings:** admin-editable `platform_fee_percent` (10), `gst_percent` (18), `hold_minutes` (10), `approval_hours` (2), `request_min_lead_minutes` (30) and per-tier hourly price guidelines (min/max). Values apply to **new** bookings only (amounts are stored on the booking). Price guidelines are advisory: the owner wizard warns, never blocks. Defaults come from `application.yml` until changed.
+- **Audit:** every admin write (verify/reject owner, approve/reject/suspend listing, suspend/activate user, hide review, location edits, settings, dispute resolution, admin cancel, refund retry, payout) records an `admin_actions` row (admin, action, target, details, time). Read-only audit page.
+- **Users:** list/search by role/status; suspend (reason required) / activate. Admins and self cannot be suspended. Suspension revokes refresh tokens and blocks requests within ~60 s; existing bookings are honoured. Listings of a suspended owner disappear from search and public pages.
+- **Listings:** admin can suspend an APPROVED/PAUSED listing (reason, owner notified) and reinstate it (→ APPROVED). Suspended listings take no new bookings; existing ones are honoured.
+- **Reviews:** admin can hide/unhide (reason); hidden reviews leave public lists and rating aggregates.
+- **Locations:** add/edit states and cities (name, coordinates, tier, active); deactivate instead of delete when referenced.
+- **Bookings monitor:** search by code/driver email/city/status/date; full detail with payment, refunds and timeline. Admin cancel of a non-terminal booking = full refund of the total, earning reversed, both parties notified.
+- **Disputes:** driver raises one per booking (CONFIRMED/ACTIVE/COMPLETED, until 7 days after end; one open at a time) with category + description (≤ 2000). Owner sees disputes on their bookings and can add one response (≤ 1000). Admin moves OPEN → UNDER_REVIEW → RESOLVED with `REFUND_FULL` (remaining refundable), `REFUND_PARTIAL` (amount ≤ remaining), `NO_REFUND` or `WARNING`, plus notes; refunds go through `RefundService` (earning follows Phase 5 rules). Notifications to both parties.
+- **Payments & refunds:** admin lists payments and refunds; FAILED refunds can be retried manually.
+- **Payouts:** per-owner pending-payout totals with masked payout details; admin marks selected `PENDING_PAYOUT` earnings `PAID` with a reference (no real money movement); owner notified. CSV of pending payouts.
+- **KPIs & reports:** `GET /admin/stats?from&to` per §8 KPI definitions, attributed by booking creation date (IST): users/owners/listings counts, bookings created/confirmed, conversion, utilization, GMV (paid totals net of refunds), platform revenue (platform fee of bookings not fully refunded), refunds, top states/cities, daily series. Reports `usage` and `revenue` grouped by city (filter state/city/date) with CSV export.

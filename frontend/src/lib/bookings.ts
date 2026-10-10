@@ -2,6 +2,7 @@ import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-quer
 import { useCallback } from 'react'
 import { api } from './api'
 import { blobProblem } from './download'
+import type { DisputeSummary } from './disputes'
 import { invalidateNotifications } from './notifications'
 import type { CancellationPolicy, Page, VehicleType } from './owner'
 import type { ReviewDto } from './reviews'
@@ -79,6 +80,10 @@ export type BookingDetailDto = BookingSummaryDto & {
   /** The driver can review it now (completed, not yet reviewed). */
   reviewable: boolean
   review: ReviewDto | null
+  /** Problem reports raised for this booking. */
+  disputes: DisputeSummary[]
+  /** The driver could raise a problem report now. */
+  disputable: boolean
 }
 
 /**

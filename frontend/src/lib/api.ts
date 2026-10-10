@@ -1,9 +1,25 @@
 import axios, { isAxiosError, type AxiosError, type InternalAxiosRequestConfig } from 'axios'
+import { toast } from 'sonner'
 import { tokenStore } from './tokenStore'
 
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api/v1',
 })
+
+const SUSPENDED_MESSAGE = 'Your account has been suspended.'
+
+/** The problem body of a failed request, also when the request asked for a blob (a download). */
+async function problemBody(error: AxiosError): Promise<{ code?: string; detail?: string } | undefined> {
+  const data = error.response?.data
+  if (data instanceof Blob) {
+    try {
+      return JSON.parse(await data.text()) as { code?: string; detail?: string }
+    } catch {
+      return undefined
+    }
+  }
+  return data as { code?: string; detail?: string } | undefined
+}
 
 let onSessionExpired: (() => void) | null = null
 
@@ -47,6 +63,8 @@ async function refreshAccessToken(failedToken: string | null): Promise<RefreshRe
       return { token: data.accessToken }
     } catch (e) {
       if (isAxiosError(e) && [401, 403].includes(e.response?.status ?? 0)) {
+        const body = e.response?.data as { code?: string; detail?: string } | undefined
+        if (e.response?.status === 403 && body?.code === 'ACCOUNT_SUSPENDED') toast.error(body.detail ?? SUSPENDED_MESSAGE)
         tokenStore.clear()
         return { expired: true }
       }
@@ -84,6 +102,19 @@ api.interceptors.response.use(
       if ('expired' in result) {
         tokenStore.clear()
         onSessionExpired?.()
+      }
+    }
+    // A suspended account is refused everywhere, public reads included: end the session and say why. Only for the
+    // token that is still the stored one, so a late answer to an old request can't sign out a fresh login, and the
+    // first of several parallel answers is the only one that acts.
+    if (error.response?.status === 403 && original && !isAuthCall) {
+      const sent = bearerToken(original)
+      const body = await problemBody(error)
+      // Checked after reading the body, so of several parallel answers only the first still finds its token stored.
+      if (sent !== null && sent === tokenStore.getAccess() && body?.code === 'ACCOUNT_SUSPENDED') {
+        tokenStore.clear()
+        onSessionExpired?.()
+        toast.error(body.detail ?? SUSPENDED_MESSAGE)
       }
     }
     return Promise.reject(error)

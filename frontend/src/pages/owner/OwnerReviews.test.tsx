@@ -74,6 +74,19 @@ describe('owner reviews', () => {
     expect(reviewCalls()[0].params).toEqual({ page: 0, size: 20 })
   })
 
+  it('shows a hidden review with a badge, a note and no reply form', async () => {
+    mock.onGet('/owner/reviews').reply(200, page([review(1, { hidden: true }), review(2)]))
+    renderApp('/owner/reviews')
+
+    const hidden = within(await screen.findByRole('article', { name: 'Review PE-REV001' }))
+    expect(hidden.getByText('Hidden by ParkEase')).toBeInTheDocument()
+    expect(hidden.getByText('This review is hidden and doesn’t count towards your rating.')).toBeInTheDocument()
+    expect(hidden.queryByRole('button', { name: /reply/i })).not.toBeInTheDocument()
+    const visible = within(screen.getByRole('article', { name: 'Review PE-REV002' }))
+    expect(visible.queryByText('Hidden by ParkEase')).not.toBeInTheDocument()
+    expect(visible.getByRole('button', { name: /reply/i })).toBeInTheDocument()
+  })
+
   it('filters by listing', async () => {
     mock.onGet('/owner/reviews').reply((config) => [200, page(config.params.listingId === 8 ? [review(2, { listingId: 8, listingTitle: 'Baner Lot' })] : [review(1), review(2, { listingId: 8, listingTitle: 'Baner Lot' })])])
     const user = userEvent.setup()

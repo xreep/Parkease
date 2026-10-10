@@ -21,6 +21,15 @@ export type NotificationType =
   | 'OWNER_REJECTED'
   | 'LISTING_APPROVED'
   | 'LISTING_REJECTED'
+  | 'OWNER_NEW_REVIEW'
+  | 'BOOKING_CANCELLED_BY_ADMIN'
+  | 'DISPUTE_OPENED'
+  | 'DISPUTE_RESPONSE'
+  | 'DISPUTE_RESOLVED'
+  | 'LISTING_SUSPENDED'
+  | 'LISTING_REINSTATED'
+  | 'ACCOUNT_SUSPENDED'
+  | 'PAYOUT_SENT'
 
 export type NotificationDto = {
   id: number

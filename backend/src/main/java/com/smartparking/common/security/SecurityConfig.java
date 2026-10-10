@@ -25,6 +25,7 @@ public class SecurityConfig {
 
     private final JwtService jwtService;
     private final AppProperties app;
+    private final UserStatusCache statusCache;
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -49,7 +50,7 @@ public class SecurityConfig {
                         .accessDeniedHandler(SecurityProblemWriter::forbidden))
                 .addFilterBefore(new AuthRateLimitFilter(app.authRateLimitPerMinute()),
                         UsernamePasswordAuthenticationFilter.class)
-                .addFilterBefore(new JwtAuthenticationFilter(jwtService), UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(new JwtAuthenticationFilter(jwtService, statusCache), UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 

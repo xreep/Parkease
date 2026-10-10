@@ -6,7 +6,6 @@ import com.smartparking.availability.AvailabilityEvaluator;
 import com.smartparking.availability.AvailabilityEvaluator.ListingAvailabilityInput;
 import com.smartparking.availability.AvailabilityRule;
 import com.smartparking.availability.AvailabilityRuleRepository;
-import com.smartparking.booking.BookingProperties;
 import com.smartparking.booking.BookingRepository;
 import com.smartparking.common.error.ApiException;
 import com.smartparking.common.model.VehicleType;
@@ -15,9 +14,11 @@ import com.smartparking.listing.dto.PublicListingDto;
 import com.smartparking.pricing.PricingService;
 import com.smartparking.pricing.QuoteDto;
 import com.smartparking.pricing.TimeWindow;
+import com.smartparking.settings.PlatformSettings;
 import com.smartparking.slot.ParkingSlot;
 import com.smartparking.slot.ParkingSlotRepository;
 import com.smartparking.slot.SlotSize;
+import com.smartparking.user.UserStatus;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.HashSet;
@@ -39,7 +40,7 @@ public class PublicListingService {
     private final PricingService pricing;
     private final ListingMapper mapper;
     private final BookingRepository bookings;
-    private final BookingProperties bookingProperties;
+    private final PlatformSettings settings;
     private final Clock clock;
 
     @Transactional(readOnly = true)
@@ -65,7 +66,7 @@ public class PublicListingService {
     public ListingQuoteResponse quote(Long id, Instant start, Instant end, VehicleType vehicleType) {
         TimeWindow window = TimeWindow.of(start, end, clock);
         ParkingListing l = requireApproved(id);
-        bookingProperties.requireNoticeForRequest(l.isAutoApprove(), window.start(), clock.instant());
+        settings.requireNoticeForRequest(l.isAutoApprove(), window.start(), clock.instant());
         List<AvailabilityRule> listingRules = l.isOpen24x7() ? List.of() : rules.findByListingIdOrderByDayOfWeekAsc(id);
         List<AvailabilityBlock> overlapping = blocks.findOverlapping(List.of(id), window.start(), window.end());
         var bookedSlotIds = new HashSet<>(
@@ -81,6 +82,7 @@ public class PublicListingService {
 
     private ParkingListing requireApproved(Long id) {
         return listings.findByIdAndStatus(id, ListingStatus.APPROVED)
+                .filter(l -> l.getOwner().getStatus() == UserStatus.ACTIVE) // a suspended owner's listings are hidden
                 .orElseThrow(() -> ApiException.notFound("Listing not found"));
     }
 

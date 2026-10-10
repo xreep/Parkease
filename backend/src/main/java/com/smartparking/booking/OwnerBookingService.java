@@ -12,6 +12,7 @@ import com.smartparking.listing.ParkingListing;
 import com.smartparking.notification.NotificationType;
 import com.smartparking.notification.Notifier;
 import com.smartparking.payment.RefundService;
+import com.smartparking.settings.PlatformSettings;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -48,7 +49,7 @@ public class OwnerBookingService {
     private final OwnerEarningRepository earnings;
     private final Notifier notifier;
     private final AppProperties app;
-    private final BookingProperties properties;
+    private final PlatformSettings settings;
     private final Clock clock;
 
     // ---- listing --------------------------------------------------------------------------------------------
@@ -183,7 +184,7 @@ public class OwnerBookingService {
         if (booking.getApprovalDeadline() == null || !booking.getApprovalDeadline().isBefore(booking.getStartTime())) {
             return START_PASSED_REASON;
         }
-        int hours = properties.approvalHours();
+        int hours = settings.approvalHours();
         return "The owner didn't respond within " + hours + (hours == 1 ? " hour" : " hours");
     }
 

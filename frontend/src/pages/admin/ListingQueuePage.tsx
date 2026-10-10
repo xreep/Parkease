@@ -4,15 +4,19 @@ import { FormError } from '../../components/AuthCard'
 import { Pagination } from '../../components/ui/Pagination'
 import { Select } from '../../components/ui/Select'
 import { Spinner } from '../../components/ui/Spinner'
+import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useAdminListings, type AdminListingSummary } from '../../lib/admin'
 import { errorMessage } from '../../lib/errors'
 import { formatDateTime } from '../../lib/format'
 import type { ListingStatus } from '../../lib/owner'
+import { stepBackIfEmpty } from '../../lib/paging'
 
 const FILTERS: { value: ListingStatus; label: string }[] = [
   { value: 'PENDING_REVIEW', label: 'Pending review' },
   { value: 'APPROVED', label: 'Live' },
   { value: 'REJECTED', label: 'Changes needed' },
+  { value: 'PAUSED', label: 'Paused' },
+  { value: 'SUSPENDED', label: 'Suspended' },
 ]
 
 const reviewLink =
@@ -27,7 +31,10 @@ function ListingRow({ listing }: { listing: AdminListingSummary }) {
         <div aria-hidden className="flex h-32 w-full items-center justify-center rounded-xl bg-slate-100 text-3xl font-bold text-slate-300 dark:bg-slate-800 dark:text-slate-600 sm:h-20 sm:w-32 sm:shrink-0">P</div>
       )}
       <div className="min-w-0 flex-1 space-y-0.5">
-        <h3 className="font-semibold">{listing.title}</h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="font-semibold">{listing.title}</h3>
+          <StatusBadge kind="listing" status={listing.status} />
+        </div>
         <p className="text-sm text-slate-500">{`${listing.cityName}, ${listing.stateName}`}</p>
         <p className="text-sm text-slate-700 dark:text-slate-300">
           <span>{listing.ownerName}</span>
@@ -46,8 +53,7 @@ export function ListingQueuePage() {
   const [page, setPage] = useState(0)
   const { data, error, isPending } = useAdminListings(status, page)
 
-  // The last row of a later page was handled elsewhere: step back instead of showing an empty page.
-  if (data !== undefined && data.content.length === 0 && page > 0) setPage(page - 1)
+  stepBackIfEmpty(page, setPage, data?.content)
 
   return (
     <div className="space-y-6">

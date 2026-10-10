@@ -4,7 +4,6 @@ import com.smartparking.booking.Booking;
 import com.smartparking.booking.BookingActor;
 import com.smartparking.booking.BookingEvents;
 import com.smartparking.booking.BookingMapper;
-import com.smartparking.booking.BookingProperties;
 import com.smartparking.booking.BookingRepository;
 import com.smartparking.booking.BookingStatus;
 import com.smartparking.booking.dto.BookingDetailDto;
@@ -22,6 +21,7 @@ import com.smartparking.notification.NotificationType;
 import com.smartparking.notification.Notifier;
 import com.smartparking.payment.dto.MockPayResponse;
 import com.smartparking.payment.dto.VerifyPaymentRequest;
+import com.smartparking.settings.PlatformSettings;
 import com.smartparking.user.User;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -57,7 +57,7 @@ public class PaymentService {
     private final BookingRepository bookings;
     private final BookingEvents events;
     private final BookingMapper mapper;
-    private final BookingProperties bookingProperties;
+    private final PlatformSettings settings;
     private final OwnerEarningRepository earnings;
     private final InvoiceService invoices;
     private final RefundService refunds;
@@ -331,7 +331,7 @@ public class PaymentService {
 
         BookingStatus from = booking.getStatus();
         ParkingListing listing = booking.getListing();
-        Duration approvalWindow = Duration.ofHours(bookingProperties.approvalHours());
+        Duration approvalWindow = Duration.ofHours(settings.approvalHours());
         String note = "Payment received";
         switch (from) {
             case PENDING_PAYMENT, EXPIRED -> {

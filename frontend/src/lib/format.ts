@@ -27,6 +27,12 @@ export function formatCompactINR(value: number): string {
   return `₹${Number((value / size).toFixed(1))}${suffix}`
 }
 
+/** "1 booking", "2 bookings". */
+export const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`
+
+/** "42.5%": one decimal at most, none when whole. */
+export const formatPercent = (n: number): string => `${Number(n.toFixed(1))}%`
+
 const dateTime = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
 
 export function formatDateTime(iso: string): string {

@@ -1,3 +1,5 @@
+import { api } from './api'
+
 /**
  * A failed blob request carries its problem as a Blob. Gives back what to throw: an Error with the server's `detail`
  * when the blob holds a problem body, otherwise the original error.
@@ -37,5 +39,23 @@ export function filenameFrom(disposition: unknown): string | null {
     return decodeURIComponent(match[1].trim())
   } catch {
     return match[1].trim()
+  }
+}
+
+/**
+ * Fetches `url` as a CSV (`format=csv` added to `params`), hands it to the browser under the server's filename (or
+ * `fallbackName`) and says whether the server cut it at its row limit. A failed request throws its problem detail.
+ */
+export async function downloadCsv(
+  url: string,
+  params: Record<string, unknown>,
+  fallbackName: string,
+): Promise<{ truncated: boolean }> {
+  try {
+    const response = await api.get<Blob>(url, { params: { ...params, format: 'csv' }, responseType: 'blob' })
+    saveBlob(response.data, filenameFrom(response.headers['content-disposition']) ?? fallbackName)
+    return { truncated: String(response.headers['x-truncated']).toLowerCase() === 'true' }
+  } catch (error) {
+    throw await blobProblem(error)
   }
 }

@@ -35,11 +35,23 @@ public interface ParkingListingRepository extends JpaRepository<ParkingListing, 
     @Query("select l from ParkingListing l where l.id = :id")
     Optional<ParkingListing> findByIdForUpdate(@Param("id") Long id);
 
+    boolean existsByIdAndOwnerId(Long id, Long ownerId);
+
     List<ParkingListing> findByOwnerId(Long ownerId);
 
     long countByStatus(ListingStatus status);
 
     long countByOwnerId(Long ownerId);
+
+    long countByCityId(Long cityId);
+
+    /** Rows of {cityId, count} of the cities' listings in any status. */
+    @Query("select l.city.id, count(l) from ParkingListing l where l.city.id in :ids group by l.city.id")
+    List<Object[]> countByCities(@Param("ids") Collection<Long> ids);
+
+    /** Rows of {ownerId, count} of the owners' listings in any status. */
+    @Query("select l.owner.id, count(l) from ParkingListing l where l.owner.id in :ids group by l.owner.id")
+    List<Object[]> countByOwners(@Param("ids") Collection<Long> ids);
 
     boolean existsByOwnerIdAndTitle(Long ownerId, String title);
 }
