@@ -13,15 +13,17 @@ import com.smartparking.notification.Notifier;
 import com.smartparking.owner.OwnerProfile;
 import com.smartparking.owner.OwnerProfileRepository;
 import com.smartparking.owner.dashboard.OwnerEarningsService;
-import com.smartparking.owner.dashboard.dto.OwnerEarningDto;
 import com.smartparking.user.Role;
 import com.smartparking.user.User;
 import com.smartparking.user.UserRepository;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeSet;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -52,23 +54,38 @@ public class AdminPayoutService {
             User owner = owners.get(t.getOwnerId());
             OwnerProfile profile = details.get(t.getOwnerId());
             return new PayoutOwnerDto(t.getOwnerId(), owner.getName(), owner.getEmail(), t.getNet(), t.getRows(),
-                    method(profile), masked(profile));
+                    method(profile), masked(profile), money(t.getDisputedNet()));
         }).toList();
     }
 
     @Transactional(readOnly = true)
-    public List<OwnerEarningDto> pendingEarnings(Long ownerId) {
+    public List<PayoutEarningDto> pendingEarnings(Long ownerId) {
         User owner = users.findById(ownerId).orElseThrow(() -> ApiException.notFound("Owner not found"));
         if (owner.getRole() != Role.OWNER) {
             throw ApiException.notFound("Owner not found");
         }
-        return earnings.findPendingByOwnerId(ownerId).stream().map(OwnerEarningsService::toDto).toList();
+        List<OwnerEarning> pending = earnings.findPendingByOwnerId(ownerId);
+        Set<Long> disputed = disputedBookings(pending);
+        return pending.stream().map(e -> PayoutEarningDto.of(OwnerEarningsService.toDto(e),
+                disputed.contains(e.getBooking().getId()))).toList();
+    }
+
+    private Set<Long> disputedBookings(List<OwnerEarning> rows) {
+        if (rows.isEmpty()) {
+            return Set.of();
+        }
+        return new HashSet<>(earnings.disputedBookingIds(rows.stream().map(e -> e.getBooking().getId()).toList()));
+    }
+
+    private static BigDecimal money(BigDecimal value) {
+        return (value == null ? BigDecimal.ZERO : value).setScale(2, RoundingMode.HALF_UP);
     }
 
     /**
      * Marks the earnings PAID with a payout reference. The rows are locked first; every id must be a PENDING_PAYOUT
      * earning of {@code ownerId} (409 {@code NOTHING_TO_PAY} otherwise, and nothing changes), so two admins paying the
-     * same earnings at once cannot both succeed.
+     * same earnings at once cannot both succeed. Earnings of bookings with an unresolved dispute are held back:
+     * selecting one refuses the whole payout (409 {@code EARNING_DISPUTED}).
      */
     @Transactional
     public MarkPaidResult markPaid(AuthUser admin, MarkPaidRequest request) {
@@ -83,6 +100,10 @@ public class AdminPayoutService {
         if (!allPayable) {
             throw ApiException.conflict("NOTHING_TO_PAY",
                     "Every selected earning must be a pending payout of this owner");
+        }
+        if (!disputedBookings(locked).isEmpty()) {
+            throw ApiException.conflict("EARNING_DISPUTED",
+                    "An earning in the selection has an unresolved dispute; resolve it before paying it out");
         }
         BigDecimal total = BigDecimal.ZERO;
         for (OwnerEarning e : locked) {

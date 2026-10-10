@@ -57,7 +57,7 @@ public class AdminUserService {
 
     @Transactional
     public AdminUserDto suspend(AuthUser admin, Long id, String rawReason) {
-        User user = users.findById(id).orElseThrow(() -> ApiException.notFound("User not found"));
+        User user = users.findByIdForUpdate(id).orElseThrow(() -> ApiException.notFound("User not found"));
         if (user.getRole() == Role.ADMIN || user.getId().equals(admin.id())) {
             throw ApiException.conflict("CANNOT_SUSPEND", "Admins and your own account cannot be suspended");
         }
@@ -80,7 +80,7 @@ public class AdminUserService {
 
     @Transactional
     public AdminUserDto activate(AuthUser admin, Long id) {
-        User user = users.findById(id).orElseThrow(() -> ApiException.notFound("User not found"));
+        User user = users.findByIdForUpdate(id).orElseThrow(() -> ApiException.notFound("User not found"));
         if (user.getStatus() != UserStatus.SUSPENDED) {
             throw ApiException.conflict("INVALID_STATUS", "This account is not suspended");
         }

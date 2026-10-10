@@ -56,13 +56,19 @@ public class AdminPaymentService {
     public AdminRefundDto retry(AuthUser admin, Long refundId) {
         TransactionTemplate tx = new TransactionTemplate(txManager);
         tx.setReadOnly(true);
-        Refund before = tx.execute(s -> refunds.findById(refundId).orElse(null));
-        if (before == null) {
-            throw ApiException.notFound("Refund not found");
-        }
-        if (before.getStatus() != RefundStatus.FAILED) {
-            throw ApiException.conflict("NOT_RETRYABLE", "Only failed refunds can be retried (this one is "
-                    + before.getStatus() + ")");
+        // Refused up front (and not audited) when a retry cannot do anything: not failed, or no room left.
+        String blocked = tx.execute(s -> {
+            Refund before = refunds.findById(refundId).orElse(null);
+            if (before == null) {
+                throw ApiException.notFound("Refund not found");
+            }
+            if (before.getStatus() != RefundStatus.FAILED) {
+                return "Only failed refunds can be retried (this one is " + before.getStatus() + ")";
+            }
+            return refundService.retryBlocker(before).orElse(null);
+        });
+        if (blocked != null) {
+            throw ApiException.conflict("NOT_RETRYABLE", blocked);
         }
         // The audit row is written inside the retry's own transaction, so it exists exactly when the outcome does.
         AtomicReference<AdminRefundDto> result = new AtomicReference<>();

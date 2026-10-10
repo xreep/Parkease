@@ -37,7 +37,8 @@ public record AdminBookingDetailDto(
         PaymentInfo payment,
         List<RefundInfo> refunds,
         List<BookingDetailDto.Event> events,
-        List<DisputeSummaryDto> disputes) {
+        List<DisputeSummaryDto> disputes,
+        BigDecimal refundableRemaining) {
 
     public record PaymentInfo(Long id, PaymentProviderType provider, String providerOrderId, String providerPaymentId,
                               PaymentStatus status, BigDecimal amount, Instant capturedAt) {

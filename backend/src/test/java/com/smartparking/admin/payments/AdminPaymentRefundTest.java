@@ -172,6 +172,28 @@ class AdminPaymentRefundTest {
     }
 
     @Test
+    void aFailedRefundWithNoRoomLeftIsNotRetryableAndLeavesNoAuditRow() throws Exception {
+        long id = paid(driver, 10);
+        long refund = failedRefund(id);
+        int callsBefore = provider.calls.size();
+        // the payment got its money back some other way (e.g. in the provider's dashboard)
+        jdbc.update("update payments set status = 'REFUNDED' where booking_id = ?", id);
+
+        retry(refund).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("NOT_RETRYABLE"));
+        assertThat(provider.calls).hasSize(callsBefore);
+        assertThat(jdbc.queryForObject("select count(*) from admin_actions where action = 'REFUND_RETRIED'",
+                Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("select attempts from refunds where id = ?", Integer.class, refund)).isEqualTo(1);
+
+        // payment captured again, but other refunds already cover it
+        jdbc.update("update payments set status = 'PARTIALLY_REFUNDED' where booking_id = ?", id);
+        jdbc.update("insert into refunds (payment_id, amount, status, reason) select id, 67.08, 'PROCESSED', 'other' "
+                + "from payments where booking_id = ?", id);
+        retry(refund).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("NOT_RETRYABLE"));
+        assertThat(provider.calls).hasSize(callsBefore);
+    }
+
+    @Test
     void aRefundThatIsNotFailedCannotBeRetried() throws Exception {
         long id = paid(driver, 10);
         failedRefund(id);

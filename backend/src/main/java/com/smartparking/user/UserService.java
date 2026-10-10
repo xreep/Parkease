@@ -20,7 +20,8 @@ public class UserService {
     }
 
     public UserDto update(Long id, UpdateProfileRequest request) {
-        User user = require(id);
+        // Locked: the whole row is written back, which must not undo a suspension that commits meanwhile.
+        User user = users.findByIdForUpdate(id).orElseThrow(() -> ApiException.notFound("User not found"));
         if (request.name() != null) {
             user.setName(request.name().trim());
         }

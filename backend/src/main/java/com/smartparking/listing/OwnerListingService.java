@@ -160,7 +160,12 @@ public class OwnerListingService {
 
     private ListingDetailDto transition(Long ownerId, Long listingId, ListingStatus from, ListingStatus to,
                                         String message) {
-        ParkingListing listing = requireOwned(ownerId, listingId);
+        // Ownership by id, then the row lock before the listing is loaded: a concurrent admin suspension must be seen.
+        if (!listings.existsByIdAndOwnerId(listingId, ownerId)) {
+            throw ApiException.notFound("Listing not found");
+        }
+        ParkingListing listing = listings.findByIdForUpdate(listingId)
+                .orElseThrow(() -> ApiException.notFound("Listing not found"));
         if (listing.getStatus() != from) {
             throw ApiException.conflict("INVALID_STATUS", message);
         }

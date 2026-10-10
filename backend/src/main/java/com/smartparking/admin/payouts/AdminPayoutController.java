@@ -32,7 +32,7 @@ public class AdminPayoutController {
     /** Most owners one CSV export holds; more than that sets the truncation header. */
     static final int CSV_MAX_ROWS = 5000;
     private static final MediaType CSV = new MediaType("text", "csv", StandardCharsets.UTF_8);
-    static final String CSV_HEADER = "Owner ID,Owner,Email,Pending amount,Earnings,Payout method,Payout details";
+    static final String CSV_HEADER = "Owner ID,Owner,Email,Pending amount,Earnings,Payout method,Payout details,Held for disputes";
 
     private final AdminPayoutService service;
     private final Clock clock;
@@ -76,7 +76,8 @@ public class AdminPayoutController {
                     EarningsCsv.cell(String.valueOf(r.ownerId())), EarningsCsv.cell(r.ownerName()),
                     EarningsCsv.cell(r.ownerEmail()), EarningsCsv.cell(r.pendingAmount().setScale(2).toPlainString()),
                     EarningsCsv.cell(String.valueOf(r.earningsCount())), EarningsCsv.cell(r.payoutMethod()),
-                    EarningsCsv.cell(r.payoutMasked())))).append("\r\n");
+                    EarningsCsv.cell(r.payoutMasked()),
+                    EarningsCsv.cell(r.disputedAmount().setScale(2).toPlainString())))).append("\r\n");
         }
         return out.toString();
     }

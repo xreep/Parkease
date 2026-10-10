@@ -83,6 +83,7 @@ class AdminStatsReportTest {
     @Autowired PaymentRepository payments;
     @Autowired OwnerEarningRepository earnings;
     @Autowired ReportService reportService;
+    @Autowired PlatformUtilization utilization;
 
     String admin;
     String ownerAuth;
@@ -107,6 +108,7 @@ class AdminStatsReportTest {
     @BeforeEach
     void setUp() throws Exception {
         DatabaseCleaner.clean(jdbc);
+        utilization.invalidate(); // results are cached per range for a couple of minutes
         admin = adminAuth(mvc, users, encoder, "stats-admin@example.com");
         ownerAuth = OwnerTestSupport.verifiedOwner(mvc, users, profiles, "stats-owner-a@example.com");
         AuthTestSupport.register(mvc, "stats-owner-b@example.com", "OWNER");
@@ -554,6 +556,23 @@ class AdminStatsReportTest {
                 report(kind, filter + "&format=csv").andExpect(status().isBadRequest());
             }
         }
+    }
+
+    @Test
+    void utilizationIsCachedPerRangeAndFilterUntilItExpiresOrIsInvalidated() throws Exception {
+        booking(pune, puneSlot, BookingStatus.COMPLETED, d0, "10:00", d0, "10:00", "12:00");
+        report("usage", "&cityId=" + puneId).andExpect(jsonPath("$.rows[0].bookedHours").value(2.0));
+
+        booking(pune, puneSlot, BookingStatus.COMPLETED, d0, "10:00", d0, "14:00", "15:00");
+        // same range and filters: the two-minute-old figure
+        report("usage", "&cityId=" + puneId).andExpect(jsonPath("$.rows[0].bookedHours").value(2.0));
+        // another filter or range is another entry
+        report("usage", "&stateId=" + mhId).andExpect(jsonPath("$.rows[0].bookedHours").value(3.0));
+        getWith(admin, "/api/v1/admin/reports/usage?from=" + d0 + "&to=" + d0.plusDays(1) + "&cityId=" + puneId)
+                .andExpect(jsonPath("$.rows[0].bookedHours").value(3.0));
+
+        utilization.invalidate();
+        report("usage", "&cityId=" + puneId).andExpect(jsonPath("$.rows[0].bookedHours").value(3.0));
     }
 
     @Test

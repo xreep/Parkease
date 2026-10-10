@@ -35,6 +35,8 @@ public interface ParkingListingRepository extends JpaRepository<ParkingListing, 
     @Query("select l from ParkingListing l where l.id = :id")
     Optional<ParkingListing> findByIdForUpdate(@Param("id") Long id);
 
+    boolean existsByIdAndOwnerId(Long id, Long ownerId);
+
     List<ParkingListing> findByOwnerId(Long ownerId);
 
     long countByStatus(ListingStatus status);
