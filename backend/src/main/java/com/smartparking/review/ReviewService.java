@@ -126,7 +126,9 @@ public class ReviewService {
                 .filter(l -> l.getOwner().getStatus() == UserStatus.ACTIVE) // a suspended owner's listings are hidden
                 .orElseThrow(() -> ApiException.notFound("Listing not found"));
         Page<Review> result = reviews.findByListingIdAndHiddenAtIsNull(listing.getId(), paged(page, size));
-        return new ListingReviewsDto(summarize(listing.getId()), new PageResponse<>(
+        // The summary (one grouped query) is the same on every page, so only the first page pays for it.
+        ReviewSummaryDto summary = result.getNumber() == 0 ? summarize(listing.getId()) : null;
+        return new ListingReviewsDto(summary, new PageResponse<>(
                 result.getContent().stream().map(mapper::toDto).toList(), result.getNumber(), result.getSize(),
                 result.getTotalElements(), result.getTotalPages()));
     }

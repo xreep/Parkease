@@ -438,11 +438,27 @@ class ReviewFlowTest {
                 .andExpect(jsonPath("$.reviews.content[*].id", contains((int) newer, (int) older)))
                 .andExpect(jsonPath("$.reviews.content[0].authorName").value("Ravi K."))
                 .andExpect(jsonPath("$.reviews.content[1].ownerReply").value("Thanks"))
-                .andExpect(jsonPath("$.reviews.totalElements").value(2));
+                .andExpect(jsonPath("$.reviews.totalElements").value(2))
+                .andExpect(jsonPath("$.summary.reviewCount").value(2))
+                .andExpect(jsonPath("$.summary.avgRating").value(4.0))
+                .andExpect(jsonPath("$.summary.distribution.5").value(1))
+                .andExpect(jsonPath("$.summary.distribution.3").value(1));
         mvc.perform(get("/api/v1/listings/" + listingId + "/reviews?page=1&size=1"))
+                // the summary is worked out once, with the first page; later pages only carry their reviews
+                .andExpect(jsonPath("$.summary").isEmpty())
                 .andExpect(jsonPath("$.reviews.content", hasSize(1)))
                 .andExpect(jsonPath("$.reviews.content[0].id").value(older))
                 .andExpect(jsonPath("$.reviews.totalPages").value(2));
+    }
+
+    @Test
+    void aNegativePageIsTheFirstPageAndStillCarriesTheSummary() throws Exception {
+        reviewOk(driver, completed(driver, 10), 4, "Fine");
+
+        mvc.perform(get("/api/v1/listings/" + listingId + "/reviews?page=-3"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.summary.reviewCount").value(1))
+                .andExpect(jsonPath("$.reviews.page").value(0));
     }
 
     @Test
