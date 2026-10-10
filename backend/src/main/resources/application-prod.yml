@@ -7,15 +7,22 @@ spring:
     hikari:
       # Neon's free tier allows few connections and the Render instance has 512 MB.
       maximum-pool-size: 5
-      minimum-idle: 1
-      # Neon suspends idle compute; retire connections before the server drops them.
-      max-lifetime: 300000
+      # Neon suspends idle compute and silently drops its connections: hold none open while idle, retire idle ones
+      # after 2 minutes and every connection after 4, well inside the server-side timeouts.
+      minimum-idle: 0
+      idle-timeout: 120000
+      max-lifetime: 240000
       connection-timeout: 30000
 
 server:
-  # Render proxies HTTPS to us over HTTP. The rate limiter reads X-Forwarded-For itself (app.security.trust-forwarded-for),
-  # so the container must not consume and strip the header first.
-  forward-headers-strategy: none
+  # Render's proxy terminates TLS and appends the client to X-Forwarded-For. Tomcat's RemoteIpValve applies the header
+  # only when the connection comes from an internal proxy, so getRemoteAddr() is the real client (rate limiting
+  # keys on it) and a caller cannot pick its own address. Widen INTERNAL_PROXIES if Render's proxies are not in
+  # these ranges (see docs/DEPLOYMENT.md): the value is a regular expression matched against the peer address.
+  forward-headers-strategy: native
+  tomcat:
+    remoteip:
+      internal-proxies: ${INTERNAL_PROXIES:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|169\.254\.\d{1,3}\.\d{1,3}|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|100\.6[4-9]\.\d{1,3}\.\d{1,3}|100\.[7-9]\d\.\d{1,3}\.\d{1,3}|100\.1[01]\d\.\d{1,3}\.\d{1,3}|100\.12[0-7]\.\d{1,3}\.\d{1,3}|172\.1[6-9]\.\d{1,3}\.\d{1,3}|172\.2\d\.\d{1,3}\.\d{1,3}|172\.3[01]\.\d{1,3}\.\d{1,3}|0:0:0:0:0:0:0:1|::1|fe[89ab]\p{XDigit}:.*|f[cd]\p{XDigit}{2}:.*}
   shutdown: graceful
 
 app:
@@ -25,7 +32,6 @@ app:
   jwt:
     secret: ${JWT_SECRET}
   security:
-    trust-forwarded-for: true
     hsts: true
   payments:
     mock-enabled: false

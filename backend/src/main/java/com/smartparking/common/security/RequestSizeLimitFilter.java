@@ -7,7 +7,11 @@ import jakarta.servlet.ServletInputStream;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
@@ -45,6 +49,7 @@ public class RequestSizeLimitFilter extends OncePerRequestFilter {
 
         private final long limit;
         private ServletInputStream stream;
+        private BufferedReader reader;
 
         LimitedRequest(HttpServletRequest request, long limit) {
             super(request);
@@ -57,6 +62,16 @@ public class RequestSizeLimitFilter extends OncePerRequestFilter {
                 stream = new LimitedStream(super.getInputStream(), limit);
             }
             return stream;
+        }
+
+        @Override
+        public BufferedReader getReader() throws IOException {
+            if (reader == null) {
+                String encoding = getCharacterEncoding();
+                Charset charset = encoding != null ? Charset.forName(encoding) : StandardCharsets.UTF_8;
+                reader = new BufferedReader(new InputStreamReader(getInputStream(), charset));
+            }
+            return reader;
         }
     }
 

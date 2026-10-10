@@ -20,6 +20,8 @@ spring:
 
 server:
   port: ${PORT:8080}
+  # Client addresses come from Tomcat's RemoteIpValve: X-Forwarded-For is honoured only from internal proxies
+  # (server.tomcat.remoteip.internal-proxies, Tomcat's default private/loopback/CGNAT ranges unless set; see prod).
   forward-headers-strategy: native
   # Error bodies are built by GlobalExceptionHandler; this keeps Boot's own /error page equally quiet.
   error:
@@ -39,9 +41,6 @@ app:
       public-per-minute: 120
       upload-per-minute: 20
       payment-verify-per-minute: 30
-    # Only true behind a proxy that appends the real peer to X-Forwarded-For (prod: Render).
-    trust-forwarded-for: false
-    trusted-proxy-hops: 1
     hsts: false
     max-json-body-bytes: 1048576
   jwt:
