@@ -143,11 +143,11 @@ export function PricingStep({ listing, onSaved }: StepProps) {
               />
               <div>
                 <label htmlFor={`policy-${p.value}`} className="text-sm font-medium">{p.label}</label>
-                <p id={`policy-${p.value}-help`} className="text-sm text-slate-500">{p.help}</p>
+                <p id={`policy-${p.value}-help`} className="text-sm text-slate-500 dark:text-slate-400">{p.help}</p>
               </div>
             </div>
           ))}
-          <p className="text-sm text-slate-500">{REFUND_NOTE}</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{REFUND_NOTE}</p>
         </fieldset>
 
         <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">

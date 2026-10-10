@@ -7,6 +7,7 @@ import com.smartparking.user.ChangePasswordRequest;
 import com.smartparking.common.error.ApiException;
 import com.smartparking.common.security.AuthUser;
 import com.smartparking.common.security.JwtProperties;
+import com.smartparking.common.seed.DemoMode;
 import com.smartparking.common.security.JwtService;
 import com.smartparking.common.util.Emails;
 import com.smartparking.common.util.Tokens;
@@ -36,6 +37,7 @@ public class AuthService {
     private final JwtProperties jwtProperties;
     private final Clock clock;
     private final AccountTokenService accountTokens;
+    private final DemoMode demoMode;
     /** BCrypt only uses the first 72 bytes and rejects longer input when hashing. */
     private static final int MAX_PASSWORD_BYTES = 72;
 
@@ -47,7 +49,7 @@ public class AuthService {
     public AuthService(UserRepository users, OwnerProfileRepository ownerProfiles,
                        RefreshTokenRepository refreshTokens, PasswordEncoder passwordEncoder,
                        JwtService jwtService, JwtProperties jwtProperties, Clock clock,
-                       AccountTokenService accountTokens) {
+                       AccountTokenService accountTokens, DemoMode demoMode) {
         this.users = users;
         this.ownerProfiles = ownerProfiles;
         this.refreshTokens = refreshTokens;
@@ -56,6 +58,7 @@ public class AuthService {
         this.jwtProperties = jwtProperties;
         this.clock = clock;
         this.accountTokens = accountTokens;
+        this.demoMode = demoMode;
         this.dummyHash = passwordEncoder.encode(DUMMY_PASSWORD);
     }
 
@@ -100,6 +103,10 @@ public class AuthService {
      */
     public AuthResponse changePassword(Long userId, ChangePasswordRequest request) {
         User user = users.findById(userId).orElseThrow(() -> ApiException.notFound("User not found"));
+        if (demoMode.isLockedAccount(user.getEmail())) {
+            throw ApiException.forbidden("DEMO_ACCOUNT_LOCKED",
+                    "This is a shared demo account, so its password cannot be changed. Create your own account to try it.");
+        }
         if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
             throw ApiException.badRequest("WRONG_PASSWORD", "Your current password is incorrect");
         }

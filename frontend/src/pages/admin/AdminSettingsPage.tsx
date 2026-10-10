@@ -11,6 +11,7 @@ import { Dialog } from '../../components/ui/Dialog'
 import { TextField } from '../../components/ui/TextField'
 import { invalidateAdminActivity, saveSettings, useAdminSettings, type PlatformSettings, type PriceGuideline } from '../../lib/admin'
 import { toProblem } from '../../lib/errors'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const MAX_HOURLY = 100_000
 const TIER_NAMES: Record<PriceGuideline['tier'], string> = { 1: 'Metro', 2: 'Large city', 3: 'Other city' }
@@ -182,6 +183,7 @@ function SettingsForm({ settings }: { settings: PlatformSettings }) {
 }
 
 export function AdminSettingsPage() {
+  usePageTitle('Admin · Settings')
   const { data, error, isPending } = useAdminSettings()
   return (
     <div className="space-y-6">

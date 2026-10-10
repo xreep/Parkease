@@ -346,7 +346,7 @@ class PaymentVerificationTest {
     void realModeRefusesAPaymentTheProviderDoesNotDescribeFully() throws Exception {
         Held held = hold(10);
         String pay = mockPay(mvc, driver.auth(), held.bookingId());
-        provider.type = PaymentProviderType.RAZORPAY; // fetcher still answers like the mock: captured, nothing else
+        asRazorpay(held); // a Razorpay deployment's payments are Razorpay's; the fetcher still answers like the mock
 
         verifyPayment(held, pay).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("PAYMENT_VERIFICATION_FAILED"));

@@ -1,10 +1,12 @@
 package com.smartparking.payment;
 
 import com.smartparking.common.security.JwtProperties;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 import org.springframework.util.StringUtils;
@@ -33,5 +35,19 @@ public class PaymentConfig {
         }
         log.warn("Razorpay keys not set — using the mock payment provider");
         return new MockPaymentProvider(jwt.secret());
+    }
+
+    /**
+     * The hosted demo's seeded history was "paid" with the mock provider, so refunds of it must reach the mock even
+     * though Razorpay is primary. Only registered under the demo profile, and never used for a new checkout; with a
+     * mock primary there is nothing to add.
+     */
+    @Bean
+    @Profile("demo")
+    LegacyPaymentProviders demoLegacyProviders(PaymentProvider primary, JwtProperties jwt) {
+        if (primary.type() == PaymentProviderType.MOCK) {
+            return new LegacyPaymentProviders(List.of());
+        }
+        return new LegacyPaymentProviders(List.of(new MockPaymentProvider(jwt.secret())));
     }
 }

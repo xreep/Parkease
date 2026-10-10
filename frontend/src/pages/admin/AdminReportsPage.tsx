@@ -21,6 +21,7 @@ import { errorMessage } from '../../lib/errors'
 import { formatINR, formatPercent } from '../../lib/format'
 import { statsRange } from '../../lib/ownerDashboard'
 import { useCsvExport } from '../../lib/useCsvExport'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 type Column<Row, Totals> = {
   header: string
@@ -102,7 +103,7 @@ function ReportTable<Row extends BaseRow, Totals>({
             <p className="font-semibold">{`${row.cityName}, ${row.stateName}`}</p>
             <dl className="grid grid-cols-2 gap-2 text-sm">
               {columns.map((c) => (
-                <div key={c.header}><dt className="text-xs text-slate-500">{c.header}</dt><dd>{c.cell(row)}</dd></div>
+                <div key={c.header}><dt className="text-xs text-slate-500 dark:text-slate-400">{c.header}</dt><dd>{c.cell(row)}</dd></div>
               ))}
             </dl>
           </li>
@@ -111,7 +112,7 @@ function ReportTable<Row extends BaseRow, Totals>({
           <p className="font-semibold">Total</p>
           <dl className="grid grid-cols-2 gap-2 text-sm">
             {columns.map((c) => (
-              <div key={c.header}><dt className="text-xs text-slate-500">{c.header}</dt><dd className="font-semibold">{c.total(totals)}</dd></div>
+              <div key={c.header}><dt className="text-xs text-slate-500 dark:text-slate-400">{c.header}</dt><dd className="font-semibold">{c.total(totals)}</dd></div>
             ))}
           </dl>
         </li>
@@ -148,6 +149,7 @@ const TABS: { value: ReportKind; label: string }[] = [
 ]
 
 export function AdminReportsPage() {
+  usePageTitle('Admin · Reports and exports')
   const initial = statsRange(30)
   const [kind, setKind] = useState<ReportKind>('usage')
   const [from, setFrom] = useState(initial.from)

@@ -29,6 +29,7 @@ import {
   type CityTier,
 } from '../../lib/adminManage'
 import { errorMessage, toProblem } from '../../lib/errors'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const inRange = (min: number, max: number) => (v: string) => {
   if (v.trim() === '') return false
@@ -232,6 +233,7 @@ function CitiesPanel({ state, onEditState }: { state: AdminState; onEditState: (
 }
 
 export function AdminLocationsPage() {
+  usePageTitle('Admin · Locations')
   const { data: states, error, isPending } = useAdminStates()
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [stateDialog, setStateDialog] = useState<{ state: AdminState | null } | null>(null)
@@ -266,7 +268,7 @@ export function AdminLocationsPage() {
                     )}
                   >
                     <span>{s.name}</span>
-                    <span className="text-xs text-slate-500">{s.citiesCount}</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">{s.citiesCount}</span>
                   </button>
                 </li>
               )

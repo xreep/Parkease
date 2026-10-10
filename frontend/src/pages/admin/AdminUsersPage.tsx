@@ -26,6 +26,7 @@ import {
 import { errorMessage } from '../../lib/errors'
 import { formatDateTime, plural } from '../../lib/format'
 import { stepBackIfEmpty, withPageReset } from '../../lib/paging'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const ROLE_LABELS: Record<UserRole, string> = { DRIVER: 'Driver', OWNER: 'Owner', ADMIN: 'Admin' }
 const ROLE_TONES = { DRIVER: 'sky', OWNER: 'amber', ADMIN: 'slate' } as const
@@ -62,8 +63,8 @@ function UserRow({ user, isSelf, onSuspend, onChanged }: { user: AdminUser; isSe
         </div>
         <div className="space-y-0.5 text-sm text-slate-700 dark:text-slate-300 sm:text-right">
           <p>{`${plural(user.bookingsCount, 'booking', 'bookings')} · ${plural(user.listingsCount, 'listing', 'listings')}`}</p>
-          <p className="text-slate-500">{`Joined ${formatDateTime(user.createdAt)}`}</p>
-          {!user.emailVerified && <p className="text-slate-500">Email not verified</p>}
+          <p className="text-slate-500 dark:text-slate-400">{`Joined ${formatDateTime(user.createdAt)}`}</p>
+          {!user.emailVerified && <p className="text-slate-500 dark:text-slate-400">Email not verified</p>}
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -87,6 +88,7 @@ function UserRow({ user, isSelf, onSuspend, onChanged }: { user: AdminUser; isSe
 }
 
 export function AdminUsersPage() {
+  usePageTitle('Admin · Users')
   const queryClient = useQueryClient()
   const { user: me } = useAuth()
   const [role, setRole] = useState<UserRole | ''>('')

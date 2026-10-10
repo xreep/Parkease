@@ -28,14 +28,15 @@ import { VEHICLE_TYPE_LABELS, formatDateTime, formatINR } from '../../lib/format
 import { invalidateReviewQueries, type ReviewDto } from '../../lib/reviews'
 import { useNow } from '../../lib/useNow'
 import { durationLabel, formatWindow } from '../../lib/time'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const primaryLink =
-  'inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700'
+  'inline-flex items-center justify-center rounded-lg bg-brand-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-800'
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-      <h3 className="text-base font-semibold">{title}</h3>
+      <h2 className="text-base font-semibold">{title}</h2>
       <div className="mt-3 space-y-2 text-sm">{children}</div>
     </section>
   )
@@ -176,7 +177,7 @@ function ReviewPanel({ booking }: { booking: BookingDetailDto }) {
       aria-labelledby="review-heading"
       className="scroll-mt-24 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900"
     >
-      <h3 id="review-heading" className="text-base font-semibold">{title}</h3>
+      <h2 id="review-heading" className="text-base font-semibold">{title}</h2>
       <div className="mt-3 text-sm">
         {review ? (
           <div className="space-y-2">
@@ -184,7 +185,7 @@ function ReviewPanel({ booking }: { booking: BookingDetailDto }) {
             {review.comment ? (
               <p className="whitespace-pre-line break-words">{review.comment}</p>
             ) : (
-              <p className="text-slate-500">No comment</p>
+              <p className="text-slate-500 dark:text-slate-400">No comment</p>
             )}
             <OwnerReply review={review} />
           </div>
@@ -211,7 +212,7 @@ function DisputesPanel({ booking }: { booking: BookingDetailDto }) {
       aria-labelledby="problems-heading"
       className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900"
     >
-      <h3 id="problems-heading" className="text-base font-semibold">Problems reported</h3>
+      <h2 id="problems-heading" className="text-base font-semibold">Problems reported</h2>
       <ul className="mt-3 space-y-2 text-sm">
         {booking.disputes.map((d) => (
           <li key={d.id} className="flex flex-wrap items-center justify-between gap-2">
@@ -220,7 +221,7 @@ function DisputesPanel({ booking }: { booking: BookingDetailDto }) {
             </Link>
             <span className="flex items-center gap-2">
               <StatusBadge kind="dispute" status={d.status} />
-              <span className="text-xs text-slate-500">{formatDateTime(d.createdAt)}</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">{formatDateTime(d.createdAt)}</span>
             </span>
           </li>
         ))}
@@ -252,7 +253,7 @@ function BookingContent({ booking, isNew }: { booking: BookingDetailDto; isNew: 
         <div className="min-w-0 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge kind="booking" status={booking.status} />
-            <span className="text-sm text-slate-500">Booking code</span>
+            <span className="text-sm text-slate-500 dark:text-slate-400">Booking code</span>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <p className="break-all font-mono text-3xl font-bold tracking-wider">{booking.bookingCode}</p>
@@ -274,11 +275,11 @@ function BookingContent({ booking, isNew }: { booking: BookingDetailDto; isNew: 
       <div className="grid items-start gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,20rem)]">
         <div className="min-w-0 space-y-6">
           <Panel title="Parking">
-            <h4 className="text-lg font-semibold">
+            <h3 className="text-lg font-semibold">
               <Link to={`/listings/${booking.listingId}`} className="text-brand-700 hover:underline dark:text-brand-400">
                 {booking.listingTitle}
               </Link>
-            </h4>
+            </h3>
             <p className="text-slate-600 dark:text-slate-400">{booking.address}</p>
             <a
               href={`https://www.google.com/maps/dir/?api=1&destination=${booking.lat},${booking.lng}`}
@@ -352,6 +353,7 @@ export function BookingDetailPage() {
   const { id } = useParams()
   const [params] = useSearchParams()
   const { data, error, isPending } = useBooking(id, true, true)
+  usePageTitle(data ? `Booking ${data.bookingCode}` : 'Booking details')
 
   if (isPending) {
     return (

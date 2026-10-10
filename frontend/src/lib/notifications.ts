@@ -78,6 +78,8 @@ export function useUnreadCount(enabled = true) {
     queryKey: ['notifications', 'unread'],
     queryFn: getUnreadCount,
     enabled,
+    // The bell refreshes itself in the background; a failed refresh is not worth a toast.
+    meta: { silent: true },
     refetchInterval: () => (document.visibilityState === 'visible' ? UNREAD_REFRESH_MS : false),
   })
 }

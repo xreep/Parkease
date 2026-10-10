@@ -20,9 +20,10 @@ import { CANCELLATION_POLICIES, REFUND_NOTE, formatINR, VEHICLE_TYPE_LABELS } fr
 import { loadRazorpay, openRazorpay } from '../../lib/razorpay'
 import { listingHref, usePublicListing } from '../../lib/search'
 import { durationLabel, formatWindow } from '../../lib/time'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const primaryLink =
-  'inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700'
+  'inline-flex items-center justify-center rounded-lg bg-brand-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-800'
 
 const RED_UNDER_SECONDS = 120
 
@@ -295,7 +296,7 @@ function CheckoutView({ checkout }: { checkout: CheckoutDto }) {
             ) : (
               <Button type="button" className="w-full" loading={busy && !mockOpen} disabled={busy} onClick={pay}>{`Pay ${total}`}</Button>
             )}
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               {'Your slot is reserved until the timer runs out. '}
               {payment.provider === 'RAZORPAY' ? 'Payments are processed securely by Razorpay.' : 'Test mode — no real money is charged.'}
             </p>
@@ -319,6 +320,7 @@ function CheckoutView({ checkout }: { checkout: CheckoutDto }) {
 }
 
 export function CheckoutPage() {
+  usePageTitle('Review and pay')
   const { bookingId } = useParams()
   const { data, error, isPending } = useCheckout(bookingId)
   const problem = error ? toProblem(error) : null

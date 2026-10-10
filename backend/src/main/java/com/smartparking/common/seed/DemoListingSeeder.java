@@ -52,12 +52,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Dev-only demo data: verified owners per region, 55 approved listings covering every state and union territory,
+ * Demo data for the dev and demo profiles: verified owners per region, 55 approved listings covering every state and union territory,
  * plus one pending owner and one pending listing so the admin review queues are not empty. Safe to run repeatedly.
  */
 @Slf4j
 @Component
-@Profile("dev")
+@Profile({"dev", "demo"})
 @Order(2)
 public class DemoListingSeeder implements ApplicationRunner {
 

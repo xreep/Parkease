@@ -10,10 +10,12 @@ import { Badge } from '../../components/ui/StatusBadge'
 import { errorMessage } from '../../lib/errors'
 import { useMyListings } from '../../lib/owner'
 import { useOwnerReviews } from '../../lib/reviews'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const ALL = 'all'
 
 export function OwnerReviewsPage() {
+  usePageTitle('Owner reviews')
   const [listing, setListing] = useState<string>(ALL)
   const [page, setPage] = useState(0)
   const listingId = listing === ALL ? undefined : Number(listing)
@@ -63,7 +65,7 @@ export function OwnerReviewsPage() {
                       {review.hidden && <Badge tone="red">Hidden by ParkEase</Badge>}
                     </span>
                     <span className="block text-sm font-normal text-slate-600 dark:text-slate-400">{review.listingTitle}</span>
-                    <span className="block font-mono text-xs font-normal text-slate-500">{review.bookingCode}</span>
+                    <span className="block font-mono text-xs font-normal text-slate-500 dark:text-slate-400">{review.bookingCode}</span>
                   </>
                 }
                 extra={

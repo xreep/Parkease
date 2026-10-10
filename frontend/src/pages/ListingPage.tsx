@@ -20,6 +20,7 @@ import { windowForDay } from '../lib/availability'
 import { usePublicListing, type PublicListingDto } from '../lib/search'
 import { toLocalInputValue } from '../lib/time'
 import { NotFoundPage } from './NotFoundPage'
+import { usePageTitle } from '../lib/usePageTitle'
 
 const noop = () => undefined
 
@@ -59,7 +60,7 @@ function HoursSection({ listing }: { listing: PublicListingDto }) {
             return (
               <div key={name} className="contents">
                 <dt>{name}</dt>
-                <dd className={rule ? undefined : 'text-slate-500'}>
+                <dd className={rule ? undefined : 'text-slate-500 dark:text-slate-400'}>
                   {rule ? `${rule.openTime.slice(0, 5)} – ${rule.closeTime.slice(0, 5)}` : 'Closed'}
                 </dd>
               </div>
@@ -73,6 +74,8 @@ function HoursSection({ listing }: { listing: PublicListingDto }) {
 
 function ListingView({ id }: { id: string }) {
   const { data: listing, isPending, error } = usePublicListing(id)
+  // An unknown listing renders the 404 page, which sets its own title.
+  usePageTitle(error && toProblem(error).status === 404 ? undefined : (listing?.title ?? 'Parking spot'))
   const [requested, setRequested] = useState<{ start: string; end: string } | null>(null)
 
   if (isPending && !error) {

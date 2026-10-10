@@ -12,6 +12,7 @@ import { errorMessage } from '../../lib/errors'
 import { formatCompactINR, formatINR, formatPercent, plural } from '../../lib/format'
 import { STATS_RANGES, type StatsRange } from '../../lib/ownerDashboard'
 import { formatShortDate } from '../../lib/time'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 
 function Kpi({ label, value, note }: { label: string; value: string; note?: string }) {
@@ -19,7 +20,7 @@ function Kpi({ label, value, note }: { label: string; value: string; note?: stri
     <div role="group" aria-label={label} className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
       <p className="text-sm text-slate-600 dark:text-slate-400">{label}</p>
       <p className="mt-1 text-2xl font-bold">{value}</p>
-      {note && <p className="text-xs text-slate-500">{note}</p>}
+      {note && <p className="text-xs text-slate-500 dark:text-slate-400">{note}</p>}
     </div>
   )
 }
@@ -147,6 +148,7 @@ function StatsView({ stats }: { stats: AdminStatsDto }) {
 }
 
 export function AdminHomePage() {
+  usePageTitle('Admin · Overview')
   const [days, setDays] = useState<StatsRange>(30)
   const { data, error, isPending, isPlaceholderData } = useAdminStats(days)
 

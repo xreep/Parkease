@@ -67,7 +67,7 @@ export function PhotoGallery({ photos, title }: { photos: Photo[]; title: string
 
   if (photos.length === 0) {
     return (
-      <div className="grid h-56 place-items-center rounded-2xl bg-slate-100 text-slate-500 sm:h-72 dark:bg-slate-800">
+      <div className="grid h-56 place-items-center rounded-2xl bg-slate-100 text-slate-500 dark:text-slate-400 sm:h-72 dark:bg-slate-800">
         <div className="flex flex-col items-center gap-2">
           <Car aria-hidden className="h-10 w-10" />
           <p className="text-sm">No photos yet</p>

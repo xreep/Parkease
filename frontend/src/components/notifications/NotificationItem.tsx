@@ -35,7 +35,7 @@ export function NotificationItem({ notification, now, onOpen }: { notification: 
             {!notification.read && <span className="sr-only"> (unread)</span>}
           </span>
           <span className="mt-0.5 block break-words text-sm text-slate-600 dark:text-slate-400">{notification.body}</span>
-          <span className="mt-1 block text-xs text-slate-500">{formatRelativeTime(notification.createdAt, now)}</span>
+          <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">{formatRelativeTime(notification.createdAt, now)}</span>
         </span>
       </button>
     </li>

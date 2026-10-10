@@ -1,0 +1,17 @@
+# Opt-in profile that seeds a realistic demo on startup: logins, listings and ~500 bookings with their payments,
+# refunds, invoices, earnings, reviews and disputes (DemoAccountSeeder, DemoListingSeeder, DemoActivitySeeder).
+# Locally it adds to the dev profile:   SPRING_PROFILES_ACTIVE=dev,demo
+# For a hosted demo run it next to prod: SPRING_PROFILES_ACTIVE=prod,demo
+# The order of the profiles does not matter. DEMO_PASSWORD is required (DemoProfileGuard stops the start without it),
+# so a public demo never runs with a password that is written down in the repository.
+# Idempotent and deterministic; never changes rows it did not create. A failure while seeding is logged and the
+# application still starts (under dev it stops the start instead).
+# Every start of a demo deployment also resets the showcase logins (password from DEMO_PASSWORD, ACTIVE, owners
+# VERIFIED) and the platform settings (DemoAccountReset), locks the showcase logins against password changes and
+# suspension, drops mail to the placeholder addresses (@example.com, @parkease.dev) and reports demoMode in /api/v1/health.
+app:
+  demo:
+    enabled: true
+  seed:
+    # Every seeded account (admin@, owner@, driver@parkease.dev and the generated owners and drivers) logs in with it.
+    demo-password: ${DEMO_PASSWORD:}

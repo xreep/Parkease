@@ -12,6 +12,7 @@ import { PhotosStep } from './wizard/PhotosStep'
 import { PricingStep } from './wizard/PricingStep'
 import { ReviewStep } from './wizard/ReviewStep'
 import { SlotsStep } from './wizard/SlotsStep'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const STEPS = ['Location', 'Photos', 'Slots', 'Pricing', 'Hours', 'Review'] as const
 
@@ -24,7 +25,7 @@ const stepClass = (current: boolean, enabled: boolean) =>
   clsx(
     'flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition',
     current
-      ? 'bg-brand-600 text-white'
+      ? 'bg-brand-700 text-white'
       : enabled
         ? 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
         : 'text-slate-400 dark:text-slate-600',
@@ -137,6 +138,7 @@ function EditListingWizard({ id }: { id: number }) {
 
 export function ListingWizardPage() {
   const { id } = useParams()
+  usePageTitle(id === undefined ? 'New listing' : 'Edit listing')
   if (id === undefined) return <NewListingWizard />
   const numeric = Number(id)
   if (!Number.isInteger(numeric) || numeric <= 0) return <FormError message="Listing not found" />

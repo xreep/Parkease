@@ -19,4 +19,4 @@ export function Empty({ children }: { children: ReactNode }) {
 
 export const linkClass = 'font-medium text-brand-700 hover:underline dark:text-brand-400'
 export const primaryLink =
-  'inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700'
+  'inline-flex items-center justify-center rounded-lg bg-brand-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-800'

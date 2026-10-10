@@ -3,10 +3,20 @@ spring:
     url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/smartparking_test}
     username: ${DB_USERNAME:${USER}}
     password: ${DB_PASSWORD:}
+    hikari:
+      # Many cached application contexts each own a pool; idle connections must not pile up against max_connections.
+      minimum-idle: 0
+      idle-timeout: 10000
 
 app:
   bcrypt-strength: 4
   auth-rate-limit-per-minute: 10000
+  security:
+    # The suite fires thousands of requests from one address; PublicRateLimitTest lowers these for itself.
+    rate-limit:
+      public-per-minute: 100000
+      upload-per-minute: 100000
+      payment-verify-per-minute: 100000
   jwt:
     secret: dGVzdC1vbmx5LWp3dC1zZWNyZXQtc21hcnQtcGFya2luZy1wbGF0Zm9ybS0yMDI2
   mail:

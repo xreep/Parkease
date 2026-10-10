@@ -51,7 +51,7 @@ public class PaymentService {
     private static final int MAX_FAILURE_REASON = 300;
     static final String START_PASSED_REASON = "The booking start time passed before the payment arrived";
 
-    private final PaymentProvider provider;
+    private final PaymentProviders providers;
     private final PaymentProperties paymentProperties;
     private final PaymentRepository payments;
     private final BookingRepository bookings;
@@ -76,7 +76,7 @@ public class PaymentService {
 
     /** Creates the provider order for a booking. A network call: keep it outside database transactions. */
     public ProviderOrder createProviderOrder(String bookingCode, BigDecimal total) {
-        return provider.createOrder(bookingCode, RefundService.toPaise(total), Map.of("bookingCode", bookingCode));
+        return providers.primary().createOrder(bookingCode, RefundService.toPaise(total), Map.of("bookingCode", bookingCode));
     }
 
     /** Records the provider order as the booking's payment (status CREATED). */
@@ -84,7 +84,7 @@ public class PaymentService {
     public Payment recordOrder(Booking booking, ProviderOrder order) {
         Payment payment = new Payment();
         payment.setBooking(booking);
-        payment.setProvider(provider.type());
+        payment.setProvider(providers.primary().type());
         payment.setOrderId(order.orderId());
         payment.setAmount(booking.getTotalAmount());
         payment.setCurrency(order.currency());
@@ -109,7 +109,7 @@ public class PaymentService {
      */
     @Transactional(readOnly = true)
     public MockPayResponse mockPay(Long driverId, Long bookingId) {
-        if (!paymentProperties.mockEnabled() || !(provider instanceof MockPaymentProvider mock)) {
+        if (!paymentProperties.mockEnabled() || !(providers.primary() instanceof MockPaymentProvider mock)) {
             throw ApiException.notFound("Not found");
         }
         if (!bookings.existsByIdAndDriverId(bookingId, driverId)) {
@@ -129,7 +129,8 @@ public class PaymentService {
         }
         Long orderBookingId = payments.findBookingIdByOrderId(request.orderId()).orElseThrow(this::verificationFailed);
         if (!orderBookingId.equals(request.bookingId())
-                || !provider.verifyPayment(request.orderId(), request.paymentId(), request.signature())) {
+                || !providerOf(request.orderId()).verifyPayment(request.orderId(), request.paymentId(),
+                request.signature())) {
             throw verificationFailed();
         }
         Long bookingId = confirmWithProvider(request.orderId(), request.paymentId(), null, BookingActor.DRIVER);
@@ -156,7 +157,8 @@ public class PaymentService {
         if (expected.alreadyConfirmed()) {
             return confirmPayment(orderId, paymentId, fallbackMethod, actor);
         }
-        return confirmFetched(orderId, expected, provider.fetchPayment(paymentId), fallbackMethod, actor);
+        PaymentProvider provider = providerOf(orderId);
+        return confirmFetched(provider, orderId, expected, provider.fetchPayment(paymentId), fallbackMethod, actor);
     }
 
     private Expected expectedFor(String orderId, String paymentId) {
@@ -170,8 +172,14 @@ public class PaymentService {
         });
     }
 
-    private Long confirmFetched(String orderId, Expected expected, ProviderPayment fetched, String fallbackMethod,
-                                BookingActor actor) {
+    /** The provider that took the payment of the order (which may not be the one new checkouts use). */
+    private PaymentProvider providerOf(String orderId) {
+        return tx.execute(s -> providers.forPayment(payments.findByOrderId(orderId)
+                .orElseThrow(() -> ApiException.notFound("Payment not found"))));
+    }
+
+    private Long confirmFetched(PaymentProvider provider, String orderId, Expected expected, ProviderPayment fetched,
+                                String fallbackMethod, BookingActor actor) {
         // Only the offline mock may leave the order, amount or currency unreported; a real provider that does is wrong.
         boolean lenient = provider.type() == PaymentProviderType.MOCK;
         long expectedPaise = RefundService.toPaise(expected.amount());
@@ -192,7 +200,7 @@ public class PaymentService {
                         orderId, fetched.paymentId());
                 return expected.bookingId();
             }
-            fetched = capture(orderId, expected, fetched);
+            fetched = capture(provider, orderId, expected, fetched);
         } else if (!ProviderPayment.CAPTURED.equals(fetched.status())) {
             log.warn("Payment {} of order {} is '{}' at the provider, not captured", fetched.paymentId(), orderId,
                     fetched.status());
@@ -209,7 +217,8 @@ public class PaymentService {
      * Captures an authorized payment. If that fails, the payment is looked at once more: a concurrent request (the
      * webhook, or a second verify) may have captured it first, which is as good as success.
      */
-    private ProviderPayment capture(String orderId, Expected expected, ProviderPayment authorized) {
+    private ProviderPayment capture(PaymentProvider provider, String orderId, Expected expected,
+                                    ProviderPayment authorized) {
         try {
             provider.capture(authorized.paymentId(), RefundService.toPaise(expected.amount()), expected.currency());
             return authorized;
@@ -240,12 +249,14 @@ public class PaymentService {
      */
     public int reconcileOrder(String orderId) {
         int applied = 0;
+        PaymentProvider provider = providerOf(orderId);
         for (ProviderPayment found : provider.fetchOrderPayments(orderId)) {
             if (!ProviderPayment.CAPTURED.equals(found.status())) {
                 continue;
             }
             try {
-                confirmFetched(orderId, expectedFor(orderId, found.paymentId()), found, null, BookingActor.SYSTEM);
+                confirmFetched(provider, orderId, expectedFor(orderId, found.paymentId()), found, null,
+                        BookingActor.SYSTEM);
                 applied++;
             } catch (ApiException e) {
                 log.error("Order {}: provider payment {} could not be applied: {}", orderId, found.paymentId(),

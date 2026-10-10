@@ -52,7 +52,7 @@ export function DisputeView({
       </div>
 
       <Section title="What happened">
-        <p className="text-xs text-slate-500">{`Reported by ${dispute.raisedByName}`}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{`Reported by ${dispute.raisedByName}`}</p>
         <p className="whitespace-pre-line break-words">{dispute.description}</p>
       </Section>
 
@@ -60,7 +60,7 @@ export function DisputeView({
         {dispute.ownerResponse ? (
           <>
             <p className="whitespace-pre-line break-words">{dispute.ownerResponse}</p>
-            {dispute.ownerRespondedAt && <p className="text-xs text-slate-500">{formatDateTime(dispute.ownerRespondedAt)}</p>}
+            {dispute.ownerRespondedAt && <p className="text-xs text-slate-500 dark:text-slate-400">{formatDateTime(dispute.ownerRespondedAt)}</p>}
           </>
         ) : (
           <p>{noResponseText}</p>
@@ -76,23 +76,23 @@ export function DisputeView({
       {resolved && dispute.resolution && (
         <Section title="Outcome">
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-            <dt className="text-slate-500">Decision</dt>
+            <dt className="text-slate-500 dark:text-slate-400">Decision</dt>
             <dd>{DISPUTE_RESOLUTION_LABELS[dispute.resolution]}</dd>
             {dispute.resolutionAmount !== null && (
               <>
-                <dt className="text-slate-500">Refunded</dt>
+                <dt className="text-slate-500 dark:text-slate-400">Refunded</dt>
                 <dd>{formatINR(dispute.resolutionAmount)}</dd>
               </>
             )}
             {dispute.resolvedAt && (
               <>
-                <dt className="text-slate-500">Resolved</dt>
+                <dt className="text-slate-500 dark:text-slate-400">Resolved</dt>
                 <dd>{formatDateTime(dispute.resolvedAt)}</dd>
               </>
             )}
             {dispute.adminNotes && (
               <>
-                <dt className="text-slate-500">Admin notes</dt>
+                <dt className="text-slate-500 dark:text-slate-400">Admin notes</dt>
                 <dd className="whitespace-pre-line break-words">{dispute.adminNotes}</dd>
               </>
             )}
@@ -114,7 +114,7 @@ export function DisputeList({ items, label, href }: { items: DisputeSummary[]; l
             <StatusBadge kind="dispute" status={d.status} />
           </div>
           <p className="mt-1 text-sm">{d.listingTitle}</p>
-          <p className="text-xs text-slate-500">{formatDateTime(d.createdAt)}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{formatDateTime(d.createdAt)}</p>
         </li>
       ))}
     </ul>

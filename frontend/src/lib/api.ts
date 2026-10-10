@@ -1,9 +1,10 @@
 import axios, { isAxiosError, type AxiosError, type InternalAxiosRequestConfig } from 'axios'
 import { toast } from 'sonner'
+import { apiBaseUrl } from './apiBase'
 import { tokenStore } from './tokenStore'
 
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api/v1',
+  baseURL: apiBaseUrl(import.meta.env.VITE_API_URL),
 })
 
 const SUSPENDED_MESSAGE = 'Your account has been suspended.'
