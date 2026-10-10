@@ -6,7 +6,7 @@ import { Pagination } from '../../components/ui/Pagination'
 import { Select } from '../../components/ui/Select'
 import { DISPUTE_STATUS_LABELS, useOwnerDisputes, type DisputeStatus } from '../../lib/disputes'
 import { errorMessage } from '../../lib/errors'
-import { stepBackIfEmpty } from '../../lib/usePaging'
+import { stepBackIfEmpty } from '../../lib/paging'
 
 export function OwnerDisputesPage() {
   const [status, setStatus] = useState<DisputeStatus | ''>('')

@@ -14,7 +14,7 @@ import { Dialog } from '../../components/ui/Dialog'
 import { TextArea } from '../../components/ui/TextArea'
 import { TextField } from '../../components/ui/TextField'
 import {
-  invalidateDisputes,
+  invalidateAdminDisputes,
   NOTES_MAX,
   resolveDispute,
   reviewDispute,
@@ -72,11 +72,11 @@ function ResolveForm({ dispute, onClose, onBusyChange }: { dispute: Dispute; onC
         notes: values.notes,
       })
       toast.success('Report resolved')
-      await invalidateDisputes(queryClient)
+      await invalidateAdminDisputes(queryClient)
       onClose()
     } catch (error) {
       setFormError(errorMessage(error))
-      if (toProblem(error).status === 409) await invalidateDisputes(queryClient)
+      if (toProblem(error).status === 409) await invalidateAdminDisputes(queryClient)
     } finally {
       onBusyChange(false)
     }
@@ -111,7 +111,7 @@ function ResolveForm({ dispute, onClose, onBusyChange }: { dispute: Dispute; onC
           {...register('amount')}
         />
       )}
-      <TextArea label="Notes" rows={4} hint="Kept in the audit record and shown to both sides." error={errors.notes?.message} {...register('notes')} />
+      <TextArea label="Notes" rows={4} hint="Kept in the admin record; not shown to the driver or owner." error={errors.notes?.message} {...register('notes')} />
       <div className="flex justify-end gap-2">
         <Button type="button" variant="secondary" disabled={isSubmitting} onClick={onClose}>Cancel</Button>
         <Button type="submit" loading={isSubmitting}>Resolve report</Button>
@@ -134,7 +134,7 @@ function Content({ dispute }: { dispute: Dispute }) {
     } catch (error) {
       toast.error(errorMessage(error))
     } finally {
-      await invalidateDisputes(queryClient)
+      await invalidateAdminDisputes(queryClient)
       setReviewing(false)
     }
   }

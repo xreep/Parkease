@@ -5,7 +5,7 @@ import { DisputeList } from '../../components/disputes/DisputeView'
 import { Pagination } from '../../components/ui/Pagination'
 import { useMyDisputes } from '../../lib/disputes'
 import { errorMessage } from '../../lib/errors'
-import { stepBackIfEmpty } from '../../lib/usePaging'
+import { stepBackIfEmpty } from '../../lib/paging'
 
 export function DisputesPage() {
   const [page, setPage] = useState(0)

@@ -99,18 +99,6 @@ Reserve signs you in. To book, add a vehicle under **My parking → Vehicles** (
 - **Owner dashboard:** **Overview** has a 7 / 30 / 90 day range, key figures (earnings, bookings, occupancy, rating, pending approvals), held / pending payout / paid balances, earnings and bookings charts and the next bookings. **Earnings** is the ledger with status and date filters and a **Download CSV** export. **Calendar** is a week grid of slots by day with bookings and blocked times (IST).
 - **Driver pages:** **Bookings** has Upcoming / Active / Past / Cancelled tabs (the tab is in the URL), **Payments** lists payments, refunds and receipts, and the **Overview** shows booking, spend and parking-hours stats with a prompt for bookings still waiting for a review.
 
-### Try it: admin panel, disputes and payouts (Phase 7)
-
-Sign in as an admin and open **Admin** (`/admin`):
-
-- **Overview:** platform KPIs (users, listings, bookings, conversion, utilization, GMV, revenue, refunds) for the last 7 / 30 / 90 days, daily charts, top states and cities, and the owner and listing review queues.
-- **Users, listings and reviews:** search users by role and status and suspend (with a reason) or activate them (admins and your own account cannot be suspended); suspend or reinstate approved listings; hide or unhide reviews, which removes them from public lists and ratings.
-- **Locations:** add and edit cities (coordinates, price tier, active) per state.
-- **Bookings:** search and filter every booking, open its payment, refunds, timeline and disputes, and cancel a booking for the driver (the dialog shows the refund that will be issued).
-- **Disputes:** drivers press **Report a problem** on a booking (up to 7 days after it ends); the owner answers once under **Owner dashboard → Disputes**; an admin takes it under review and resolves it with a full or partial refund, no refund or a warning.
-- **Payments and payouts:** payments and refunds tables (failed refunds can be retried), and owners' pending payouts with masked payout details; select earnings, enter the transfer reference and mark them paid (no money moves in ParkEase), or download the pending list as CSV. Owners see the reference on their earnings.
-- **Reports, settings and audit:** usage and revenue reports per city with CSV export; platform fee, GST, booking timing and per-tier hourly price guidelines (changes apply to new bookings only; owners see a non-blocking warning outside the range); an audit log of every admin action.
-
 #### Cancellation policy
 
 When a driver cancels a confirmed booking, the refund is a share of the **parking charge**; the platform fee and GST are not refunded. (A request the owner has not accepted yet is refunded in full, fee and GST included.) Each listing has one policy, shown on the listing page and at checkout.
@@ -122,6 +110,18 @@ When a driver cancels a confirmed booking, the refund is a share of the **parkin
 | Strict | n/a | Up to 48 hours before the start | Within 48 hours of the start |
 
 Owner cancellations and requests that expire or are declined always refund the driver in full.
+
+### Try it: admin panel, disputes and payouts (Phase 7)
+
+Sign in as an admin and open **Admin** (`/admin`):
+
+- **Overview:** platform KPIs (users, listings, bookings, conversion, utilization, GMV, revenue, refunds) for the last 7 / 30 / 90 days, daily charts, top states and cities, and the owner and listing review queues.
+- **Users, listings and reviews:** search users by role and status and suspend (with a reason) or activate them (admins and your own account cannot be suspended); suspend or reinstate approved listings; hide or unhide reviews, which removes them from public lists and ratings.
+- **Locations:** add and edit states, and add and edit cities (coordinates, price tier, active) per state.
+- **Bookings:** search and filter every booking, open its payment, refunds, timeline and disputes, and cancel a booking for the driver (the dialog shows the refund that will be issued).
+- **Disputes:** drivers press **Report a problem** on a booking (up to 7 days after it ends); the owner answers once under **Owner dashboard → Disputes**; an admin takes it under review and resolves it with a full or partial refund, no refund or a warning.
+- **Payments and payouts:** payments and refunds tables (failed refunds can be retried), and owners' pending payouts with masked payout details; select earnings, enter the transfer reference and mark them paid (no money moves in ParkEase), or download the pending list as CSV. Owners see the reference on their earnings.
+- **Reports, settings and audit:** usage and revenue reports per city with CSV export; platform fee, GST, booking timing and per-tier hourly price guidelines (changes apply to new bookings only; owners see a non-blocking warning outside the range); an audit log of every admin action.
 
 ### Payments
 

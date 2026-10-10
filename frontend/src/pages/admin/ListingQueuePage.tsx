@@ -9,7 +9,7 @@ import { useAdminListings, type AdminListingSummary } from '../../lib/admin'
 import { errorMessage } from '../../lib/errors'
 import { formatDateTime } from '../../lib/format'
 import type { ListingStatus } from '../../lib/owner'
-import { stepBackIfEmpty } from '../../lib/usePaging'
+import { stepBackIfEmpty } from '../../lib/paging'
 
 const FILTERS: { value: ListingStatus; label: string }[] = [
   { value: 'PENDING_REVIEW', label: 'Pending review' },

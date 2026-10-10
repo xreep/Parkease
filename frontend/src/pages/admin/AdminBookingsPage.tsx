@@ -14,7 +14,7 @@ import { BOOKING_STATUS_LABELS, type BookingStatus } from '../../lib/bookings'
 import { errorMessage } from '../../lib/errors'
 import { formatINR } from '../../lib/format'
 import { formatWindow } from '../../lib/time'
-import { stepBackIfEmpty, withPageReset } from '../../lib/usePaging'
+import { stepBackIfEmpty, withPageReset } from '../../lib/paging'
 
 const STATUSES = Object.keys(BOOKING_STATUS_LABELS) as BookingStatus[]
 

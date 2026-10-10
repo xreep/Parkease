@@ -8,9 +8,9 @@ import { Select } from '../../components/ui/Select'
 import { useAdminAudit, type AdminAction, type AuditFilters } from '../../lib/admin'
 import { errorMessage } from '../../lib/errors'
 import { formatDateTime } from '../../lib/format'
-import { stepBackIfEmpty } from '../../lib/usePaging'
+import { stepBackIfEmpty } from '../../lib/paging'
 
-const TARGET_TYPES = ['USER', 'OWNER', 'LISTING', 'REVIEW', 'STATE', 'CITY', 'BOOKING', 'DISPUTE', 'REFUND', 'PAYOUT', 'SETTINGS']
+const TARGET_TYPES = ['USER', 'OWNER', 'LISTING', 'REVIEW', 'STATE', 'CITY', 'BOOKING', 'DISPUTE', 'REFUND', 'SETTINGS']
 const label = (type: string) => type.charAt(0) + type.slice(1).toLowerCase()
 
 /** What the server records, so the filter can only ask for actions that exist. */

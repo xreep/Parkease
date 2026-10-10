@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { stepBackIfEmpty, withPageReset } from './usePaging'
+import { stepBackIfEmpty, withPageReset } from './paging'
 
 describe('stepBackIfEmpty', () => {
   it('steps back from an empty later page', () => {
