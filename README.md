@@ -6,7 +6,7 @@ ParkEase is a two-sided marketplace where private parking owners rent out unused
 
 It is the implementation of the Unified Mentor project **"Smart Parking Slot Rental & Availability Platform"** (project id 11778), plus a few additions agreed beyond the brief: real Razorpay test-mode payments with refunds, in-app and email notifications, reviews and ratings, and all-India location data.
 
-- **Live demo:** add the Vercel URL here once deployed (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)).
+- **Live demo:** https://parkease-orpin.vercel.app (API: https://parkease-api-pb1f.onrender.com — free tier, so the first request after a quiet spell can take up to a minute while it wakes). Demo logins: `admin@parkease.dev`, `owner@parkease.dev`, `driver@parkease.dev`; ask the project owner for the shared demo password.
 - **Design spec:** [docs/superpowers/specs/2026-10-04-smart-parking-design.md](docs/superpowers/specs/2026-10-04-smart-parking-design.md) (decisions per phase in sections 17 to 23)
 - **Architecture:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · **Project report:** [docs/PROJECT_REPORT.md](docs/PROJECT_REPORT.md)
 - **API docs:** Swagger UI at `http://localhost:8080/swagger-ui` while the backend runs.
