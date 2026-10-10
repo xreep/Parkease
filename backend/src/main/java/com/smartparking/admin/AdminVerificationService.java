@@ -38,7 +38,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-public class AdminReviewService {
+public class AdminVerificationService {
 
     private final OwnerProfileRepository ownerProfiles;
     private final OwnerProfileService ownerProfileService;

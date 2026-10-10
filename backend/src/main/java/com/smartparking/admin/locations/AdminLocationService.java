@@ -3,6 +3,7 @@ package com.smartparking.admin.locations;
 import com.smartparking.admin.audit.AdminAuditService;
 import com.smartparking.common.error.ApiException;
 import com.smartparking.common.security.AuthUser;
+import com.smartparking.common.util.SqlStates;
 import com.smartparking.common.web.PageResponse;
 import com.smartparking.listing.ParkingListingRepository;
 import com.smartparking.location.City;
@@ -16,6 +17,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
+import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -38,7 +41,8 @@ public class AdminLocationService {
 
     @Transactional(readOnly = true)
     public List<AdminStateDto> listStates() {
-        return states.findAllForAdmin();
+        return states.findAllWithTotalCityCounts().stream()
+                .map(t -> stateDto(t.getState(), t.getCityCount())).toList();
     }
 
     @Transactional
@@ -58,7 +62,7 @@ public class AdminLocationService {
         state.setSlug(slug);
         state.setType(request.type());
         state.setCapitalName(request.capitalName().trim());
-        states.saveAndFlush(state);
+        saveOrConflict(() -> states.saveAndFlush(state), slug);
         audit.record(admin, "STATE_CREATED", "STATE", state.getId(), "Created " + name + " (" + code + ")");
         return stateDto(state, 0);
     }
@@ -74,8 +78,7 @@ public class AdminLocationService {
                 throw slugTaken(slug);
             }
             changes.add("name: " + state.getName() + " -> " + name);
-            state.setName(name);
-            state.setSlug(slug);
+            state.setName(name); // the slug stays as it was: public URLs must not change when a name is edited
         }
         if (request.type() != null && request.type() != state.getType()) {
             changes.add("type: " + state.getType() + " -> " + request.type());
@@ -126,7 +129,7 @@ public class AdminLocationService {
         city.setCapital(Boolean.TRUE.equals(request.capital()));
         city.setTier(request.tier() == null ? 3 : request.tier().shortValue());
         city.setActive(request.active() == null || request.active());
-        cities.saveAndFlush(city);
+        saveOrConflict(() -> cities.saveAndFlush(city), slug);
         audit.record(admin, "CITY_CREATED", "CITY", city.getId(),
                 "Created " + name + " in " + state.getName() + " (tier " + city.getTier() + ")");
         return cityDto(city, 0);
@@ -143,8 +146,7 @@ public class AdminLocationService {
                 throw slugTaken(slug);
             }
             changes.add("name: " + city.getName() + " -> " + name);
-            city.setName(name);
-            city.setSlug(slug);
+            city.setName(name); // the slug stays as it was: public URLs must not change when a name is edited
         }
         if (request.lat() != null && request.lat() != city.getLat()) {
             changes.add("lat: " + city.getLat() + " -> " + request.lat());
@@ -199,6 +201,30 @@ public class AdminLocationService {
             throw ApiException.badRequest("VALIDATION_FAILED", "The name must contain letters or digits");
         }
         return slug;
+    }
+
+    /**
+     * Runs the insert; a unique-constraint violation (two admins creating the same place at once get past the
+     * existence checks together) becomes the same 409 the checks would have given.
+     */
+    private static void saveOrConflict(Runnable save, String slug) {
+        try {
+            save.run();
+        } catch (DataIntegrityViolationException e) {
+            if (!SqlStates.UNIQUE_VIOLATION.equals(SqlStates.of(e))) {
+                throw e;
+            }
+            String constraint = null;
+            for (Throwable t = e; t != null && constraint == null; t = t.getCause()) {
+                if (t instanceof ConstraintViolationException cve) {
+                    constraint = cve.getConstraintName();
+                }
+            }
+            if (constraint != null && constraint.contains("code")) {
+                throw ApiException.conflict("CODE_TAKEN", "A state or territory with this code already exists");
+            }
+            throw slugTaken(slug);
+        }
     }
 
     private static ApiException slugTaken(String slug) {

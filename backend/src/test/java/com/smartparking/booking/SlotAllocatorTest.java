@@ -81,7 +81,7 @@ class SlotAllocatorTest {
 
     private BookingDraft draft() {
         Quote quote = new Quote(PricingMode.HOURLY, 120, new BigDecimal("60.00"), new BigDecimal("6.00"),
-                new BigDecimal("1.08"), new BigDecimal("67.08"), "2 hours");
+                new BigDecimal("1.08"), new BigDecimal("67.08"), "2 hours", new BigDecimal("18.00"));
         return new BookingDraft(driver.getId(), listing.getId(), null, VehicleType.FOUR_WHEELER, "MH12AB1234",
                 start, end, quote);
     }

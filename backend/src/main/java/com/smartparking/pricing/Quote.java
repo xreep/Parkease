@@ -9,5 +9,6 @@ public record Quote(
         BigDecimal platformFee,
         BigDecimal gstAmount,
         BigDecimal totalAmount,
-        String breakdown) {
+        String breakdown,
+        BigDecimal gstPercent) {
 }

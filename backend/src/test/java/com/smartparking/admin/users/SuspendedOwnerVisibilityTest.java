@@ -54,6 +54,10 @@ class SuspendedOwnerVisibilityTest {
         em.clear();
     }
 
+    private static java.time.LocalDate tomorrowDay() {
+        return java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")).plusDays(1);
+    }
+
     private String window() {
         return "start=" + tomorrowAt(10) + "&end=" + tomorrowAt(12);
     }
@@ -61,6 +65,8 @@ class SuspendedOwnerVisibilityTest {
     @Test
     void visibleWhileTheOwnerIsActive() throws Exception {
         mvc.perform(get("/api/v1/listings/" + listingId)).andExpect(status().isOk());
+        mvc.perform(get("/api/v1/listings/" + listingId + "/availability?from=" + tomorrowDay() + "&to="
+                + tomorrowDay())).andExpect(status().isOk());
         mvc.perform(get("/api/v1/search?lat=" + LAT + "&lng=" + LNG))
                 .andExpect(jsonPath("$.content[*].id", hasItem(listingId.intValue())));
     }
@@ -76,6 +82,8 @@ class SuspendedOwnerVisibilityTest {
         mvc.perform(get("/api/v1/listings/" + listingId)).andExpect(status().isNotFound());
         mvc.perform(get("/api/v1/listings/" + listingId + "/quote?" + window())).andExpect(status().isNotFound());
         mvc.perform(get("/api/v1/listings/" + listingId + "/reviews")).andExpect(status().isNotFound());
+        mvc.perform(get("/api/v1/listings/" + listingId + "/availability?from=" + tomorrowDay() + "&to="
+                + tomorrowDay())).andExpect(status().isNotFound());
     }
 
     @Test
@@ -92,6 +100,8 @@ class SuspendedOwnerVisibilityTest {
         setOwnerStatus("ACTIVE");
         mvc.perform(get("/api/v1/listings/" + listingId)).andExpect(status().isOk());
         mvc.perform(get("/api/v1/listings/" + listingId + "/reviews")).andExpect(status().isOk());
+        mvc.perform(get("/api/v1/listings/" + listingId + "/availability?from=" + tomorrowDay() + "&to="
+                + tomorrowDay())).andExpect(status().isOk());
         mvc.perform(get("/api/v1/search?lat=" + LAT + "&lng=" + LNG))
                 .andExpect(jsonPath("$.content[*].id", hasItem(listingId.intValue())));
     }

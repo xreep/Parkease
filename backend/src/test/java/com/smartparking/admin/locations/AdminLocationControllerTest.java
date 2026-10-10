@@ -37,6 +37,7 @@ class AdminLocationControllerTest {
     @Autowired PasswordEncoder encoder;
     @Autowired CityRepository cities;
     @Autowired ParkingListingRepository listings;
+    @Autowired com.smartparking.owner.OwnerProfileRepository profilesRepo;
 
     String admin;
 
@@ -106,7 +107,7 @@ class AdminLocationControllerTest {
                 .andExpect(jsonPath("$.name").value("Test Land"));
         adminPatch("/api/v1/admin/states/" + id, "{\"name\":\"Testland\",\"type\":\"STATE\"}")
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value("Testland")).andExpect(jsonPath("$.slug").value("testland"))
+                .andExpect(jsonPath("$.name").value("Testland")).andExpect(jsonPath("$.slug").value("test-land"))
                 .andExpect(jsonPath("$.type").value("STATE"));
         assertThat(jdbc.queryForList("select action || ' ' || target_type || ' ' || target_id from admin_actions "
                 + "order by id", String.class))
@@ -233,7 +234,7 @@ class AdminLocationControllerTest {
                 .andExpect(jsonPath("$.lng").value(73.9)).andExpect(jsonPath("$.capital").value(true))
                 .andExpect(jsonPath("$.name").value("Pune")).andExpect(jsonPath("$.slug").value("pune"));
         adminPatch("/api/v1/admin/cities/" + pune, "{\"name\":\"Pune City\"}").andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value("Pune City")).andExpect(jsonPath("$.slug").value("pune-city"));
+                .andExpect(jsonPath("$.name").value("Pune City")).andExpect(jsonPath("$.slug").value("pune")); // stable
         adminPatch("/api/v1/admin/cities/" + pune, "{\"name\":\"Nagpur\"}")
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("SLUG_TAKEN"));
         adminPatch("/api/v1/admin/cities/" + pune, "{\"tier\":9}").andExpect(status().isBadRequest());
@@ -268,6 +269,28 @@ class AdminLocationControllerTest {
 
         adminPatch("/api/v1/admin/cities/" + pune, "{\"active\":true}").andExpect(status().isOk());
         mvc.perform(get("/api/v1/cities?q=Pune")).andExpect(jsonPath("$[*].slug", hasItem("pune")));
+    }
+
+    @Test
+    void newListingsCannotBeAddedToAnInactiveCityButGuidelinesStillWork() throws Exception {
+        long pune = cityId("pune");
+        String owner = com.smartparking.support.OwnerTestSupport.verifiedOwner(mvc, users,
+                profilesRepo, "loc-owner3@example.com");
+        Long existing = ListingTestSupport.createListing(mvc, owner, pune);
+        long nagpur = cityId("nagpur");
+        adminPatch("/api/v1/admin/cities/" + pune, "{\"active\":false}").andExpect(status().isOk());
+
+        mvc.perform(post("/api/v1/owner/listings").header(HttpHeaders.AUTHORIZATION, owner)
+                        .contentType(MediaType.APPLICATION_JSON).content(ListingTestSupport.basicsJson(pune, "New Spot")))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("CITY_INACTIVE"));
+        // an existing listing may keep editing its basics without moving; moving it into the city is refused
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(
+                                "/api/v1/owner/listings/" + existing).header(HttpHeaders.AUTHORIZATION, owner)
+                        .contentType(MediaType.APPLICATION_JSON).content(ListingTestSupport.basicsJson(pune, "Renamed")))
+                .andExpect(status().isOk());
+        jdbc.update("update cities set active = true where id = ?", nagpur);
+        mvc.perform(get("/api/v1/pricing-guidelines?cityId=" + pune).header(HttpHeaders.AUTHORIZATION, owner))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.tier").value(1));
     }
 
     @Test

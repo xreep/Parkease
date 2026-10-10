@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class AdminOwnerController {
 
-    private final AdminReviewService service;
+    private final AdminVerificationService service;
 
     @GetMapping("/queues")
     public QueueCountsDto queues() {
