@@ -119,19 +119,14 @@ export function PricingStep({ listing, onSaved }: StepProps) {
       <FormError message={formError} />
       <fieldset disabled={readOnly} className="space-y-6">
         <div className="grid gap-4 sm:grid-cols-3">
-          <TextField label="Price per hour (₹)" inputMode="decimal" autoComplete="off" error={errors.pricePerHour?.message} {...register('pricePerHour')} />
+          <TextField label="Price per hour (₹)" inputMode="decimal" autoComplete="off" hint={guideline ? `Usual range in ${listing.cityName}: ${range} per hour` : undefined} error={errors.pricePerHour?.message} {...register('pricePerHour')} />
           <TextField label="Price per day (₹, optional)" inputMode="decimal" autoComplete="off" error={errors.pricePerDay?.message} {...register('pricePerDay')} />
           <TextField label="Price per month (₹, optional)" inputMode="decimal" autoComplete="off" error={errors.pricePerMonth?.message} {...register('pricePerMonth')} />
         </div>
-        {guideline && (
-          <div className="-mt-3 space-y-2 text-sm">
-            <p className="text-slate-600 dark:text-slate-400">{`Usual range in ${listing.cityName}: ${range} per hour`}</p>
-            {outside && typed !== null && (
-              <p role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
-                {`${formatINR(typed)} is ${outside} the usual range for ${listing.cityName} (${range}). You can still save this price.`}
-              </p>
-            )}
-          </div>
+        {outside && typed !== null && (
+          <p role="status" className="-mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+            {`${formatINR(typed)} is ${outside} the usual range for ${listing.cityName} (${range}). You can still save this price.`}
+          </p>
         )}
 
         <fieldset className="space-y-2">

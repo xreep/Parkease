@@ -63,6 +63,15 @@ describe('admin audit log', () => {
     await waitFor(() => expect(calls().at(-1)!.params).toEqual({ page: 0, size: 20 }))
   })
 
+  it('offers the target types the server records (payouts are recorded against owners)', async () => {
+    mock.onGet('/admin/audit').reply(200, page([action(1)]))
+    renderApp('/admin/audit')
+    await screen.findByRole('table', { name: 'Audit log' })
+
+    expect(screen.getByRole('option', { name: 'Owner' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Payout' })).not.toBeInTheDocument()
+  })
+
   it('pages through the log', async () => {
     mock.onGet('/admin/audit').reply((config) => [200, page([action(config.params.page + 1)], 2, config.params.page)])
     const user = userEvent.setup()

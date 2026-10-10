@@ -152,6 +152,34 @@ describe('admin disputes', () => {
     expect(JSON.parse(mock.history.post[0].data)).toEqual({ resolution: 'REFUND_PARTIAL', amount: 120.5, notes: 'Part of it' })
   })
 
+  it('says the notes stay in the admin record', async () => {
+    mock.onGet('/admin/disputes/1').reply(200, dispute(1))
+    const u = userEvent.setup()
+    renderApp('/admin/disputes/1')
+    const dialog = await openResolve(u)
+
+    expect(dialog.getByText('Kept in the admin record; not shown to the driver or owner.')).toBeInTheDocument()
+  })
+
+  it('rejects a partial amount of zero or with three decimals', async () => {
+    mock.onGet('/admin/disputes/1').reply(200, dispute(1))
+    const u = userEvent.setup()
+    renderApp('/admin/disputes/1')
+    const dialog = await openResolve(u)
+    await u.click(dialog.getByLabelText('Partial refund'))
+    await u.type(dialog.getByLabelText('Notes'), 'Part')
+
+    await u.type(dialog.getByLabelText('Refund amount (₹)'), '0')
+    await u.click(dialog.getByRole('button', { name: 'Resolve report' }))
+    expect(await dialog.findByText('Enter an amount above ₹0, up to ₹300')).toBeInTheDocument()
+
+    await u.clear(dialog.getByLabelText('Refund amount (₹)'))
+    await u.type(dialog.getByLabelText('Refund amount (₹)'), '10.123')
+    await u.click(dialog.getByRole('button', { name: 'Resolve report' }))
+    expect(await dialog.findByText('Enter an amount above ₹0, up to ₹300')).toBeInTheDocument()
+    expect(mock.history.post).toHaveLength(0)
+  })
+
   it('requires notes and sends no amount for no-refund or warning', async () => {
     mock.onGet('/admin/disputes/1').reply(200, dispute(1))
     mock.onPost('/admin/disputes/1/resolve').reply(200, dispute(1))

@@ -159,4 +159,63 @@ describe('admin writes refresh the audit log and the numbers', () => {
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Nashik added'))
     expect(invalidated(['admin', 'audit'])).toBe(true)
   })
+
+  const dispute = (status: string) => ({
+    id: 1, bookingId: 91, bookingCode: 'PE-D1', listingTitle: 'L', category: 'NO_ACCESS', status, createdAt: '2026-10-06T08:00:00Z',
+    resolvedAt: null, description: 'The gate was locked', raisedByName: 'Rahul', ownerResponse: null, ownerRespondedAt: null,
+    resolution: null, resolutionAmount: null, adminNotes: null, refundableRemaining: 300,
+  })
+
+  it('after resolving a dispute, including the money views a refund touches', async () => {
+    mock.onGet('/admin/disputes/1').reply(200, dispute('UNDER_REVIEW'))
+    mock.onPost('/admin/disputes/1/resolve').reply(200, dispute('RESOLVED'))
+    const u = userEvent.setup()
+    renderApp('/admin/disputes/1', queryClient)
+    await u.click(await screen.findByRole('button', { name: 'Resolve' }))
+    const dialog = within(await screen.findByRole('dialog'))
+    await u.click(dialog.getByLabelText('No refund'))
+    await u.type(dialog.getByLabelText('Notes'), 'Fine')
+    await u.click(dialog.getByRole('button', { name: 'Resolve report' }))
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Report resolved'))
+    for (const key of ['audit', 'stats', 'payments', 'refunds', 'payouts', 'booking', 'bookings']) {
+      expect(invalidated(['admin', key]), key).toBe(true)
+    }
+  })
+
+  it('after taking a dispute under review', async () => {
+    mock.onGet('/admin/disputes/1').reply(200, dispute('OPEN'))
+    mock.onPost('/admin/disputes/1/review').reply(200, dispute('UNDER_REVIEW'))
+    const u = userEvent.setup()
+    renderApp('/admin/disputes/1', queryClient)
+    await u.click(await screen.findByRole('button', { name: 'Start review' }))
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Report is under review'))
+    expect(invalidated(['admin', 'audit'])).toBe(true)
+    expect(invalidated(['admin', 'refunds'])).toBe(true)
+  })
+
+  it('but a driver raising a report does not touch the admin views', async () => {
+    mock.onGet('/me').reply(200, { ...admin, role: 'DRIVER' })
+    mock.onGet('/bookings/91').reply(200, {
+      id: 91, bookingCode: 'PE-8KQ2M4', status: 'COMPLETED', listingId: 7, listingTitle: 'L', cityName: 'Pune', coverPhotoUrl: null,
+      startTime: '2026-10-05T04:30:00Z', endTime: '2026-10-05T06:30:00Z', vehicleType: 'FOUR_WHEELER', plateNumber: 'MH12AB1234',
+      totalAmount: 89, createdAt: '2026-10-04T08:00:00Z', address: 'A', lat: 18.5, lng: 73.8, slotLabel: 'A', pricingMode: 'HOURLY',
+      pricingBreakdown: 'x', baseAmount: 80, platformFee: 8, gstAmount: 1, refundAmount: 0, holdExpiresAt: null, approvalDeadline: null,
+      confirmedAt: null, cancelReason: null, cancelledBy: null, paymentStatus: 'CAPTURED', invoiceNumber: null, autoApprove: true,
+      ownerFirstName: 'P', events: [], reviewable: false, review: null, disputes: [], disputable: true,
+    })
+    mock.onPost('/bookings/91/disputes').reply(201, {})
+    const u = userEvent.setup()
+    renderApp('/driver/bookings/91', queryClient)
+    await u.click(await screen.findByRole('button', { name: 'Report a problem' }))
+    const dialog = within(await screen.findByRole('dialog'))
+    await u.type(dialog.getByLabelText('Describe the problem'), 'The gate was locked and nobody answered')
+    await u.click(dialog.getByRole('button', { name: 'Send report' }))
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Report sent'))
+    expect(invalidated(['disputes'])).toBe(true)
+    expect(invalidated(['admin', 'audit'])).toBe(false)
+    expect(invalidated(['admin', 'stats'])).toBe(false)
+  })
 })

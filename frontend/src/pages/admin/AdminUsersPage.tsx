@@ -25,7 +25,7 @@ import {
 } from '../../lib/adminManage'
 import { errorMessage } from '../../lib/errors'
 import { formatDateTime, plural } from '../../lib/format'
-import { stepBackIfEmpty, withPageReset } from '../../lib/usePaging'
+import { stepBackIfEmpty, withPageReset } from '../../lib/paging'
 
 const ROLE_LABELS: Record<UserRole, string> = { DRIVER: 'Driver', OWNER: 'Owner', ADMIN: 'Admin' }
 const ROLE_TONES = { DRIVER: 'sky', OWNER: 'amber', ADMIN: 'slate' } as const

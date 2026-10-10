@@ -27,7 +27,7 @@ import type { PaymentStatus } from '../../lib/bookings'
 import { PAYMENT_STATUS_LABELS } from '../../lib/driver'
 import { errorMessage } from '../../lib/errors'
 import { formatDateTime, formatINR } from '../../lib/format'
-import { stepBackIfEmpty, withPageReset } from '../../lib/usePaging'
+import { stepBackIfEmpty, withPageReset } from '../../lib/paging'
 
 type View = 'payments' | 'refunds'
 const TABS: { value: View; label: string }[] = [

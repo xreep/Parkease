@@ -12,7 +12,7 @@ import { errorMessage } from '../../lib/errors'
 import { DOCUMENT_TYPE_LABELS, formatDateTime } from '../../lib/format'
 import { openInNewTab } from '../../lib/openDocument'
 import type { VerificationStatus } from '../../lib/owner'
-import { stepBackIfEmpty } from '../../lib/usePaging'
+import { stepBackIfEmpty } from '../../lib/paging'
 
 const FILTERS: { value: VerificationStatus; label: string }[] = [
   { value: 'PENDING', label: 'Pending' },

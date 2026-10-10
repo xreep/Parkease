@@ -14,7 +14,7 @@ import { Badge } from '../../components/ui/StatusBadge'
 import { invalidateAdminActivity } from '../../lib/admin'
 import { adminErrorMessage, hideReview, unhideReview, useAdminReviews, type AdminReview, type ReviewFilters } from '../../lib/adminManage'
 import { errorMessage } from '../../lib/errors'
-import { stepBackIfEmpty } from '../../lib/usePaging'
+import { stepBackIfEmpty } from '../../lib/paging'
 
 type Show = 'all' | 'visible' | 'hidden'
 const HIDDEN: Record<Show, boolean | undefined> = { all: undefined, visible: false, hidden: true }
