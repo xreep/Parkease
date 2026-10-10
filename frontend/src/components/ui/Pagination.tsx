@@ -8,7 +8,7 @@ export function Pagination({ page, totalPages, onChange }: PaginationProps) {
   return (
     <div className="flex items-center justify-between gap-3">
       <Button type="button" variant="secondary" disabled={page === 0} onClick={() => onChange(page - 1)}>Previous</Button>
-      <p className="text-sm text-slate-500">{`Page ${page + 1} of ${totalPages}`}</p>
+      <p className="text-sm text-slate-500 dark:text-slate-400">{`Page ${page + 1} of ${totalPages}`}</p>
       <Button type="button" variant="secondary" disabled={page + 1 >= totalPages} onClick={() => onChange(page + 1)}>Next</Button>
     </div>
   )

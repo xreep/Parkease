@@ -15,6 +15,7 @@ import { invalidateAdminActivity } from '../../lib/admin'
 import { adminErrorMessage, hideReview, unhideReview, useAdminReviews, type AdminReview, type ReviewFilters } from '../../lib/adminManage'
 import { errorMessage } from '../../lib/errors'
 import { stepBackIfEmpty } from '../../lib/paging'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 type Show = 'all' | 'visible' | 'hidden'
 const HIDDEN: Record<Show, boolean | undefined> = { all: undefined, visible: false, hidden: true }
@@ -50,6 +51,7 @@ function ReviewActions({ review, onHide, onChanged }: { review: AdminReview; onH
 }
 
 export function AdminReviewsPage() {
+  usePageTitle('Admin · Reviews')
   const queryClient = useQueryClient()
   const [show, setShow] = useState<Show>('all')
   const [q, setQ] = useState('')
@@ -123,7 +125,7 @@ export function AdminReviewsPage() {
                       {review.hidden && <Badge tone="red">Hidden</Badge>}
                     </span>
                     <span className="block text-sm font-normal text-slate-600 dark:text-slate-400">{review.listingTitle}</span>
-                    <span className="block font-mono text-xs font-normal text-slate-500">{review.bookingCode}</span>
+                    <span className="block font-mono text-xs font-normal text-slate-500 dark:text-slate-400">{review.bookingCode}</span>
                   </>
                 }
                 extra={<ReviewActions review={review} onHide={() => setHiding(review)} onChanged={refresh} />}

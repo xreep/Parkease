@@ -46,4 +46,10 @@ class ErrorTestController {
     void boom() {
         throw new IllegalStateException("secret internals");
     }
+
+    @GetMapping("/sql")
+    void sql() {
+        throw new org.springframework.jdbc.UncategorizedSQLException("StatementCallback",
+                "select * from users where email = 'a@b.c'", new java.sql.SQLException("relation \"users\" does not exist"));
+    }
 }

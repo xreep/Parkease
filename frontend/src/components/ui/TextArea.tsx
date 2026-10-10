@@ -19,7 +19,7 @@ export function TextArea({ label, error, hint, id, className, rows = 4, ...props
         aria-describedby={error || hint ? messageId : undefined}
         className={clsx(
           'block w-full rounded-lg border bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition',
-          'placeholder:text-slate-400 focus:ring-2 dark:bg-slate-900',
+          'placeholder:text-slate-500 focus:ring-2 dark:bg-slate-900 dark:placeholder:text-slate-400',
           error
             ? 'border-red-500 focus:ring-red-500/30'
             : 'border-slate-300 focus:border-brand-500 focus:ring-brand-500/30 dark:border-slate-700',
@@ -29,7 +29,7 @@ export function TextArea({ label, error, hint, id, className, rows = 4, ...props
       {error ? (
         <p id={messageId} className="text-sm text-red-600 dark:text-red-400">{error}</p>
       ) : hint ? (
-        <p id={messageId} className="text-xs text-slate-500">{hint}</p>
+        <p id={messageId} className="text-xs text-slate-500 dark:text-slate-400">{hint}</p>
       ) : null}
     </div>
   )

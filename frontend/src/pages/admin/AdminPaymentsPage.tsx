@@ -28,6 +28,7 @@ import { PAYMENT_STATUS_LABELS } from '../../lib/driver'
 import { errorMessage } from '../../lib/errors'
 import { formatDateTime, formatINR } from '../../lib/format'
 import { stepBackIfEmpty, withPageReset } from '../../lib/paging'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 type View = 'payments' | 'refunds'
 const TABS: { value: View; label: string }[] = [
@@ -90,7 +91,7 @@ function PaymentsView() {
                     <td className="break-all px-3 py-2">{p.driverEmail}</td>
                     <td className="px-3 py-2">
                       <p>{p.provider === 'RAZORPAY' ? 'Razorpay' : 'Mock'}</p>
-                      <p className="break-all font-mono text-xs text-slate-500">{p.providerPaymentId ?? p.providerOrderId}</p>
+                      <p className="break-all font-mono text-xs text-slate-500 dark:text-slate-400">{p.providerPaymentId ?? p.providerOrderId}</p>
                     </td>
                     <td className="px-3 py-2"><StatusBadge kind="payment" status={p.status} /></td>
                     <td className="px-3 py-2 text-right tabular-nums">{formatINR(p.amount)}</td>
@@ -213,6 +214,7 @@ function RefundsView() {
 }
 
 export function AdminPaymentsPage() {
+  usePageTitle('Admin · Payments')
   const [view, setView] = useState<View>('payments')
   return (
     <div className="space-y-6">

@@ -331,6 +331,49 @@ class BookingJobsTest {
     }
 
     @Test
+    void anAutoRejectionWhoseRefundNeedsARetryStillTellsTheDriverOnce() throws Exception {
+        long overdue = paidAwaitingApproval(10);
+        clock.advance(Duration.ofHours(2).plusSeconds(1));
+        provider.failures.set(1);
+
+        jobs.autoRejectOverdue();
+
+        assertThat(refund(overdue)).containsEntry("status", "FAILED");
+        assertThat(emails.sentTo(DRIVER_EMAIL)).extracting(EmailMessage::subject)
+                .containsExactly("Booking request expired – ParkEase");
+
+        long refundId = jdbc.queryForObject("select r.id from refunds r join payments p on p.id = r.payment_id "
+                + "where p.booking_id = ?", Long.class, overdue);
+        assertThat(refundService.retry(refundId)).isTrue();
+
+        assertThat(refund(overdue)).containsEntry("status", "PROCESSED");
+        // The rejection mail already said "a full refund is on its way": the retry succeeding adds neither a second
+        // email nor a second in-app notification.
+        assertThat(emails.sentTo(DRIVER_EMAIL)).hasSize(1);
+        assertThat(driverNotificationTypes()).containsExactly("BOOKING_EXPIRED_REQUEST");
+    }
+
+    @Test
+    void anAutoRejectionWithASettlingRefundIsAnnouncedOnceAndOnlyOnce() throws Exception {
+        long overdue = paidAwaitingApproval(10);
+        clock.advance(Duration.ofHours(2).plusSeconds(1));
+        provider.pendingRefunds = true;
+
+        jobs.autoRejectOverdue();
+
+        assertThat(refund(overdue)).containsEntry("status", "PENDING");
+        assertThat(emails.sentTo(DRIVER_EMAIL)).hasSize(1);
+        assertThat(emails.lastTo(DRIVER_EMAIL).textBody()).contains("A full refund of ₹67.08 is on its way");
+        assertThat(driverNotificationTypes()).containsExactly("BOOKING_EXPIRED_REQUEST");
+    }
+
+    private List<String> driverNotificationTypes() {
+        return jdbc.queryForList("select n.type from notifications n join users u on u.id = n.user_id "
+                + "where u.email = ? and n.type in ('BOOKING_EXPIRED_REQUEST', 'BOOKING_DECLINED', "
+                + "'BOOKING_REFUNDED') order by n.id", String.class, DRIVER_EMAIL);
+    }
+
+    @Test
     void autoRejectOverdueOnlyTouchesTheOverdueOne() throws Exception {
         long first = paidAwaitingApproval(10);
         long second = hold(14);

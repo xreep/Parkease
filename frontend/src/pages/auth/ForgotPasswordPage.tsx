@@ -9,11 +9,13 @@ import { Button } from '../../components/ui/Button'
 import { TextField } from '../../components/ui/TextField'
 import { api } from '../../lib/api'
 import { errorMessage } from '../../lib/errors'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const schema = z.object({ email: z.email('Enter a valid email') })
 type FormValues = z.infer<typeof schema>
 
 export function ForgotPasswordPage() {
+  usePageTitle('Forgot your password?')
   const [sent, setSent] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormValues>({ resolver: zodResolver(schema) })

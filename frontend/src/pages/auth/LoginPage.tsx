@@ -10,6 +10,7 @@ import { TextField } from '../../components/ui/TextField'
 import { useAuth } from '../../auth/AuthProvider'
 import { homeFor } from '../../auth/types'
 import { errorMessage } from '../../lib/errors'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const schema = z.object({
   email: z.email('Enter a valid email'),
@@ -23,6 +24,7 @@ function safeNext(next: string | null): string | null {
 }
 
 export function LoginPage() {
+  usePageTitle('Log in')
   const { login } = useAuth()
   const navigate = useNavigate()
   const [params] = useSearchParams()
@@ -55,7 +57,7 @@ export function LoginPage() {
         </div>
         <Button type="submit" loading={isSubmitting} className="w-full">Log in</Button>
       </form>
-      <p className="mt-6 text-center text-sm text-slate-500">
+      <p className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
         New to ParkEase?{' '}
         <Link to="/register" className="font-semibold text-brand-700 hover:underline dark:text-brand-400">Create an account</Link>
       </p>

@@ -33,6 +33,7 @@ import com.smartparking.support.RecordingEmailSender;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
@@ -277,7 +278,8 @@ class LifecycleJobsTest {
     @Test
     void approvalDeadlineIsCappedAtTheStartForABookingStartingSoon() throws Exception {
         manualApproval();
-        Instant start = Instant.now().plus(Duration.ofMinutes(30));
+        // Postgres keeps microseconds; Linux clocks have nanoseconds.
+        Instant start = Instant.now().plus(Duration.ofMinutes(30)).truncatedTo(ChronoUnit.MICROS);
         long id = hold(tomorrowAt(10));
         jdbc.update("update bookings set start_time = ?, end_time = ? where id = ?", Timestamp.from(start),
                 Timestamp.from(start.plusSeconds(7200)), id);
@@ -300,7 +302,8 @@ class LifecycleJobsTest {
     @Test
     void requestStillUnansweredAtItsStartIsRejectedForTheStartReason() throws Exception {
         manualApproval();
-        Instant start = Instant.now().plus(Duration.ofMinutes(30));
+        // Postgres keeps microseconds; Linux clocks have nanoseconds.
+        Instant start = Instant.now().plus(Duration.ofMinutes(30)).truncatedTo(ChronoUnit.MICROS);
         long id = hold(tomorrowAt(10));
         jdbc.update("update bookings set start_time = ?, end_time = ? where id = ?", Timestamp.from(start),
                 Timestamp.from(start.plusSeconds(7200)), id);

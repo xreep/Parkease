@@ -19,7 +19,8 @@ export type ReviewSummaryDto = {
   distribution: Record<'1' | '2' | '3' | '4' | '5', number>
 }
 
-export type ListingReviewsDto = { summary: ReviewSummaryDto; reviews: Page<ReviewDto> }
+/** `summary` comes with page 0 only; later pages carry null. */
+export type ListingReviewsDto = { summary: ReviewSummaryDto | null; reviews: Page<ReviewDto> }
 /** `hidden`: ParkEase hid it; it no longer counts towards the rating. */
 export type OwnerReviewDto = ReviewDto & { listingId: number; listingTitle: string; bookingCode: string; hidden?: boolean }
 
@@ -37,7 +38,7 @@ export const listOwnerReviews = async (listingId: number | undefined, page = 0, 
 export const replyToReview = async (id: number, reply: string) =>
   (await api.post<ReviewDto>(`/owner/reviews/${id}/reply`, { reply })).data
 
-/** A listing's reviews, a page at a time ("Show more" appends); the summary comes with every page. */
+/** A listing's reviews, a page at a time ("Show more" appends); the summary comes with the first page. */
 export function useListingReviews(listingId: number | string) {
   return useInfiniteQuery({
     queryKey: ['reviews', 'listing', String(listingId)],

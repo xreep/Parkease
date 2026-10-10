@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch or pull request makes the older run pointless.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      # The official image ships the contrib extensions; the migrations create btree_gist (booking overlap constraint).
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: smartparking_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d smartparking_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      # Read by backend/src/test/resources/application-test.yml.
+      TEST_DB_URL: jdbc:postgresql://localhost:5432/smartparking_test
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      # Many Spring contexts share one small database; keep each one's pool small.
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: '5'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Run tests
+        run: ./mvnw -B -ntp test
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-reports
+          path: backend/target/surefire-reports
+          retention-days: 7
+
+  frontend:
+    name: Frontend lint, types, tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Type check
+        run: npx tsc -b
+      - name: Tests
+        run: npm test -- --run
+      - name: Build
+        run: npm run build
+
+  # A report, not a gate: advisories appear in the log without failing the run.
+  audit:
+    name: Dependency audit (non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: npm audit (production dependencies, high and above)
+        working-directory: frontend
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=high
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Outdated Maven dependencies and plugins
+        working-directory: backend
+        continue-on-error: true
+        run: ./mvnw -B -ntp versions:display-dependency-updates versions:display-plugin-updates

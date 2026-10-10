@@ -253,7 +253,7 @@ export function SlotManager({ listingId, slots, readOnly = false }: Props) {
       </p>
 
       {slots.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:border-slate-700">
+        <p className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:text-slate-400 dark:border-slate-700">
           Add the individual bays drivers can book.
         </p>
       ) : (
@@ -262,7 +262,7 @@ export function SlotManager({ listingId, slots, readOnly = false }: Props) {
             <li key={slot.id} aria-label={`Slot ${slot.label}`} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{slot.label}</p>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
                   {VEHICLE_TYPE_LABELS[slot.vehicleType]} · {SLOT_SIZE_LABELS[slot.size]}
                 </p>
               </div>

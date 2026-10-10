@@ -1,0 +1,66 @@
+# Render Blueprint: the ParkEase API as a Docker web service on the free plan.
+# Secrets are never stored here: every `sync: false` key is entered once in the Render dashboard when the blueprint is
+# first applied (docs/DEPLOYMENT.md lists what to put in each). The database lives on Neon, the frontend on Vercel.
+services:
+  - type: web
+    name: parkease-api
+    runtime: docker
+    plan: free
+    region: singapore          # closest to India; keep Neon in a nearby region too (ap-southeast-1)
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    # Liveness only: static answer, no database access (so the check never wakes a suspended Neon database).
+    # /actuator/health also checks the database; use it by hand as a readiness check.
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+    envVars:
+      # Hosted demo: production hardening plus the seeded demo accounts, listings and bookings.
+      # Remove ",demo" (and DEMO_PASSWORD) for a deployment without sample data.
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod,demo
+      # Render sets PORT itself (10000); the app listens on it.
+      # Optional: INTERNAL_PROXIES (regex of proxy addresses whose X-Forwarded-For is believed), see docs/DEPLOYMENT.md.
+
+      # --- Database (Neon). DB_URL = jdbc:postgresql://<host>/<db>?sslmode=require ---
+      - key: DB_URL
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+
+      # --- Security ---
+      - key: JWT_SECRET            # openssl rand -base64 48
+        sync: false
+      - key: DEMO_PASSWORD         # shared password of every seeded demo account (required by the demo profile)
+        sync: false
+
+      # --- URLs ---
+      - key: FRONTEND_URL          # exact https origin of the Vercel site; also the only allowed CORS origin
+        sync: false
+      - key: PUBLIC_BASE_URL       # this service's own https URL (links to locally stored files)
+        sync: false
+
+      # --- Payments (Razorpay TEST keys for a demo) ---
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+
+      # --- File storage (Cloudinary). Without it uploads land on Render's ephemeral disk and vanish on restart. ---
+      - key: CLOUDINARY_URL
+        sync: false
+
+      # --- E-mail (optional; any SMTP, e.g. Brevo). Leave MAIL_HOST empty to only log e-mails. ---
+      - key: MAIL_HOST
+        sync: false
+      - key: MAIL_PORT             # Render's free plan blocks outbound 25/465/587; Brevo also listens on 2525
+        value: "2525"
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_FROM
+        sync: false

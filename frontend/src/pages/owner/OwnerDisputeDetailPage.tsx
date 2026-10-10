@@ -13,6 +13,7 @@ import { Button } from '../../components/ui/Button'
 import { TextArea } from '../../components/ui/TextArea'
 import { invalidateDisputes, respondToDispute, RESPONSE_MAX, useOwnerDispute, type Dispute } from '../../lib/disputes'
 import { errorMessage, toProblem } from '../../lib/errors'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const schema = z.object({
   response: z.string().trim().min(1, 'Write your response').max(RESPONSE_MAX, `Use at most ${RESPONSE_MAX} characters`),
@@ -64,6 +65,7 @@ function ResponseSection({ dispute }: { dispute: Dispute }) {
 export function OwnerDisputeDetailPage() {
   const { id } = useParams()
   const query = useOwnerDispute(parseId(id))
+  usePageTitle(query.data ? `Dispute on ${query.data.bookingCode}` : 'Dispute details')
   return (
     <div className="space-y-4">
       <Link to="/owner/disputes" className="text-sm font-medium text-brand-700 hover:underline dark:text-brand-400">← Disputes</Link>

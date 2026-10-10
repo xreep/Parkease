@@ -1,0 +1,49 @@
+# owner|stateSlug|citySlug|title|address|pincode|lat|lng|type|hour|day|month|2W|4W|24x7|amenities|photo|policy|autoApprove|status|note
+# owner: "demo" is owner@parkease.dev, o01..o20 are the extra verified owners of DemoActivitySeeder.
+# status: APPROVED, PENDING_REVIEW, REJECTED, PAUSED or SUSPENDED; note is the rejection or suspension reason.
+demo|maharashtra|mumbai|Powai Hiranandani Mall Parking|Hiranandani Gardens, Powai, Mumbai|400076|19.1176|72.9060|COMMERCIAL|70|450|8000|10|14|false|COVERED;CCTV;SECURITY_GUARD;EV_CHARGING|4|STRICT|true|APPROVED|
+demo|maharashtra|mumbai|Bandra West Society Parking|Hill Road, Bandra West, Mumbai|400050|19.0544|72.8302|RESIDENTIAL|60|380|7000|6|6|false|CCTV;WELL_LIT|5|FLEXIBLE|false|APPROVED|
+demo|maharashtra|pune|Koregaon Park Garage|Lane 5, North Main Road, Koregaon Park, Pune|411001|18.5362|73.8939|COMMERCIAL|35|220|4000|8|8|false|COVERED;CCTV|6|MODERATE|false|APPROVED|
+o01|delhi|new-delhi|Connaught Place Inner Circle Parking|N Block, Connaught Place, New Delhi|110001|28.6315|77.2167|COMMERCIAL|80|500|9000|10|14|true|COVERED;CCTV;SECURITY_GUARD|1|MODERATE|true|APPROVED|
+o01|delhi|new-delhi|Nehru Place Tech Hub Parking|Nehru Place, New Delhi|110019|28.5491|77.2518|OFFICE|50|320|5500|12|12|false|CCTV;COVERED|2|FLEXIBLE|false|APPROVED|
+o02|karnataka|bengaluru|Indiranagar 100ft Road Parking|100 Feet Road, Indiranagar, Bengaluru|560038|12.9784|77.6408|COMMERCIAL|45|280|5000|8|10|false|CCTV;WELL_LIT|3|STRICT|false|APPROVED|
+o02|karnataka|bengaluru|Koramangala Forum Parking|Hosur Road, Koramangala, Bengaluru|560095|12.9352|77.6245|COMMERCIAL|50|300|5200|6|12|false|COVERED;CCTV;EV_CHARGING|4|MODERATE|false|APPROVED|
+o03|maharashtra|mumbai|Dadar Station West Parking|Station Road, Dadar West, Mumbai|400028|19.0178|72.8434|METRO|55|350|6500|12|8|true|CCTV;SECURITY_GUARD;WELL_LIT|5|FLEXIBLE|true|APPROVED|
+o03|maharashtra|mumbai|Lower Parel Corporate Park|Senapati Bapat Marg, Lower Parel, Mumbai|400013|19.0010|72.8300|OFFICE|90|550|10000|8|12|false|COVERED;CCTV;EV_CHARGING;SECURITY_GUARD|6|STRICT|false|APPROVED|
+o04|tamil-nadu|chennai|T Nagar Pondy Bazaar Parking|Pondy Bazaar, T Nagar, Chennai|600017|13.0418|80.2341|COMMERCIAL|35|220|4000|8|10|false|CCTV;WELL_LIT|1|MODERATE|false|APPROVED|
+o04|tamil-nadu|chennai|OMR Tidel Park Parking|Rajiv Gandhi Salai, Taramani, Chennai|600113|12.9901|80.2490|OFFICE|40|250|4500|12|10|false|COVERED;CCTV;EV_CHARGING|2|FLEXIBLE|true|APPROVED|
+o05|west-bengal|kolkata|Park Street Heritage Parking|Park Street, Kolkata|700016|22.5535|88.3516|COMMERCIAL|40|250|4500|4|10|false|CCTV;WELL_LIT|3|MODERATE|false|APPROVED|
+o05|west-bengal|kolkata|Salt Lake Sector V Parking|Sector V, Salt Lake, Kolkata|700091|22.5726|88.4303|OFFICE|35|220|4000|10|12|false|COVERED;CCTV|4|STRICT|false|PENDING_REVIEW|
+o06|telangana|hyderabad|HITEC City Cyber Towers Parking|Madhapur, HITEC City, Hyderabad|500081|17.4435|78.3772|OFFICE|45|280|5000|12|14|false|COVERED;CCTV;EV_CHARGING;SECURITY_GUARD|5|MODERATE|true|APPROVED|
+o06|telangana|hyderabad|Banjara Hills Road 12 Parking|Road No 12, Banjara Hills, Hyderabad|500034|17.4126|78.4482|COMMERCIAL|50|300|5500|6|8|false|CCTV;WELL_LIT|6|FLEXIBLE|false|APPROVED|
+o07|maharashtra|pune|Magarpatta City Parking|Magarpatta City, Hadapsar, Pune|411013|18.5146|73.9298|OFFICE|30|190|3400|10|12|false|COVERED;CCTV;SECURITY_GUARD|1|FLEXIBLE|false|APPROVED|
+o07|maharashtra|pune|Shivajinagar Station Parking|Near Shivajinagar Station, Pune|411005|18.5308|73.8475|METRO|25|160|2800|10|8|true|CCTV;WELL_LIT|2|MODERATE|true|APPROVED|
+o08|gujarat|ahmedabad|Law Garden Night Market Parking|Law Garden, Ellisbridge, Ahmedabad|380006|23.0276|72.5580|COMMERCIAL|25|160|2800|6|8|false|WELL_LIT;CCTV|3|MODERATE|true|APPROVED|
+o08|gujarat|ahmedabad|Prahlad Nagar Corporate Road Parking|Corporate Road, Prahlad Nagar, Ahmedabad|380015|23.0120|72.5108|OFFICE|30|200|3500|8|10|false|COVERED;CCTV;EV_CHARGING|4|STRICT|false|PENDING_REVIEW|
+o09|kerala|kochi|MG Road Kochi Metro Parking|MG Road near Maharaja's Metro Station, Kochi|682016|9.9816|76.2999|METRO|30|190|3400|6|8|true|CCTV;SECURITY_GUARD|5|FLEXIBLE|true|APPROVED|
+o09|kerala|thiruvananthapuram|Kowdiar Palace Road Parking|Palace Road, Kowdiar, Thiruvananthapuram|695003|8.5170|76.9610|COMMERCIAL|25|150|2600|4|8|false|CCTV;WELL_LIT|6|MODERATE|true|APPROVED|
+o10|rajasthan|jaipur|MI Road Pink City Parking|MI Road near Panch Batti, Jaipur|302001|26.9157|75.8010|COMMERCIAL|30|190|3300|6|10|false|CCTV;WELL_LIT|1|FLEXIBLE|true|APPROVED|
+o10|rajasthan|jaipur|Malviya Nagar Mall Parking|Gaurav Tower, Malviya Nagar, Jaipur|302017|26.8530|75.8070|COMMERCIAL|25|160|2800|6|10|false|COVERED;CCTV|2|MODERATE|false|PAUSED|
+o11|gujarat|surat|VR Mall Dumas Road Parking|Dumas Road, Surat|395007|21.1450|72.7640|COMMERCIAL|25|160|2800|6|12|false|COVERED;CCTV;SECURITY_GUARD|3|MODERATE|true|APPROVED|
+o11|gujarat|vadodara|Alkapuri Circle Parking|Alkapuri, Vadodara|390007|22.3110|73.1700|COMMERCIAL|20|130|2300|4|8|false|CCTV|4|MODERATE|true|APPROVED|
+o12|chandigarh|chandigarh|Sector 17 Plaza Parking|Sector 17 Plaza, Chandigarh|160017|30.7410|76.7830|COMMERCIAL|40|250|4400|6|12|true|CCTV;SECURITY_GUARD;WELL_LIT|5|MODERATE|true|APPROVED|
+o12|haryana|gurugram|Sohna Road Business Park Parking|Sohna Road, Sector 49, Gurugram|122018|28.4110|77.0420|OFFICE|40|260|4600|8|10|false|COVERED;CCTV;EV_CHARGING|6|STRICT|false|SUSPENDED|Repeated access complaints from drivers
+o13|uttar-pradesh|lucknow|Hazratganj Crossing Parking|Hazratganj, Lucknow|226001|26.8500|80.9390|COMMERCIAL|25|160|2800|6|10|false|CCTV;WELL_LIT|1|FLEXIBLE|false|APPROVED|
+o13|uttar-pradesh|noida|Sector 18 Atta Market Parking|Sector 18, Noida|201301|28.5700|77.3260|COMMERCIAL|30|190|3300|8|10|false|CCTV;SECURITY_GUARD|2|MODERATE|true|APPROVED|
+o14|maharashtra|nagpur|Dharampeth Residency Parking|Dharampeth, Nagpur|440010|21.1380|79.0630|RESIDENTIAL|20|120|2100|4|6|false|CCTV|3|MODERATE|false|APPROVED|
+o14|maharashtra|nashik|College Road Parking|College Road, Nashik|422005|20.0094|73.7584|COMMERCIAL|20|130|2200|4|8|false|WELL_LIT|4|FLEXIBLE|true|APPROVED|
+o14|maharashtra|thane|Viviana Mall Parking|Eastern Express Highway, Thane|400601|19.2080|72.9710|COMMERCIAL|40|260|4600|6|12|false|COVERED;CCTV;SECURITY_GUARD|5|MODERATE|true|APPROVED|
+o15|tamil-nadu|coimbatore|RS Puram Parking|DB Road, RS Puram, Coimbatore|641002|11.0060|76.9500|COMMERCIAL|25|160|2800|6|8|false|CCTV;WELL_LIT|6|MODERATE|true|APPROVED|
+o15|tamil-nadu|madurai|Meenakshi Temple West Gate Parking|West Tower Street, Madurai|625001|9.9195|78.1190|COMMERCIAL|20|120|2000|6|8|true|CCTV;SECURITY_GUARD|1|FLEXIBLE|true|APPROVED|
+o16|madhya-pradesh|indore|Vijay Nagar Square Parking|Vijay Nagar, Indore|452010|22.7530|75.8940|COMMERCIAL|25|160|2800|6|10|false|CCTV;COVERED|2|MODERATE|false|APPROVED|
+o16|madhya-pradesh|bhopal|New Market TT Nagar Parking|TT Nagar, Bhopal|462003|23.2330|77.3980|COMMERCIAL|20|130|2200|4|8|false|CCTV|3|MODERATE|true|APPROVED|
+o17|bihar|patna|Boring Road Crossing Parking|Boring Road, Patna|800001|25.6140|85.1130|COMMERCIAL|20|130|2200|4|8|false|WELL_LIT|4|FLEXIBLE|true|APPROVED|
+o17|odisha|bhubaneswar|Jaydev Vihar Square Parking|Jaydev Vihar, Bhubaneswar|751013|20.3010|85.8190|COMMERCIAL|20|130|2200|4|8|false|CCTV;WELL_LIT|5|MODERATE|false|APPROVED|
+o17|assam|guwahati|GS Road Crossing Parking|GS Road, Guwahati|781005|26.1530|91.7860|COMMERCIAL|25|160|2800|6|8|false|CCTV|6|MODERATE|true|APPROVED|
+o18|delhi|new-delhi|Saket Select Citywalk Parking|Saket District Centre, New Delhi|110017|28.5280|77.2190|COMMERCIAL|70|450|8000|10|16|false|COVERED;CCTV;EV_CHARGING;SECURITY_GUARD|1|MODERATE|false|APPROVED|
+o18|delhi|new-delhi|Karol Bagh Market Parking|Ajmal Khan Road, Karol Bagh, New Delhi|110005|28.6520|77.1900|COMMERCIAL|40|260|4600|6|8|false|CCTV;WELL_LIT|2|STRICT|false|REJECTED|The photos do not show the entrance. Please add a clear picture of the gate and the slots.
+o19|karnataka|bengaluru|Electronic City Phase 1 Parking|Hosur Road, Electronic City Phase 1, Bengaluru|560100|12.8456|77.6603|OFFICE|30|190|3400|14|12|false|COVERED;CCTV;EV_CHARGING|3|MODERATE|true|APPROVED|
+o19|maharashtra|mumbai|Churchgate Station Parking|Veer Nariman Road, Churchgate, Mumbai|400020|18.9322|72.8264|METRO|75|480|8500|6|8|true|CCTV;SECURITY_GUARD;WELL_LIT|4|FLEXIBLE|true|APPROVED|
+o20|telangana|hyderabad|Secunderabad Station Parking|Station Road, Secunderabad, Hyderabad|500003|17.4344|78.5013|METRO|30|190|3300|10|12|true|CCTV;SECURITY_GUARD;WELL_LIT|5|MODERATE|true|APPROVED|
+o20|tamil-nadu|chennai|Marina Beach Road Parking|Kamarajar Salai, Marina Beach, Chennai|600005|13.0500|80.2824|COMMERCIAL|30|200|3500|6|10|true|WELL_LIT;CCTV|6|MODERATE|true|APPROVED|
+o20|west-bengal|kolkata|New Town Eco Park Parking|Eco Park Gate 3, New Town, Kolkata|700156|22.6000|88.4640|COMMERCIAL|25|150|2600|6|10|false|CCTV;WELL_LIT|1|FLEXIBLE|true|APPROVED|

@@ -12,6 +12,7 @@ import { TextField } from '../../components/ui/TextField'
 import { useAuth } from '../../auth/AuthProvider'
 import { homeFor } from '../../auth/types'
 import { toProblem } from '../../lib/errors'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const schema = z
   .object({
@@ -37,6 +38,7 @@ const roleOptions = [
 ] as const
 
 export function RegisterPage() {
+  usePageTitle('Create your account')
   const { register: registerUser } = useAuth()
   const navigate = useNavigate()
   const [params] = useSearchParams()
@@ -91,7 +93,7 @@ export function RegisterPage() {
                 <input type="radio" value={value} className="sr-only" {...register('role')} />
                 <Icon className="h-5 w-5 text-brand-600" />
                 <span className="mt-2 block text-sm font-semibold">{title}</span>
-                <span className="block text-xs text-slate-500">{body}</span>
+                <span className="block text-xs text-slate-500 dark:text-slate-400">{body}</span>
               </label>
             ))}
           </div>
@@ -106,7 +108,7 @@ export function RegisterPage() {
           error={errors.confirmPassword?.message} {...register('confirmPassword')} />
         <Button type="submit" loading={isSubmitting} className="w-full">Create account</Button>
       </form>
-      <p className="mt-6 text-center text-sm text-slate-500">
+      <p className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
         Already have an account?{' '}
         <Link to="/login" className="font-semibold text-brand-700 hover:underline dark:text-brand-400">Log in</Link>
       </p>

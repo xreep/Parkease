@@ -13,6 +13,7 @@ import { DOCUMENT_TYPE_LABELS, formatDateTime } from '../../lib/format'
 import { openInNewTab } from '../../lib/openDocument'
 import type { VerificationStatus } from '../../lib/owner'
 import { stepBackIfEmpty } from '../../lib/paging'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const FILTERS: { value: VerificationStatus; label: string }[] = [
   { value: 'PENDING', label: 'Pending' },
@@ -57,7 +58,7 @@ function OwnerRow({ owner, onReject, onChanged }: { owner: AdminOwner; onReject:
         </div>
         <div className="space-y-0.5 text-sm text-slate-700 dark:text-slate-300 sm:text-right">
           <p>{owner.documentType ? DOCUMENT_TYPE_LABELS[owner.documentType] : 'No document'}</p>
-          {owner.documentSubmittedAt && <p className="text-slate-500">{formatDateTime(owner.documentSubmittedAt)}</p>}
+          {owner.documentSubmittedAt && <p className="text-slate-500 dark:text-slate-400">{formatDateTime(owner.documentSubmittedAt)}</p>}
           <p>{owner.hasPayoutDetails ? 'Payout details added' : 'No payout details'}</p>
           <p>{`${owner.listingCount} ${owner.listingCount === 1 ? 'listing' : 'listings'}`}</p>
         </div>
@@ -83,6 +84,7 @@ function OwnerRow({ owner, onReject, onChanged }: { owner: AdminOwner; onReject:
 }
 
 export function OwnerQueuePage() {
+  usePageTitle('Admin · Owner queue')
   const queryClient = useQueryClient()
   const [status, setStatus] = useState<VerificationStatus>('PENDING')
   const [page, setPage] = useState(0)

@@ -10,9 +10,10 @@ import { useBookings, type BookingSummaryDto, type BookingView } from '../../lib
 import { errorMessage } from '../../lib/errors'
 import { VEHICLE_TYPE_LABELS, formatINR } from '../../lib/format'
 import { formatWindow } from '../../lib/time'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const primaryLink =
-  'inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700'
+  'inline-flex items-center justify-center rounded-lg bg-brand-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-800'
 const smallLink =
   'inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800'
 
@@ -72,6 +73,7 @@ function BookingCard({ booking }: { booking: BookingSummaryDto }) {
 }
 
 export function MyBookingsPage() {
+  usePageTitle('My bookings')
   // The tab and the page live in the URL (`?view=past&page=2`), so a refresh, a shared link and the browser's Back and
   // Forward buttons all restore the same list.
   const [params, setParams] = useSearchParams()

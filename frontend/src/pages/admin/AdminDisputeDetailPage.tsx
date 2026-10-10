@@ -24,6 +24,7 @@ import {
 } from '../../lib/disputes'
 import { errorMessage, toProblem } from '../../lib/errors'
 import { formatINR } from '../../lib/format'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const RESOLUTIONS: DisputeResolution[] = ['REFUND_FULL', 'REFUND_PARTIAL', 'NO_REFUND', 'WARNING']
 
@@ -171,6 +172,7 @@ function Content({ dispute }: { dispute: Dispute }) {
 export function AdminDisputeDetailPage() {
   const { id } = useParams()
   const query = useAdminDispute(parseId(id))
+  usePageTitle(query.data ? `Admin · Dispute on ${query.data.bookingCode}` : 'Admin · Dispute details')
   return (
     <div className="space-y-4">
       <Link to="/admin/disputes" className="text-sm font-medium text-brand-700 hover:underline dark:text-brand-400">← Disputes</Link>

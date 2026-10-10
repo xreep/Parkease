@@ -15,9 +15,10 @@ import { useMyListings, useOwnerProfile, type OwnerProfile } from '../../lib/own
 import { STATS_RANGES, useOwnerStats, type OwnerStatsDto, type StatsRange } from '../../lib/ownerDashboard'
 import { ratingText } from '../../lib/reviews'
 import { formatShortDate, formatWindow } from '../../lib/time'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const primaryLink =
-  'inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700'
+  'inline-flex items-center justify-center rounded-lg bg-brand-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-800'
 const secondaryLink =
   'inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800'
 
@@ -115,7 +116,7 @@ function Kpi({ label, value, note, children }: { label: string; value: string; n
     <div role="group" aria-label={label} className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
       <p className="text-sm text-slate-600 dark:text-slate-400">{label}</p>
       <p className="mt-1 text-2xl font-bold">{value}</p>
-      {note && <p className="text-xs text-slate-500">{note}</p>}
+      {note && <p className="text-xs text-slate-500 dark:text-slate-400">{note}</p>}
       {children}
     </div>
   )
@@ -243,6 +244,7 @@ function Overview() {
 }
 
 export function OwnerHomePage() {
+  usePageTitle('Owner dashboard')
   const { user } = useAuth()
   const profile = useOwnerProfile()
   if (!user) return null

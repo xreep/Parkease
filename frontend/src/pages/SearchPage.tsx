@@ -20,6 +20,7 @@ import {
 import { activeFilterCount, filtersOf, NO_FILTERS, paramsOf, RADIUS_OPTIONS, type Filters } from '../lib/searchFilters'
 import { toProblem } from '../lib/errors'
 import { durationLabel, formatWindow } from '../lib/time'
+import { usePageTitle } from '../lib/usePageTitle'
 
 const SORT_LABELS: Record<SearchSort, string> = {
   distance: 'Nearest',
@@ -245,6 +246,7 @@ function SearchResults({ params }: { params: SearchParams }) {
 }
 
 export function SearchPage() {
+  usePageTitle('Find parking')
   const [searchParams] = useSearchParams()
   const params = parseSearchParams(searchParams)
 

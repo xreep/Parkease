@@ -6,8 +6,10 @@ import { Pagination } from '../../components/ui/Pagination'
 import { useMyDisputes } from '../../lib/disputes'
 import { errorMessage } from '../../lib/errors'
 import { stepBackIfEmpty } from '../../lib/paging'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 export function DisputesPage() {
+  usePageTitle('Help')
   const [page, setPage] = useState(0)
   const { data, error, isPending, isPlaceholderData } = useMyDisputes(page)
   stepBackIfEmpty(page, setPage, data?.content, isPlaceholderData)
