@@ -41,7 +41,7 @@ final class DemoShowcase {
         }
         // The demo driver's own bookings: one of everything.
         Instant startedAt = planner.floorQuarter(world.now.minus(Duration.ofMinutes(70)));
-        planner.addForced(andheri, demo, car, startedAt, startedAt.plus(Duration.ofHours(4)), Outcome.ACTIVE, null);
+        parkedNow(andheri, demo, car, startedAt, 4);
         show(bkc, demo, car, 1, 10, 0, 300, Outcome.CONFIRMED, null);
         show(cyber, demo, car, 5, 10, 0, 420, Outcome.CONFIRMED, null);
         show(bandra, demo, car, 2, 11, 0, 180, Outcome.AWAITING, null);
@@ -61,9 +61,22 @@ final class DemoShowcase {
         show(bandra, carDrivers.get(2), 4, 14, 0, 240, Outcome.AWAITING);
         show(powai, carDrivers.get(3), 2, 10, 0, 300, Outcome.CONFIRMED);
         Instant powaiStart = planner.floorQuarter(world.now.minus(Duration.ofMinutes(40)));
-        planner.addForced(powai, carDrivers.get(4), vehicleOf(carDrivers.get(4), VehicleType.FOUR_WHEELER),
-                powaiStart, powaiStart.plus(Duration.ofHours(3)), Outcome.ACTIVE, null);
+        parkedNow(powai, carDrivers.get(4), vehicleOf(carDrivers.get(4), VehicleType.FOUR_WHEELER), powaiStart, 3);
         mark(show(powai, carDrivers.get(5), -3, 10, 0, 180, Outcome.COMPLETED), 2, true, false);
+    }
+
+    /**
+     * A booking in progress right now: the longest of {@code hours}, {@code hours - 1} … 1 hour that still ends within
+     * the listing's opening hours (seeding late in the evening must not run past closing); none when it is closed.
+     */
+    private void parkedNow(Lst l, Person driver, Veh vehicle, Instant start, int hours) {
+        for (int h = hours; h >= 1; h--) {
+            Instant end = start.plus(Duration.ofHours(h));
+            if (end.isAfter(world.now) && planner.fits(l, start, end)) {
+                planner.addForced(l, driver, vehicle, start, end, Outcome.ACTIVE, null);
+                return;
+            }
+        }
     }
 
     private Bk show(Lst l, Person driver, int day, int hour, int minute, int minutes, Outcome outcome) {
