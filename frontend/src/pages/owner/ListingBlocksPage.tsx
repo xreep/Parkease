@@ -13,6 +13,7 @@ import { TextField } from '../../components/ui/TextField'
 import { errorMessage } from '../../lib/errors'
 import { formatDateTime } from '../../lib/format'
 import { addBlock, deleteBlock, invalidateBlocks, useBlocks, useListing, type Block, type ListingDetail } from '../../lib/owner'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const schema = z
   .object({
@@ -160,6 +161,7 @@ function BlocksContent({ id }: { id: number }) {
 }
 
 export function ListingBlocksPage() {
+  usePageTitle('Block dates')
   const { id } = useParams()
   const numeric = Number(id)
   if (!Number.isInteger(numeric) || numeric <= 0) return <FormError message="Listing not found" />

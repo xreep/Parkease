@@ -1,6 +1,7 @@
 import clsx from 'clsx'
-import { useEffect, useRef } from 'react'
+import { Suspense, useEffect, useRef } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { PageFallback } from '../../components/PageFallback'
 
 type NavItem = { to: string; label: string; end?: boolean }
 
@@ -53,7 +54,7 @@ function AdminNav() {
       <div className="flex min-w-max gap-4">
         {sections.map((section) => (
           <div key={section.label}>
-            <p aria-hidden className="hidden px-3 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 sm:block">
+            <p aria-hidden className="hidden px-3 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 sm:block">
               {section.label}
             </p>
             <ul className="flex gap-1">
@@ -91,7 +92,9 @@ export function AdminLayout() {
         <AdminNav />
       </div>
       <div className="mt-6">
-        <Outlet />
+        <Suspense fallback={<PageFallback />}>
+          <Outlet />
+        </Suspense>
       </div>
     </div>
   )

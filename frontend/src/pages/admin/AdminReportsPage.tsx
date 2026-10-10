@@ -21,6 +21,7 @@ import { errorMessage } from '../../lib/errors'
 import { formatINR, formatPercent } from '../../lib/format'
 import { statsRange } from '../../lib/ownerDashboard'
 import { useCsvExport } from '../../lib/useCsvExport'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 type Column<Row, Totals> = {
   header: string
@@ -148,6 +149,7 @@ const TABS: { value: ReportKind; label: string }[] = [
 ]
 
 export function AdminReportsPage() {
+  usePageTitle('Admin · Reports and exports')
   const initial = statsRange(30)
   const [kind, setKind] = useState<ReportKind>('usage')
   const [from, setFrom] = useState(initial.from)

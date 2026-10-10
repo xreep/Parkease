@@ -13,6 +13,7 @@ import { DOCUMENT_TYPE_LABELS, formatDateTime } from '../../lib/format'
 import { openInNewTab } from '../../lib/openDocument'
 import type { VerificationStatus } from '../../lib/owner'
 import { stepBackIfEmpty } from '../../lib/paging'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const FILTERS: { value: VerificationStatus; label: string }[] = [
   { value: 'PENDING', label: 'Pending' },
@@ -83,6 +84,7 @@ function OwnerRow({ owner, onReject, onChanged }: { owner: AdminOwner; onReject:
 }
 
 export function OwnerQueuePage() {
+  usePageTitle('Admin · Owner queue')
   const queryClient = useQueryClient()
   const [status, setStatus] = useState<VerificationStatus>('PENDING')
   const [page, setPage] = useState(0)

@@ -7,8 +7,10 @@ import { Select } from '../../components/ui/Select'
 import { DISPUTE_STATUS_LABELS, useAdminDisputes, type DisputeStatus } from '../../lib/disputes'
 import { errorMessage } from '../../lib/errors'
 import { stepBackIfEmpty } from '../../lib/paging'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 export function AdminDisputesPage() {
+  usePageTitle('Admin · Disputes')
   const [status, setStatus] = useState<DisputeStatus | ''>('')
   const [page, setPage] = useState(0)
   const { data, error, isPending, isPlaceholderData } = useAdminDisputes(status || undefined, page)

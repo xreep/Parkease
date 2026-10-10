@@ -1,4 +1,6 @@
+import { Suspense } from 'react'
 import { Outlet } from 'react-router-dom'
+import { PageFallback } from '../../components/PageFallback'
 import { Tabs } from '../../components/ui/Tabs'
 
 const tabs = [
@@ -20,7 +22,9 @@ export function OwnerLayout() {
         <Tabs items={tabs} />
       </div>
       <div className="mt-6">
-        <Outlet />
+        <Suspense fallback={<PageFallback />}>
+          <Outlet />
+        </Suspense>
       </div>
     </div>
   )

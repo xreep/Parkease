@@ -24,6 +24,7 @@ import { errorMessage } from '../../lib/errors'
 import { VEHICLE_TYPE_LABELS, formatDateTime, formatINR } from '../../lib/format'
 import { formatWindow } from '../../lib/time'
 import { useNow } from '../../lib/useNow'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const TABS: { value: OwnerBookingView; label: string }[] = [
   { value: 'requests', label: 'Requests' },
@@ -188,6 +189,7 @@ function BookingCard({ booking, view, onChanged }: { booking: OwnerBookingDto; v
 }
 
 export function OwnerBookingsPage() {
+  usePageTitle('Owner bookings')
   const queryClient = useQueryClient()
   const [view, setView] = useState<OwnerBookingView>('requests')
   const [page, setPage] = useState(0)

@@ -11,6 +11,7 @@ import type { AuthResponse, User } from '../auth/types'
 import { api } from '../lib/api'
 import { errorMessage } from '../lib/errors'
 import { tokenStore } from '../lib/tokenStore'
+import { usePageTitle } from '../lib/usePageTitle'
 
 const profileSchema = z.object({
   name: z.string().trim().min(2, 'Enter your full name').max(100),
@@ -108,6 +109,7 @@ function PasswordForm() {
 }
 
 export function AccountPage() {
+  usePageTitle('Your account')
   const { user } = useAuth()
   if (!user) return null
   return (

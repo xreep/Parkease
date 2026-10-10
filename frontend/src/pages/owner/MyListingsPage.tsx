@@ -10,9 +10,10 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { errorMessage } from '../../lib/errors'
 import { formatINR } from '../../lib/format'
 import { deleteListing, pauseListing, resumeListing, useMyListings, type ListingStatus, type ListingSummary } from '../../lib/owner'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const primaryLink =
-  'inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700'
+  'inline-flex items-center justify-center rounded-lg bg-brand-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-800'
 const smallLink =
   'inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800'
 
@@ -108,6 +109,7 @@ function ListingCard({ listing, onChanged, onDelete }: { listing: ListingSummary
 }
 
 export function MyListingsPage() {
+  usePageTitle('My listings')
   const queryClient = useQueryClient()
   const [page, setPage] = useState(0)
   const [deleting, setDeleting] = useState<ListingSummary | null>(null)

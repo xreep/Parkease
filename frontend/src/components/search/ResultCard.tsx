@@ -49,14 +49,14 @@ export function ResultCard({ result: r, start, end, vehicle, highlighted, onHigh
 
       <div className="min-w-0 flex-1 space-y-1.5">
         <div className="flex items-start justify-between gap-2">
-          <h3 id={titleId} className="min-w-0 font-semibold leading-snug">
+          <h2 id={titleId} className="min-w-0 font-semibold leading-snug">
             <Link
               to={listingHref(r.id, start, end, vehicle)}
               className="break-words hover:text-brand-700 hover:underline dark:hover:text-brand-400"
             >
               {r.title}
             </Link>
-          </h3>
+          </h2>
           {r.reviewCount > 0 && (
             <span className="shrink-0 text-sm font-medium text-amber-600 dark:text-amber-400">
               {`★ ${r.avgRating.toFixed(1)} (${r.reviewCount})`}

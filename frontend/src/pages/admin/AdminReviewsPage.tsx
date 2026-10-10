@@ -15,6 +15,7 @@ import { invalidateAdminActivity } from '../../lib/admin'
 import { adminErrorMessage, hideReview, unhideReview, useAdminReviews, type AdminReview, type ReviewFilters } from '../../lib/adminManage'
 import { errorMessage } from '../../lib/errors'
 import { stepBackIfEmpty } from '../../lib/paging'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 type Show = 'all' | 'visible' | 'hidden'
 const HIDDEN: Record<Show, boolean | undefined> = { all: undefined, visible: false, hidden: true }
@@ -50,6 +51,7 @@ function ReviewActions({ review, onHide, onChanged }: { review: AdminReview; onH
 }
 
 export function AdminReviewsPage() {
+  usePageTitle('Admin · Reviews')
   const queryClient = useQueryClient()
   const [show, setShow] = useState<Show>('all')
   const [q, setQ] = useState('')

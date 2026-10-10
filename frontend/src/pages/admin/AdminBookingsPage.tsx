@@ -15,10 +15,12 @@ import { errorMessage } from '../../lib/errors'
 import { formatINR } from '../../lib/format'
 import { formatWindow } from '../../lib/time'
 import { stepBackIfEmpty, withPageReset } from '../../lib/paging'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const STATUSES = Object.keys(BOOKING_STATUS_LABELS) as BookingStatus[]
 
 export function AdminBookingsPage() {
+  usePageTitle('Admin · Bookings')
   const [status, setStatus] = useState<BookingStatus | ''>('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')

@@ -11,6 +11,7 @@ import { errorMessage } from '../../lib/errors'
 import { useMyListings } from '../../lib/owner'
 import { useOwnerCalendar, type OwnerCalendarDto } from '../../lib/ownerDashboard'
 import { addDays, DAY_MS, formatShortDate, istDate, istInstant, weekdayOf } from '../../lib/time'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 /** The API serves at most 14 days; a week is shown at a time. */
@@ -150,6 +151,7 @@ function Legend() {
 }
 
 export function OwnerCalendarPage() {
+  usePageTitle('Owner calendar')
   const listings = useMyListings(0, 100)
   const [picked, setPicked] = useState<number | null>(null)
   const today = istDate()

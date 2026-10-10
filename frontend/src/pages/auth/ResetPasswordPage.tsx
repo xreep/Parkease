@@ -9,6 +9,7 @@ import { Button } from '../../components/ui/Button'
 import { TextField } from '../../components/ui/TextField'
 import { api } from '../../lib/api'
 import { errorMessage } from '../../lib/errors'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const schema = z
   .object({
@@ -23,6 +24,7 @@ const schema = z
 type FormValues = z.infer<typeof schema>
 
 export function ResetPasswordPage() {
+  usePageTitle('Choose a new password')
   const [params] = useSearchParams()
   const token = params.get('token')
   const navigate = useNavigate()

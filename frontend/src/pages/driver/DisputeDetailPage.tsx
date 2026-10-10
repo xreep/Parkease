@@ -3,8 +3,10 @@ import { parseId } from '../../lib/params'
 import { DisputePageShell } from '../../components/disputes/DisputePageShell'
 import { DisputeView } from '../../components/disputes/DisputeView'
 import { useMyDispute } from '../../lib/disputes'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 export function DisputeDetailPage() {
+  usePageTitle('Problem report')
   const { id } = useParams()
   const query = useMyDispute(parseId(id))
   return (

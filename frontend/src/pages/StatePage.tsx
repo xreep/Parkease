@@ -4,10 +4,12 @@ import { Spinner } from '../components/ui/Spinner'
 import { toProblem } from '../lib/errors'
 import { useStateDetail } from '../lib/locations'
 import { NotFoundPage } from './NotFoundPage'
+import { usePageTitle } from '../lib/usePageTitle'
 
 export function StatePage() {
   const { stateSlug = '' } = useParams()
   const { data: state, isLoading, error } = useStateDetail(stateSlug)
+  usePageTitle(error && toProblem(error).status === 404 ? undefined : `Parking in ${state?.name ?? 'India'}`)
 
   if (isLoading) {
     return (

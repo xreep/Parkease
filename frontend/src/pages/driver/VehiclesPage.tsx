@@ -8,6 +8,7 @@ import { VehicleForm } from '../../components/vehicles/VehicleForm'
 import { errorMessage } from '../../lib/errors'
 import { VEHICLE_TYPE_LABELS } from '../../lib/format'
 import { useVehicleMutations, useVehicles, type VehicleDto } from '../../lib/vehicles'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 function DeleteDialog({ vehicle, onClose }: { vehicle: VehicleDto; onClose: () => void }) {
   const { remove } = useVehicleMutations()
@@ -88,6 +89,7 @@ function VehicleRow({ vehicle, onEdit, onDelete }: { vehicle: VehicleDto; onEdit
 }
 
 export function VehiclesPage() {
+  usePageTitle('My vehicles')
   const { data: vehicles, error, isPending } = useVehicles()
   const [editing, setEditing] = useState<VehicleDto | null>(null)
   const [deleting, setDeleting] = useState<VehicleDto | null>(null)

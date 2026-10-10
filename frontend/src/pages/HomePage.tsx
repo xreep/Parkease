@@ -5,6 +5,7 @@ import { Spinner } from '../components/ui/Spinner'
 import { useStates, type StateSummary } from '../lib/locations'
 import { toSearchParams } from '../lib/search'
 import { defaultWindow } from '../lib/time'
+import { usePageTitle } from '../lib/usePageTitle'
 
 const steps = [
   { Icon: MapPin, title: 'Search near your destination', body: 'Metro stations, offices, malls and markets across India.' },
@@ -52,6 +53,7 @@ function StateGrid({ title, states }: { title: string; states: StateSummary[] })
 }
 
 export function HomePage() {
+  usePageTitle('Reserve parking across India')
   const navigate = useNavigate()
   const { data: states, isLoading, isError } = useStates()
   const stateList = states?.filter((s) => s.type === 'STATE') ?? []
@@ -119,7 +121,7 @@ export function HomePage() {
               <span className="grid h-10 w-10 place-items-center rounded-lg bg-brand-100 text-brand-700 dark:bg-brand-900/50 dark:text-brand-300">
                 <Icon className="h-5 w-5" />
               </span>
-              <p className="mt-4 text-xs font-semibold text-slate-400">STEP {i + 1}</p>
+              <p className="mt-4 text-xs font-semibold text-slate-500">STEP {i + 1}</p>
               <h3 className="mt-1 font-semibold">{title}</h3>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{body}</p>
             </div>
@@ -154,7 +156,7 @@ export function HomePage() {
             <h2 className="text-2xl font-bold">Have an empty parking spot?</h2>
             <p className="mt-2 text-slate-300">List it in minutes, set your own prices and get paid for every booking.</p>
           </div>
-          <Link to="/register?role=OWNER" className="rounded-lg bg-brand-500 px-5 py-3 font-semibold hover:bg-brand-400">
+          <Link to="/register?role=OWNER" className="rounded-lg bg-brand-400 px-5 py-3 font-semibold text-slate-950 hover:bg-brand-300">
             Start earning
           </Link>
         </div>

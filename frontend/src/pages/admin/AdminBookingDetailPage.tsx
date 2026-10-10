@@ -20,6 +20,7 @@ import { DISPUTE_CATEGORY_LABELS } from '../../lib/disputes'
 import { errorMessage } from '../../lib/errors'
 import { formatDateTime, formatINR } from '../../lib/format'
 import { formatWindow } from '../../lib/time'
+import { usePageTitle } from '../../lib/usePageTitle'
 
 const ACTOR_LABELS = { DRIVER: 'Driver', OWNER: 'Owner', SYSTEM: 'System', ADMIN: 'Admin' } as const
 
@@ -201,6 +202,7 @@ function BookingContent({ booking }: { booking: AdminBookingDetail }) {
 }
 
 export function AdminBookingDetailPage() {
+  usePageTitle('Admin · Booking details')
   const { id } = useParams()
   const numeric = Number(id)
   const valid = Number.isInteger(numeric) && numeric > 0
