@@ -60,7 +60,7 @@ function HoursSection({ listing }: { listing: PublicListingDto }) {
             return (
               <div key={name} className="contents">
                 <dt>{name}</dt>
-                <dd className={rule ? undefined : 'text-slate-500'}>
+                <dd className={rule ? undefined : 'text-slate-500 dark:text-slate-400'}>
                   {rule ? `${rule.openTime.slice(0, 5)} – ${rule.closeTime.slice(0, 5)}` : 'Closed'}
                 </dd>
               </div>

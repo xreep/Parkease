@@ -268,7 +268,7 @@ export function AdminLocationsPage() {
                     )}
                   >
                     <span>{s.name}</span>
-                    <span className="text-xs text-slate-500">{s.citiesCount}</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">{s.citiesCount}</span>
                   </button>
                 </li>
               )

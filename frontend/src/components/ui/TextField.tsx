@@ -28,7 +28,7 @@ export function TextField({ label, error, hint, id, className, ...props }: TextF
       {error ? (
         <p id={messageId} className="text-sm text-red-600 dark:text-red-400">{error}</p>
       ) : hint ? (
-        <p id={messageId} className="text-xs text-slate-500">{hint}</p>
+        <p id={messageId} className="text-xs text-slate-500 dark:text-slate-400">{hint}</p>
       ) : null}
     </div>
   )

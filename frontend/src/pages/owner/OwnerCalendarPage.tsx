@@ -9,6 +9,7 @@ import { Spinner } from '../../components/ui/Spinner'
 import { BOOKING_STATUS_LABELS, type BookingStatus } from '../../lib/bookings'
 import { errorMessage } from '../../lib/errors'
 import { useMyListings } from '../../lib/owner'
+import { FALLBACK_STYLE, STATUS_STYLE } from '../../components/owner/calendarStyle'
 import { useOwnerCalendar, type OwnerCalendarDto } from '../../lib/ownerDashboard'
 import { addDays, DAY_MS, formatShortDate, istDate, istInstant, weekdayOf } from '../../lib/time'
 import { usePageTitle } from '../../lib/usePageTitle'
@@ -17,14 +18,6 @@ const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 /** The API serves at most 14 days; a week is shown at a time. */
 const WEEK_DAYS = 7
 
-const STATUS_STYLE: Partial<Record<BookingStatus, string>> = {
-  CONFIRMED: 'bg-emerald-600 text-white',
-  ACTIVE: 'bg-sky-600 text-white',
-  AWAITING_APPROVAL: 'bg-amber-500 text-slate-900',
-  COMPLETED: 'bg-slate-500 text-white',
-}
-/** The calendar only receives live bookings (confirmed, waiting, active, completed); anything else gets a neutral bar. */
-const FALLBACK_STYLE = 'bg-slate-400 text-slate-900'
 const LEGEND: BookingStatus[] = ['CONFIRMED', 'ACTIVE', 'AWAITING_APPROVAL', 'COMPLETED']
 
 const HATCHED =
@@ -210,7 +203,7 @@ export function OwnerCalendarPage() {
             <div className={clsx('space-y-3 transition-opacity', isPlaceholderData && 'opacity-60')} aria-busy={isPlaceholderData}>
               <Grid calendar={data} days={days} today={today} />
               <Legend />
-              <p className="text-xs text-slate-500">All times are in IST.</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">All times are in IST.</p>
             </div>
           ) : null}
         </>

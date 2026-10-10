@@ -296,7 +296,7 @@ function CheckoutView({ checkout }: { checkout: CheckoutDto }) {
             ) : (
               <Button type="button" className="w-full" loading={busy && !mockOpen} disabled={busy} onClick={pay}>{`Pay ${total}`}</Button>
             )}
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               {'Your slot is reserved until the timer runs out. '}
               {payment.provider === 'RAZORPAY' ? 'Payments are processed securely by Razorpay.' : 'Test mode — no real money is charged.'}
             </p>

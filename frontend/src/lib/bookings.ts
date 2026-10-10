@@ -227,6 +227,8 @@ export function useBooking(id: number | string | undefined, enabled = true, poll
     queryKey: ['booking', id],
     queryFn: () => getBooking(id!),
     enabled: enabled && id !== undefined,
+    // The status poll runs in the background and the page shows its own error if the booking cannot be loaded.
+    meta: { silent: poll },
     refetchInterval: poll
       ? (query) => (query.state.data && IN_FLIGHT.includes(query.state.data.status) ? BOOKING_REFRESH_MS : false)
       : false,

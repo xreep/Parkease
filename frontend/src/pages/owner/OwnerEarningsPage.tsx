@@ -55,7 +55,7 @@ function EarningsTable({ earnings }: { earnings: OwnerEarningDto[] }) {
               <td className="px-3 py-2 font-mono font-semibold">{e.bookingCode}</td>
               <td className="px-3 py-2">
                 <p className="break-words">{e.listingTitle}</p>
-                <p className="text-xs text-slate-500">{formatWindow(e.startTime, e.endTime)}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{formatWindow(e.startTime, e.endTime)}</p>
               </td>
               <td className="px-3 py-2 text-right tabular-nums">{formatINR(e.gross)}</td>
               <td className="px-3 py-2 text-right tabular-nums">{formatINR(e.commission)}</td>
@@ -80,11 +80,11 @@ function EarningsCards({ earnings }: { earnings: OwnerEarningDto[] }) {
             <StatusBadge kind="earning" status={e.status} />
           </div>
           <p className="break-words text-sm font-medium">{e.listingTitle}</p>
-          <p className="text-xs text-slate-500">{formatWindow(e.startTime, e.endTime)}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{formatWindow(e.startTime, e.endTime)}</p>
           <dl className="grid grid-cols-3 gap-2 text-sm">
-            <div><dt className="text-xs text-slate-500">Gross</dt><dd>{formatINR(e.gross)}</dd></div>
-            <div><dt className="text-xs text-slate-500">Commission</dt><dd>{formatINR(e.commission)}</dd></div>
-            <div><dt className="text-xs text-slate-500">Net</dt><dd className="font-semibold">{formatINR(e.net)}</dd></div>
+            <div><dt className="text-xs text-slate-500 dark:text-slate-400">Gross</dt><dd>{formatINR(e.gross)}</dd></div>
+            <div><dt className="text-xs text-slate-500 dark:text-slate-400">Commission</dt><dd>{formatINR(e.commission)}</dd></div>
+            <div><dt className="text-xs text-slate-500 dark:text-slate-400">Net</dt><dd className="font-semibold">{formatINR(e.net)}</dd></div>
           </dl>
           {paidLine(e) && <p className="text-xs text-slate-600 dark:text-slate-400">{`Paid ${paidLine(e)}`}</p>}
         </li>

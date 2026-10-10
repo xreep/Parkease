@@ -141,7 +141,7 @@ export function AvailabilityCalendar({
           <thead>
             <tr>
               {WEEKDAYS.map(([short, long]) => (
-                <th key={long} scope="col" abbr={long} className="pb-1 text-xs font-medium text-slate-500">{short}</th>
+                <th key={long} scope="col" abbr={long} className="pb-1 text-xs font-medium text-slate-500 dark:text-slate-400">{short}</th>
               ))}
             </tr>
           </thead>
@@ -165,7 +165,7 @@ export function AvailabilityCalendar({
             </li>
           ))}
         </ul>
-        <p role="status" className="text-xs text-slate-500">
+        <p role="status" className="text-xs text-slate-500 dark:text-slate-400">
           {picked
             ? `Booking card set to ${Number(picked.slice(8))} ${MONTH_NAMES[Number(picked.slice(5, 7)) - 1]}.`
             : 'Dates are in IST. Pick a day to fill in the booking card.'}

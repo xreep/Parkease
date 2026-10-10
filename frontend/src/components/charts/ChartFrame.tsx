@@ -19,16 +19,16 @@ export function ChartFrame({
   children: ReactNode
 }) {
   if (points.length === 0) {
-    return <p className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 dark:border-slate-700">No data for this period.</p>
+    return <p className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 dark:text-slate-400 dark:border-slate-700">No data for this period.</p>
   }
   const middle = points[Math.floor((points.length - 1) / 2)]
   return (
     <figure className="space-y-1">
       <div className="flex gap-2">
-        <span data-axis="max" className="w-14 shrink-0 text-right text-xs tabular-nums text-slate-500">{max}</span>
+        <span data-axis="max" className="w-14 shrink-0 text-right text-xs tabular-nums text-slate-500 dark:text-slate-400">{max}</span>
         <div className="min-w-0 flex-1 border-b border-l border-slate-300 dark:border-slate-700">{children}</div>
       </div>
-      <div className="ml-16 flex justify-between gap-2 text-xs text-slate-500">
+      <div className="ml-16 flex justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
         <span data-axis="first">{points[0].label}</span>
         {points.length > 2 && <span className="hidden sm:inline">{middle.label}</span>}
         {points.length > 1 && <span data-axis="last">{points[points.length - 1].label}</span>}

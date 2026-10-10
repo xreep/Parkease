@@ -93,7 +93,7 @@ function BlockList({ listingId, blocks, canRemove, onRemoved }: { listingId: num
 
   if (sorted.length === 0) {
     return (
-      <p className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:border-slate-700">
+      <p className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:text-slate-400 dark:border-slate-700">
         No blocked times. Your listing follows its weekly hours.
       </p>
     )
@@ -104,7 +104,7 @@ function BlockList({ listingId, blocks, canRemove, onRemoved }: { listingId: num
         <li key={block.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
           <div className="min-w-0 flex-1 space-y-0.5">
             <p className="font-medium">{`${formatDateTime(block.startTime)} → ${formatDateTime(block.endTime)}`}</p>
-            <p className="text-sm text-slate-500">{block.slotLabel ?? 'Whole listing'}</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">{block.slotLabel ?? 'Whole listing'}</p>
             {block.reason && <p className="text-sm text-slate-600 dark:text-slate-400">{block.reason}</p>}
           </div>
           {canRemove && (

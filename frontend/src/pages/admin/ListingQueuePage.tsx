@@ -36,13 +36,13 @@ function ListingRow({ listing }: { listing: AdminListingSummary }) {
           <h3 className="font-semibold">{listing.title}</h3>
           <StatusBadge kind="listing" status={listing.status} />
         </div>
-        <p className="text-sm text-slate-500">{`${listing.cityName}, ${listing.stateName}`}</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">{`${listing.cityName}, ${listing.stateName}`}</p>
         <p className="text-sm text-slate-700 dark:text-slate-300">
           <span>{listing.ownerName}</span>
           {' · '}
           <span className="break-all">{listing.ownerEmail}</span>
         </p>
-        {listing.submittedAt && <p className="text-sm text-slate-500">{formatDateTime(listing.submittedAt)}</p>}
+        {listing.submittedAt && <p className="text-sm text-slate-500 dark:text-slate-400">{formatDateTime(listing.submittedAt)}</p>}
       </div>
       <Link to={`/admin/listings/${listing.id}`} className={reviewLink}>Review</Link>
     </article>

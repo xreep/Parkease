@@ -63,8 +63,8 @@ function UserRow({ user, isSelf, onSuspend, onChanged }: { user: AdminUser; isSe
         </div>
         <div className="space-y-0.5 text-sm text-slate-700 dark:text-slate-300 sm:text-right">
           <p>{`${plural(user.bookingsCount, 'booking', 'bookings')} · ${plural(user.listingsCount, 'listing', 'listings')}`}</p>
-          <p className="text-slate-500">{`Joined ${formatDateTime(user.createdAt)}`}</p>
-          {!user.emailVerified && <p className="text-slate-500">Email not verified</p>}
+          <p className="text-slate-500 dark:text-slate-400">{`Joined ${formatDateTime(user.createdAt)}`}</p>
+          {!user.emailVerified && <p className="text-slate-500 dark:text-slate-400">Email not verified</p>}
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">

@@ -6,7 +6,7 @@ const POLICY_LABELS: Record<CancellationPolicy, string> = { FLEXIBLE: 'Flexible'
 /** Read-only fact blocks shared by the owner's review step and the admin review page. */
 
 export function PhotoFacts({ listing }: { listing: ListingDetail }) {
-  if (listing.photos.length === 0) return <p className="text-slate-500">No photos yet</p>
+  if (listing.photos.length === 0) return <p className="text-slate-500 dark:text-slate-400">No photos yet</p>
   return (
     <ul className="flex flex-wrap gap-2" aria-label="Photos">
       {listing.photos.map((p, i) => (
@@ -33,7 +33,7 @@ export function PricingFacts({ listing, viewer = 'owner' }: { listing: ListingDe
   return (
     <>
       {listing.pricePerHour === null ? (
-        <p className="text-slate-500">No pricing yet</p>
+        <p className="text-slate-500 dark:text-slate-400">No pricing yet</p>
       ) : (
         <>
           {prices.map(([unit, value]) => value !== null && <p key={unit}>{`${formatINR(value)}/${unit}`}</p>)}
@@ -41,7 +41,7 @@ export function PricingFacts({ listing, viewer = 'owner' }: { listing: ListingDe
           <p>{listing.autoApprove ? 'Bookings are approved automatically' : viewer === 'owner' ? 'You approve each booking' : 'The owner approves each booking'}</p>
         </>
       )}
-      {listing.rules && <p className="text-slate-500">{`Rules: ${listing.rules}`}</p>}
+      {listing.rules && <p className="text-slate-500 dark:text-slate-400">{`Rules: ${listing.rules}`}</p>}
     </>
   )
 }
@@ -49,7 +49,7 @@ export function PricingFacts({ listing, viewer = 'owner' }: { listing: ListingDe
 export function HoursFacts({ listing }: { listing: ListingDetail }) {
   if (listing.open24x7) return <p>Open 24 × 7</p>
   const hours = [...listing.hours].sort((a, b) => a.dayOfWeek - b.dayOfWeek)
-  if (hours.length === 0) return <p className="text-slate-500">No opening hours yet</p>
+  if (hours.length === 0) return <p className="text-slate-500 dark:text-slate-400">No opening hours yet</p>
   return (
     <>
       {hours.map((h) => (
@@ -60,7 +60,7 @@ export function HoursFacts({ listing }: { listing: ListingDetail }) {
 }
 
 export function AmenityFacts({ listing }: { listing: ListingDetail }) {
-  if (listing.amenities.length === 0) return <p className="text-slate-500">None selected</p>
+  if (listing.amenities.length === 0) return <p className="text-slate-500 dark:text-slate-400">None selected</p>
   return (
     <ul className="flex flex-wrap gap-2">
       {listing.amenities.map((a) => (

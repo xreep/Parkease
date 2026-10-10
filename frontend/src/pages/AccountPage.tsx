@@ -116,7 +116,7 @@ export function AccountPage() {
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-10 sm:px-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Your account</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           {roleLabel[user.role]} · {user.emailVerified ? 'Email verified' : 'Email not verified'}
         </p>
       </div>

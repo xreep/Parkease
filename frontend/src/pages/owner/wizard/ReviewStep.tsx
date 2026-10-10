@@ -79,7 +79,7 @@ export function ReviewStep({ listing, onSaved }: StepProps) {
           <p className="font-medium">{listing.title}</p>
           <p>{LISTING_TYPE_LABELS[listing.listingType]}</p>
           <p>{formatAddress(listing)}</p>
-          <p className="text-slate-500">{`Lat ${listing.lat.toFixed(5)}, Lng ${listing.lng.toFixed(5)}`}</p>
+          <p className="text-slate-500 dark:text-slate-400">{`Lat ${listing.lat.toFixed(5)}, Lng ${listing.lng.toFixed(5)}`}</p>
         </SummaryCard>
 
         <SummaryCard title="Photos" listingId={listing.id} step={2}>
