@@ -111,4 +111,50 @@ class DeploymentConfigFilesTest {
             assertThat(pattern.matcher(external).matches()).as(external).isFalse();
         }
     }
+
+    @Test
+    void theImageIsSizedForA512MbInstance() throws Exception {
+        String dockerfile = java.nio.file.Files.readString(java.nio.file.Path.of("Dockerfile"));
+
+        assertThat(dockerfile).contains("-XX:MaxRAMPercentage=65").contains("-XX:MaxMetaspaceSize=160m")
+                .doesNotContain("MaxRAMPercentage=75");
+        assertThat(load("application-prod.yml").getProperty("server.tomcat.threads.max")).isEqualTo(50);
+    }
+
+    @Test
+    void theDemoProfileTurnsDemoModeOn() throws Exception {
+        assertThat(load("application-demo.yml").getProperty("app.demo.enabled")).isEqualTo(true);
+        assertThat(load("application.yml").getProperty("app.demo.enabled")).isEqualTo(false);
+    }
+
+    @Test
+    void theTestSuiteDoesNotHoldIdleConnectionsOrUnboundedContexts() throws Exception {
+        PropertySource<?> test = load("application-test.yml");
+        java.util.Properties spring = new java.util.Properties();
+        try (var in = new ClassPathResource("spring.properties").getInputStream()) {
+            spring.load(in);
+        }
+
+        assertThat(test.getProperty("spring.datasource.hikari.minimum-idle")).isEqualTo(0);
+        assertThat(test.getProperty("spring.datasource.hikari.idle-timeout")).isEqualTo(10000);
+        assertThat(spring.getProperty("spring.test.context.cache.maxSize")).isEqualTo("12");
+    }
+
+    @Test
+    void theDocsAgreeWithTheConfiguration() throws Exception {
+        java.nio.file.Path root = java.nio.file.Path.of("..");
+        String deployment = java.nio.file.Files.readString(root.resolve("docs/DEPLOYMENT.md"));
+        String architecture = java.nio.file.Files.readString(root.resolve("docs/ARCHITECTURE.md"));
+        String render = java.nio.file.Files.readString(root.resolve("render.yaml"));
+
+        // the INTERNAL_PROXIES example is pasted as is, so it must not double the backslashes
+        assertThat(deployment).contains("paste exactly").doesNotContain("\\\\.");
+        assertThat(architecture).doesNotContain("trust-forwarded-for").doesNotContain("trusted-proxy-hops")
+                .doesNotContain("health check `/actuator/health`");
+        assertThat(deployment).contains("DEMO_PASSWORD must be set when the demo profile is active")
+                .doesNotContain("about 250 listings").contains("about 100 listings")
+                .doesNotContain("every 10 minutes from a free monitor");
+        assertThat(architecture).contains("/api/v1/health");
+        assertThat(render).contains("healthCheckPath: /api/v1/health");
+    }
 }

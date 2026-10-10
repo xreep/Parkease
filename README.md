@@ -202,7 +202,7 @@ cd backend && ./mvnw test                 # needs PostgreSQL; uses the smartpark
 cd frontend && npm run lint && npx tsc -b && npm test -- --run && npm run build
 ```
 
-- **Backend:** about 870 tests (JUnit 5, MockMvc integration tests against a real PostgreSQL, because the double-booking guarantee is an exclusion constraint that H2 cannot model).
+- **Backend:** 903 tests (JUnit 5, MockMvc integration tests against a real PostgreSQL, because the double-booking guarantee is an exclusion constraint that H2 cannot model).
 - **Frontend:** 854 Vitest tests (React Testing Library, `axios-mock-adapter`), including axe-core accessibility checks of the key pages.
 - **CI:** [GitHub Actions](.github/workflows/ci.yml) runs the backend suite on a PostgreSQL 16 service, the frontend lint, type check, tests and build, and a non-blocking dependency audit on every push and pull request; Dependabot checks weekly.
 

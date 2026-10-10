@@ -35,6 +35,8 @@ class ProductionConfigValidatorTest {
         List<String> cors = List.of("https://parkease.vercel.app");
         String mailHost = "smtp-relay.brevo.com";
         String cloudinaryUrl = "cloudinary://key:secret@cloud";
+        String publicBaseUrl = "https://api.example.com";
+        String webhookSecret = "whsec_x";
 
         Config jwt(String v) { jwtSecret = v; return this; }
         Config db(String v) { dbUrl = v; return this; }
@@ -42,6 +44,8 @@ class ProductionConfigValidatorTest {
         Config cors(String... v) { cors = v == null ? null : List.of(v); return this; }
         Config mail(String v) { mailHost = v; return this; }
         Config cloudinary(String v) { cloudinaryUrl = v; return this; }
+        Config publicBase(String v) { publicBaseUrl = v; return this; }
+        Config webhook(String v) { webhookSecret = v; return this; }
 
         ProductionConfigValidator build() {
             MockEnvironment env = new MockEnvironment();
@@ -51,8 +55,11 @@ class ProductionConfigValidatorTest {
             return new ProductionConfigValidator(
                     new JwtProperties(jwtSecret, Duration.ofMinutes(15), Duration.ofDays(7)),
                     new AppProperties(frontendUrl, cors, 12, 10),
-                    new StorageProperties("uploads", "https://api.example.com", cloudinaryUrl),
+                    new StorageProperties("uploads", publicBaseUrl, cloudinaryUrl),
                     new AppMailProperties(mailHost, 587, "u", "p", "ParkEase <no-reply@example.com>"),
+                    new com.smartparking.payment.PaymentProperties(
+                            new com.smartparking.payment.PaymentProperties.Razorpay("rzp_test_x", "s", webhookSecret),
+                            false),
                     env);
         }
     }
@@ -172,5 +179,35 @@ class ProductionConfigValidatorTest {
         assertThat(testSecret.find()).as("test secret").isTrue();
         assertThat(ProductionConfigValidator.KNOWN_SECRETS)
                 .contains(devSecret.group(1).trim(), testSecret.group(1).trim());
+    }
+
+    @Test
+    void rejectsOriginsWithATrailingSlashOrAPath() {
+        assertRefuses(new Config().frontend("https://parkease.vercel.app/"), "FRONTEND_URL", "no trailing slash");
+        assertRefuses(new Config().frontend("https://parkease.vercel.app/app"), "FRONTEND_URL", "no trailing slash");
+        assertRefuses(new Config().cors("https://parkease.vercel.app/"), "CORS_ALLOWED_ORIGINS", "no trailing slash");
+        assertRefuses(new Config().cors("https://parkease.vercel.app/x?y=1"), "CORS_ALLOWED_ORIGINS", "no trailing slash");
+        assertThatCode(() -> new Config().frontend("https://parkease.vercel.app:8443").build().validate())
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void warnsWhenLocalUploadLinksStillPointAtLocalhost() {
+        assertThat(new Config().cloudinary("").publicBase("http://localhost:8080").build().warnings())
+                .anyMatch(w -> w.contains("PUBLIC_BASE_URL") && w.contains("localhost"));
+        assertThat(new Config().cloudinary("").publicBase("https://api.example.com").build().warnings())
+                .noneMatch(w -> w.contains("PUBLIC_BASE_URL"));
+        // with Cloudinary the base URL is not used for uploads
+        assertThat(new Config().publicBase("http://localhost:8080").build().warnings())
+                .noneMatch(w -> w.contains("PUBLIC_BASE_URL"));
+    }
+
+    @Test
+    void warnsWithoutAWebhookSecret() {
+        assertThat(new Config().webhook("").build().warnings())
+                .anyMatch(w -> w.contains("RAZORPAY_WEBHOOK_SECRET"));
+        assertThat(new Config().webhook(null).build().warnings())
+                .anyMatch(w -> w.contains("RAZORPAY_WEBHOOK_SECRET"));
+        assertThat(new Config().build().warnings()).isEmpty();
     }
 }

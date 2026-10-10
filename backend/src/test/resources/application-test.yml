@@ -3,6 +3,10 @@ spring:
     url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/smartparking_test}
     username: ${DB_USERNAME:${USER}}
     password: ${DB_PASSWORD:}
+    hikari:
+      # Many cached application contexts each own a pool; idle connections must not pile up against max_connections.
+      minimum-idle: 0
+      idle-timeout: 10000
 
 app:
   bcrypt-strength: 4

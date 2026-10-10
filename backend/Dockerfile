@@ -28,9 +28,9 @@ RUN groupadd --system --gid 10001 parkease \
 COPY --from=build --chown=parkease:parkease /workspace/app.jar /app/app.jar
 USER parkease
 
-# Small instances (Render free: 512 MB): cap the heap at 75% of the container limit, one GC thread, small stacks,
+# Small instances (Render free: 512 MB): cap the heap at 65% of the container limit (the rest is metaspace, thread stacks, buffers), one GC thread, small stacks,
 # and let the platform restart the process rather than limp on after an out-of-memory error.
-ENV JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+UseSerialGC -Xss512k -XX:+ExitOnOutOfMemoryError"
+ENV JAVA_OPTS="-XX:MaxRAMPercentage=65 -XX:MaxMetaspaceSize=160m -XX:+UseSerialGC -Xss512k -XX:+ExitOnOutOfMemoryError"
 # Render injects PORT; the app reads it (server.port=${PORT:8080}).
 ENV PORT=8080
 EXPOSE 8080

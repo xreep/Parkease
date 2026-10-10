@@ -35,6 +35,9 @@ app:
   cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
   bcrypt-strength: 12
   auth-rate-limit-per-minute: 10
+  # True under the demo profile: shared showcase logins are protected and demo mail is filtered (see application-demo.yml).
+  demo:
+    enabled: false
   security:
     # Per client IP and minute: public reads 120, uploads and disputes 20, payment verification 30.
     rate-limit:
