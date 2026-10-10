@@ -156,6 +156,14 @@
 			<groupId>com.github.librepdf</groupId>
 			<artifactId>openpdf</artifactId>
 			<version>3.0.5</version>
+			<exclusions>
+				<!-- Native per-OS library: on the classpath it makes the Cloudinary HTTP client load it and crash
+				     on Linux. Receipts never need Brotli. See NoNativeCompressionTest. -->
+				<exclusion>
+					<groupId>com.aayushatharva.brotli4j</groupId>
+					<artifactId>*</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 	</dependencies>
 
