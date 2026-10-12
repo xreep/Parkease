@@ -24,14 +24,14 @@ import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Limit;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Background housekeeping. The {@code @Scheduled} triggers only run when scheduling is enabled
- * ({@code app.jobs.enabled}, see {@link BookingJobsConfig}); the methods are public so tests call them directly.
+ * Background housekeeping. {@link BookingJobScheduler} triggers these (only when {@code app.jobs.enabled}, see
+ * {@link BookingJobsConfig}) and throttles them while the site is quiet; the methods are public so tests call them
+ * directly.
  * Each booking is handled in its own transaction under the payment-then-booking row locks and re-checked after
  * locking, so overlapping runs (or several instances) and concurrent payments or owner decisions are harmless, and one
  * bad row never blocks the others.
@@ -102,7 +102,6 @@ public class BookingJobs {
      * Expires unpaid holds whose window lapsed (booking EXPIRED with a history entry, open payment order FAILED). Also
      * finishes holds that the slot allocator already flipped to EXPIRED in bulk without writing history.
      */
-    @Scheduled(fixedDelay = 60_000)
     public void expireHolds() {
         Instant now = clock.instant();
         List<Long> ids = new ArrayList<>(tx.execute(s -> bookings.findLapsedHoldIds(now, Limit.of(BATCH))));
@@ -146,7 +145,6 @@ public class BookingJobs {
     }
 
     /** Rejects paid requests the owner did not answer in time and refunds the drivers in full. */
-    @Scheduled(fixedDelay = 60_000)
     public void autoRejectOverdue() {
         List<Long> ids = tx.execute(s -> bookings.findOverdueApprovalIds(clock.instant(), Limit.of(BATCH)));
         int rejected = 0;
@@ -172,7 +170,6 @@ public class BookingJobs {
      * the job was down goes straight to COMPLETED). Requests that were never answered are handled by
      * {@link #autoRejectOverdue()}: their deadline never lies after the start.
      */
-    @Scheduled(fixedDelay = 60_000)
     public void advanceLifecycle() {
         Instant now = clock.instant();
         int completed = sweep("complete", () -> bookings.findDueToCompleteIds(now, Limit.of(LIFECYCLE_BATCH)),
@@ -253,7 +250,6 @@ public class BookingJobs {
      * Tells drivers their parking starts within the hour and owners that a request is about to lapse (deadline within
      * 30 minutes). Each goes out once: the sent-at column is set in the transaction that creates the notification.
      */
-    @Scheduled(fixedDelay = 60_000)
     public void sendReminders() {
         Instant now = clock.instant();
         int reminded = sweep("send the start reminder of", () -> bookings.findDueForReminderIds(now,
@@ -297,7 +293,6 @@ public class BookingJobs {
     }
 
     /** Gives FAILED refunds another go (at most {@value RefundService#MAX_ATTEMPTS} provider tries in total). */
-    @Scheduled(fixedDelay = 600_000)
     public void retryFailedRefunds() {
         int succeeded = 0;
         for (Long id : refunds.retryableRefundIds(BATCH)) {
@@ -320,14 +315,12 @@ public class BookingJobs {
      * call and the webhook was missed or is not configured). Orders from the last {@value #RECENT_MINUTES} minutes are
      * checked every five minutes: that is when a customer is waiting.
      */
-    @Scheduled(fixedDelay = 300_000)
     public void reconcileRecentPayments() {
         Instant now = clock.instant();
         reconcileBand(now.minus(RECENT), now.plus(Duration.ofDays(1)), RECONCILE_BATCH);
     }
 
     /** Orders between one and 24 hours old (abandoned holds mostly) are checked hourly, which is plenty. */
-    @Scheduled(fixedDelay = 3_600_000)
     public void reconcileOlderPayments() {
         Instant now = clock.instant();
         reconcileBand(now.minus(RECONCILE_WINDOW), now.minus(RECENT), RECONCILE_BATCH);

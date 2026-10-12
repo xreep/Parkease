@@ -79,6 +79,13 @@ app:
     request-min-lead-minutes: 30
   jobs:
     enabled: true
+  # Background jobs run every minute while the site is in use and about hourly while it is quiet, so a serverless
+  # database can sleep. KEEP_ALIVE_URL (the public /api/v1/health URL) keeps sleeping hosts such as Render's free plan
+  # awake; blank turns the ping off.
+  activity:
+    active-window: 15m
+    idle-interval: 60m
+    keep-alive-url: ${KEEP_ALIVE_URL:}
 
 springdoc:
   swagger-ui:

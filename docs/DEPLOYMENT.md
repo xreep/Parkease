@@ -160,6 +160,21 @@ instance (then use 587).
 queried Neon every few seconds would keep the free database awake around the clock and burn its compute hours.
 `/actuator/health` (database included) is for you to run by hand; it exposes no details.
 
+**Staying awake without burning database hours.** Render's free instance sleeps after 15 minutes without requests,
+and waking it restarts the JVM (minutes on the free CPU). Two pings keep it awake, both on `/api/v1/health`, which
+never touches the database:
+
+- the server pings itself every 10 minutes when `KEEP_ALIVE_URL` is set (`render.yaml` sets it to this service's
+  health URL; change it if your service URL differs, delete it to let the service sleep);
+- `.github/workflows/keep-alive.yml` pings every 10 minutes from GitHub Actions as a backup that also wakes the server
+  after a crash or restart (edit the URL in that file for your service; GitHub may run it a few minutes late and
+  disables scheduled workflows in repositories without activity for 60 days).
+
+One always-on service fits in Render's free monthly instance hours. Health pings do not count as use of the site:
+the background jobs run every minute only within 15 minutes of a real API request (`app.activity.active-window`) and
+about once an hour otherwise (`app.activity.idle-interval`), catching up on whatever they skipped. Neon therefore
+sleeps through quiet hours and only the first visitor after a quiet spell waits about a second for it to wake.
+
 **Client addresses and rate limits.** Render's proxy sends the visitor's address in `X-Forwarded-For`. The production
 profile uses `server.forward-headers-strategy: native`: Tomcat believes that header only when the connection comes from
 an *internal proxy* (default: private, loopback, link-local and CGNAT ranges, i.e. `10.0.0.0/8`, `172.16.0.0/12`,
@@ -269,7 +284,7 @@ Open the Vercel URL, then:
 
 | Symptom | Cause and fix |
 |---|---|
-| First request after a quiet period takes 30-60 s or times out | Render's free web service sleeps after 15 minutes without traffic and cold-starts a JVM. Warm it up only shortly before a demo: open `/api/v1/health` a minute or two beforehand and wait for `UP`. Do not ping it around the clock from a monitor, which would use up the free instance hours for no benefit. |
+| First request after a quiet period takes minutes or times out | Render's free web service sleeps after 15 minutes without traffic and cold-starts a JVM. Check that `KEEP_ALIVE_URL` is set to the service's own health URL and that the "Keep alive" GitHub workflow is enabled (Actions tab); see "Staying awake" above. |
 | Render deploy fails with `Unsafe production configuration` | The log lists each problem (secret, DB, URLs). Fix the named variables in the dashboard and redeploy. |
 | `RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET must be set in production` | Production has no mock payments. Add the test keys (step 3). |
 | `DEMO_PASSWORD must be set when the demo profile is active (every seeded account logs in with it)` | Set `DEMO_PASSWORD` or drop `demo` from `SPRING_PROFILES_ACTIVE`. |

@@ -18,6 +18,10 @@ services:
       # Remove ",demo" (and DEMO_PASSWORD) for a deployment without sample data.
       - key: SPRING_PROFILES_ACTIVE
         value: prod,demo
+      # The server pings its own health URL every 10 minutes so the free instance never sleeps (that endpoint does not
+      # touch the database). Change it if the service gets a different URL; delete it to let the service sleep.
+      - key: KEEP_ALIVE_URL
+        value: https://parkease-api-pb1f.onrender.com/api/v1/health
       # Render sets PORT itself (10000); the app listens on it.
       # Optional: INTERNAL_PROXIES (regex of proxy addresses whose X-Forwarded-For is believed), see docs/DEPLOYMENT.md.
 
