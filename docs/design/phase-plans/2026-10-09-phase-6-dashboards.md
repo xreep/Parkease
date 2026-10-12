@@ -1,14 +1,12 @@
 # Phase 6 — Owner Dashboard, Earnings, Reviews, Driver Pages
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
-
 **Goal:** Owners get a real dashboard (KPIs, charts, upcoming, approvals), an earnings ledger with CSV export and a per-slot week calendar; drivers can review completed bookings and see payments, stats and tabbed bookings; listings show reviews and a public availability calendar.
 
 **Architecture:** New `review` package (entity, service, controllers); `availability` gains a day-level calendar; new `owner/dashboard` services for stats, earnings and calendar (read-only, JPQL/native aggregate queries); `user` gains `/me/payments` and `/me/stats`. Frontend adds in-house SVG charts, owner overview/earnings/calendar/reviews pages, listing reviews + availability calendar, driver payments page and tabs.
 
 **Tech Stack:** Spring Boot 4.1.1 / Java 21 / PostgreSQL 16; React 19 + TS + Tailwind 4; TanStack Query; Vitest.
 
-**Spec:** `docs/superpowers/specs/2026-10-04-smart-parking-design.md` — §5, §8 and **§21 Phase 6 Decisions** (binding).
+**Spec:** `docs/design/specification.md` — §5, §8 and **§21 Phase 6 Decisions** (binding).
 
 **Plan format:** contracts, exact rules and required tests. Binding.
 

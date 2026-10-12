@@ -1,6 +1,6 @@
 # ParkEase architecture
 
-ParkEase is a single-page React application talking to one Spring Boot API that owns a PostgreSQL database. This document describes how the backend is organised, how the key flows work, and the rules that keep money and bookings correct. For the decisions behind them see sections 2 to 23 of the [design spec](superpowers/specs/2026-10-04-smart-parking-design.md).
+ParkEase is a single-page React application talking to one Spring Boot API that owns a PostgreSQL database. This document describes how the backend is organised, how the key flows work, and the rules that keep money and bookings correct. For the decisions behind them see sections 2 to 23 of the [design spec](design/specification.md).
 
 ## 1. System overview
 

@@ -1,14 +1,12 @@
 # Phase 2 — Owner Verification, Listings, Slots, Availability, Uploads, Approvals
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
-
 **Goal:** Verified parking owners can create complete listings (location pin, photos, slots, pricing, weekly hours, blocked times) and submit them; an admin approves owners and listings; demo data puts approved listings in every state/UT.
 
 **Architecture:** New backend feature packages `storage`, `listing`, `slot`, `availability`, `admin` plus additions to `owner`, `common`, `email`. Files go through a `FileStorage` interface (Cloudinary when `CLOUDINARY_URL` is set, otherwise local disk with HMAC-signed private URLs). Frontend adds an owner area (`/owner/**`) with a 6-step listing wizard and an admin area (`/admin/**`) with two review queues, using React-Leaflet for the map.
 
 **Tech Stack:** Spring Boot 4.1.1 / Java 21 / PostgreSQL 16 / Flyway; cloudinary-http5 2.5.0; React 19 + Vite + TS + Tailwind 4; leaflet + react-leaflet; TanStack Query; RHF + Zod 4; Vitest.
 
-**Spec:** `docs/superpowers/specs/2026-10-04-smart-parking-design.md` (sections 5, 6.9, 7, 8, 9 and **17. Phase 2 Adjustments**).
+**Spec:** `docs/design/specification.md` (sections 5, 6.9, 7, 8, 9 and **17. Phase 2 Adjustments**).
 
 **Plan format note (deliberate):** to keep cost down, this plan gives exact DDL, API contracts, DTO shapes, validation rules, error codes, and complete backend test code, plus full implementation code for the non-obvious parts (storage, signing, submit validation, seeding). For straightforward CRUD and UI the implementer writes code to the contract; the contracts and tests are binding.
 

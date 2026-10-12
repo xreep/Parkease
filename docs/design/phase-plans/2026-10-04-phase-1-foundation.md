@@ -1,14 +1,12 @@
 # Phase 1 — Foundation (Scaffold, Auth, Locations) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** A running Spring Boot API + React app where drivers and owners can register, verify email, log in, reset passwords, manage their profile, and browse all Indian states/UTs and their cities.
 
 **Architecture:** Monorepo with `backend/` (Spring Boot 4.1, package-by-feature under `com.smartparking`, PostgreSQL + Flyway, stateless JWT auth) and `frontend/` (React + Vite + TypeScript + Tailwind v4, TanStack Query, Axios with auto-refresh). Email, payments and storage use pluggable providers with mock fallbacks; Phase 1 introduces only the email provider.
 
 **Tech Stack:** Java 21, Spring Boot 4.1.1 (Web MVC, Security 7, Data JPA/Hibernate 7, Flyway, Validation, Mail, Actuator), jjwt 0.13.0, Bucket4j 8.21.0, springdoc-openapi 3.1.1, Lombok, PostgreSQL 16; React 19, Vite, TypeScript, Tailwind CSS v4, React Router, TanStack Query, Axios, React Hook Form + Zod 4, sonner, lucide-react, Vitest + Testing Library.
 
-**Spec:** `docs/superpowers/specs/2026-10-04-smart-parking-design.md`
+**Spec:** `docs/design/specification.md`
 
 **Phase roadmap (each phase gets its own plan file, written when the previous phase is done):**
 1. **Foundation** — this plan
@@ -6632,7 +6630,7 @@ A web platform where private parking owners rent out unused slots and drivers fi
 
 - **Backend:** Spring Boot 4.1 (Java 21), PostgreSQL 16, Flyway, Spring Security + JWT
 - **Frontend:** React + Vite + TypeScript, Tailwind CSS v4, TanStack Query
-- **Docs:** [Design spec](docs/superpowers/specs/2026-10-04-smart-parking-design.md) · API docs at `http://localhost:8080/swagger-ui` when running
+- **Docs:** [Design spec](docs/design/specification.md) · API docs at `http://localhost:8080/swagger-ui` when running
 
 ## Status
 

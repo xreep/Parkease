@@ -1,14 +1,12 @@
 # Phase 5 — Booking Lifecycle, Cancellations, Notifications, Reminders
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
-
 **Goal:** Bookings move through ACTIVE/COMPLETED automatically; drivers can cancel with an exact policy-based refund preview; owners can cancel confirmed bookings (full refund); every user gets in-app notifications (bell, dropdown, page) alongside emails; drivers get a start reminder and owners an approval nudge.
 
 **Architecture:** New `notification` package with a `Notifier` facade (email + notification in one call) that replaces direct email sends; `RefundService` generalised to partial amounts; `cancellation` logic in `booking` (`CancellationPolicyCalculator`, `CancellationService`); `BookingJobs` gains lifecycle and reminder jobs. Frontend adds a notification bell + page and cancel flows.
 
 **Tech Stack:** Spring Boot 4.1.1 / Java 21 / PostgreSQL 16; React 19 + TS + Tailwind 4; TanStack Query; Vitest.
 
-**Spec:** `docs/superpowers/specs/2026-10-04-smart-parking-design.md` — §6.5, §6.6, §19 and **§20 Phase 5 Decisions** (binding).
+**Spec:** `docs/design/specification.md` — §6.5, §6.6, §19 and **§20 Phase 5 Decisions** (binding).
 
 **Plan format:** contracts, exact rules/tables and required tests (complete code only where it removes ambiguity). Binding.
 

@@ -1,10 +1,8 @@
 # Phase 8 — Demo Data, Hardening, Deployment, CI, Polish, Docs
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
-
 **Goal:** Make ParkEase demo-ready and deployable: realistic seeded data, hardened security, deploy configs for Render + Neon + Vercel + Cloudinary, GitHub Actions CI, frontend performance/a11y polish and final documentation.
 
-**Spec:** `docs/superpowers/specs/2026-10-04-smart-parking-design.md` — **§23 Phase 8 Decisions** (binding), §9 Security, §13 Deployment.
+**Spec:** `docs/design/specification.md` — **§23 Phase 8 Decisions** (binding), §9 Security, §13 Deployment.
 
 ## Global Constraints
 

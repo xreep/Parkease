@@ -1,14 +1,12 @@
 # Phase 4 — Booking, Razorpay Payments, Owner Approvals, Receipts
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
-
 **Goal:** Drivers add vehicles, reserve a slot (10-minute hold), pay with Razorpay test mode (or a built-in mock when keys are absent), and get a confirmed booking with QR code and PDF receipt; owners approve or reject requests on manual-approve listings (rejection/timeout refunds in full); availability everywhere accounts for bookings; no double-booking is possible.
 
 **Architecture:** New backend packages `vehicle`, `booking`, `payment`, `invoice`, `earning` (+ jobs). Booking creation re-validates server-side (TimeWindow, evaluator, pricing), allocates a slot under a PostgreSQL exclusion constraint, and creates a provider order. Confirmation is idempotent and triggered by the client-side signature verification or the webhook. Frontend adds a driver area (vehicles, bookings), checkout with Razorpay Checkout.js or a mock dialog, a booking detail/confirmation page with QR + receipt download, and owner booking requests.
 
 **Tech Stack:** Spring Boot 4.1.1 / Java 21 / PostgreSQL 16 (`btree_gist`); `com.razorpay:razorpay-java:1.4.10`; `com.github.librepdf:openpdf:3.0.5`; React 19 + TS + Tailwind 4; `qrcode.react` 4.x; TanStack Query; Vitest.
 
-**Spec:** `docs/superpowers/specs/2026-10-04-smart-parking-design.md` — §5 (bookings/payments tables), §6.3, §6.4, §6.6 (hold/approval only), §7, §8 and **§19 Phase 4 Decisions** (binding).
+**Spec:** `docs/design/specification.md` — §5 (bookings/payments tables), §6.3, §6.4, §6.6 (hold/approval only), §7, §8 and **§19 Phase 4 Decisions** (binding).
 
 **Plan format:** exact DDL, state machine, algorithms and complete tests for the risky core (allocation, signatures, confirmation idempotency); contracts + required test cases elsewhere. Contracts and tests are binding.
 

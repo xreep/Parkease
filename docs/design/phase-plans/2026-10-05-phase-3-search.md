@@ -1,14 +1,12 @@
 # Phase 3 — Driver Search, Map and Public Listing Pages
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
-
 **Goal:** Drivers search near a place for a time window and vehicle type, see available listings on a clustered map and a list with prices and free slots, open a public listing page with a live price quote, and browse city pages.
 
 **Architecture:** Backend adds a pure `pricing` module (quote calculator + time-window rules), an `AvailabilityEvaluator`, and a `search` package (native candidate query → batch evaluation → sort/paginate) plus public listing endpoints. Frontend adds a place search combobox, a URL-driven search page (list + react-leaflet-cluster map), a public listing page with booking card, and city pages.
 
 **Tech Stack:** Spring Boot 4.1.1 / Java 21 / PostgreSQL 16; React 19 + Vite + TS + Tailwind 4; react-leaflet 5 + react-leaflet-cluster 4; TanStack Query; Vitest.
 
-**Spec:** `docs/superpowers/specs/2026-10-04-smart-parking-design.md` — §6.1, §6.2, §7, §8 and **§18 Phase 3 Decisions** (binding).
+**Spec:** `docs/design/specification.md` — §6.1, §6.2, §7, §8 and **§18 Phase 3 Decisions** (binding).
 
 **Plan format:** exact contracts, algorithms, and complete tests for the pricing/availability core; contract-level specs plus required test cases for the rest. Contracts and tests are binding.
 

@@ -1,14 +1,12 @@
 # Phase 7 — Admin Panel, Disputes, Payouts, Settings, Reports
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
-
 **Goal:** Admins run the platform: KPI dashboard, user/listing/review/location moderation, bookings monitor with admin cancel, disputes with refunds, payments/refunds with manual retry, owner payouts, platform settings with price guidelines, usage/revenue reports with CSV, and an audit log. Drivers can raise disputes; owners can respond and see pricing guidance.
 
 **Architecture:** `admin` package grows into sub-packages (`admin/users`, `admin/bookings`, `admin/payouts`, `admin/reports`, `admin/audit`, …); new `settings` package (`PlatformSettings` service with typed getters and an in-memory cache invalidated on update) used by pricing/booking; new `dispute` package. Frontend `pages/admin/*` with a sectioned admin nav.
 
 **Tech Stack:** Spring Boot 4.1.1 / Java 21 / PostgreSQL 16; React 19 + TS + Tailwind 4; TanStack Query; Vitest.
 
-**Spec:** `docs/superpowers/specs/2026-10-04-smart-parking-design.md` — §5, §8 (KPI definitions) and **§22 Phase 7 Decisions** (binding).
+**Spec:** `docs/design/specification.md` — §5, §8 (KPI definitions) and **§22 Phase 7 Decisions** (binding).
 
 ## Global Constraints
 
