@@ -35,9 +35,10 @@ public class SearchController {
             @RequestParam(required = false) BigDecimal maxPricePerHour,
             @RequestParam(required = false) Boolean open24x7,
             @RequestParam(required = false) String sort,
+            @RequestParam(required = false) Boolean widen,
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size) {
         return service.search(SearchCriteria.of(lat, lng, radiusKm, start, end, vehicleType, types, amenities,
-                maxPricePerHour, open24x7, sort, page, size, clock));
+                maxPricePerHour, open24x7, sort, page, size, widen, clock));
     }
 }

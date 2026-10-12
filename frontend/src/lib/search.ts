@@ -192,6 +192,8 @@ export function toSearchParams(p: SearchParams): URLSearchParams {
 export type SearchApiQuery = {
   lat: number
   lng: number
+  /** No distance chosen: the server looks further (10, then 25 km) until it finds parking. */
+  widen?: boolean
   start?: string
   end?: string
   vehicleType?: VehicleType
@@ -213,6 +215,7 @@ export function toApiQuery(p: SearchParams): SearchApiQuery {
   }
   if (p.vehicle) q.vehicleType = p.vehicle
   if (p.radius !== undefined) q.radiusKm = p.radius
+  else q.widen = true
   if (p.types?.length) q.types = p.types
   if (p.amenities?.length) q.amenities = p.amenities
   if (p.maxPrice !== undefined && p.maxPrice > 0) q.maxPricePerHour = p.maxPrice

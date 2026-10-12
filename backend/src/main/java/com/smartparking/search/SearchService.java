@@ -60,9 +60,22 @@ public class SearchService {
     }
 
     @Transactional(readOnly = true)
-    public SearchResponse search(SearchCriteria c) {
-        List<Candidate> found = candidates.findCandidates(c);
-        List<Match> matches = found.isEmpty() ? List.of() : evaluate(c, found);
+    public SearchResponse search(SearchCriteria requested) {
+        SearchCriteria c = requested;
+        List<Match> matches;
+        if (requested.widen()) {
+            // One pass over the widest radius, then keep the smallest radius that has enough parking: a city-name
+            // search centred on a landmark still finds the spots on the edge of town without extra round trips.
+            SearchCriteria widest = requested.withRadius(SearchCriteria.MAX_RADIUS_KM);
+            List<Candidate> found = candidates.findCandidates(widest);
+            List<Match> all = found.isEmpty() ? List.of() : evaluate(widest, found);
+            double radius = widenedRadius(requested.radiusKm(), all);
+            matches = all.stream().filter(m -> m.distanceKm() <= radius).toList();
+            c = requested.withRadius(radius);
+        } else {
+            List<Candidate> found = candidates.findCandidates(c);
+            matches = found.isEmpty() ? List.of() : evaluate(c, found);
+        }
 
         List<Match> sorted = new ArrayList<>(matches);
         sorted.sort(comparator(c));
@@ -78,6 +91,27 @@ public class SearchService {
                 : new SearchResponse.Window(c.window().start(), c.window().end());
         return new SearchResponse(content, c.page(), c.size(), total, totalPages,
                 new SearchResponse.Center(c.lat(), c.lng()), c.radiusKm(), window);
+    }
+
+    /**
+     * The smallest of the requested radius and the wider steps that has enough results; failing that, the smallest
+     * that has any; failing that (nothing within the widest radius), the widest one, so the page can say so.
+     */
+    private static double widenedRadius(double requested, List<Match> all) {
+        List<Double> radii = new ArrayList<>(List.of(requested));
+        for (double step : SearchCriteria.WIDEN_STEPS_KM) {
+            if (step > requested) {
+                radii.add(step);
+            }
+        }
+        for (int enough : new int[] {SearchCriteria.WIDEN_ENOUGH, 1}) {
+            for (double r : radii) {
+                if (all.stream().filter(m -> m.distanceKm() <= r).count() >= enough) {
+                    return r;
+                }
+            }
+        }
+        return radii.get(radii.size() - 1);
     }
 
     private List<Match> evaluate(SearchCriteria c, List<Candidate> found) {

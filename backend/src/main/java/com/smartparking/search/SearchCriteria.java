@@ -26,9 +26,14 @@ public record SearchCriteria(
         boolean open24x7,
         SearchSort sort,
         int page,
-        int size) {
+        int size,
+        boolean widen) {
 
     public static final double DEFAULT_RADIUS_KM = 5;
+    /** Radii tried in turn when {@code widen} is set: the requested one first, then these. */
+    public static final double[] WIDEN_STEPS_KM = {10, 25};
+    /** A widened search stops at the first radius with at least this many results. */
+    public static final int WIDEN_ENOUGH = 3;
     public static final double MIN_RADIUS_KM = 0.5;
     public static final double MAX_RADIUS_KM = 25;
     public static final int DEFAULT_SIZE = 20;
@@ -44,7 +49,8 @@ public record SearchCriteria(
     /** Raw query parameters in, validated criteria out; throws INVALID_LOCATION / INVALID_TIME_RANGE / INVALID_PARAMETER. */
     public static SearchCriteria of(Double lat, Double lng, Double radiusKm, Instant start, Instant end,
             VehicleType vehicleType, Collection<ListingType> types, Collection<Amenity> amenities,
-            BigDecimal maxPricePerHour, Boolean open24x7, String sort, Integer page, Integer size, Clock clock) {
+            BigDecimal maxPricePerHour, Boolean open24x7, String sort, Integer page, Integer size, Boolean widen,
+            Clock clock) {
         if (lat == null || lng == null || !Double.isFinite(lat) || !Double.isFinite(lng)
                 || lat < MIN_LAT || lat > MAX_LAT || lng < MIN_LNG || lng > MAX_LNG) {
             throw ApiException.badRequest("INVALID_LOCATION", "Choose a location in India");
@@ -61,6 +67,12 @@ public record SearchCriteria(
                 amenities == null || amenities.isEmpty() ? Set.of() : EnumSet.copyOf(amenities),
                 maxPricePerHour, Boolean.TRUE.equals(open24x7), SearchSort.parse(sort),
                 page == null ? 0 : Math.max(0, page),
-                size == null ? DEFAULT_SIZE : Math.max(1, Math.min(MAX_SIZE, size)));
+                size == null ? DEFAULT_SIZE : Math.max(1, Math.min(MAX_SIZE, size)), Boolean.TRUE.equals(widen));
+    }
+
+    /** The same search over another radius. */
+    public SearchCriteria withRadius(double radius) {
+        return new SearchCriteria(lat, lng, radius, window, vehicleType, types, amenities, maxPricePerHour, open24x7,
+                sort, page, size, widen);
     }
 }

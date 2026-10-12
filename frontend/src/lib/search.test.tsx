@@ -41,7 +41,7 @@ describe('search params', () => {
     const base = { place: 'X', lat: 18.5, lng: 73.8 }
     expect(toSearchParams({ ...base, maxPrice: 0 }).has('maxPrice')).toBe(false)
     expect(toSearchParams({ ...base, maxPrice: -5 }).has('maxPrice')).toBe(false)
-    expect(toApiQuery({ ...base, maxPrice: 0 })).toEqual({ lat: 18.5, lng: 73.8 })
+    expect(toApiQuery({ ...base, maxPrice: 0 })).toEqual({ lat: 18.5, lng: 73.8, widen: true })
     expect(parseSearchParams(toSearchParams({ ...base, maxPrice: 0 }))).toEqual(base)
   })
 
@@ -122,7 +122,12 @@ describe('search params', () => {
       sort: 'price',
       page: 2,
     })
-    expect(toApiQuery({ place: 'X', lat: 1, lng: 2 })).toEqual({ lat: 1, lng: 2 })
+    expect(toApiQuery({ place: 'X', lat: 1, lng: 2 })).toEqual({ lat: 1, lng: 2, widen: true })
+  })
+
+  it('asks the server to widen the radius only when no distance was chosen', () => {
+    expect(toApiQuery({ place: 'X', lat: 1, lng: 2 }).widen).toBe(true)
+    expect(toApiQuery({ place: 'X', lat: 1, lng: 2, radius: 10 }).widen).toBeUndefined()
   })
 })
 

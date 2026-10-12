@@ -76,7 +76,10 @@ function SearchResults({ params }: { params: SearchParams }) {
     document.getElementById(`result-${id}`)?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
   }
 
-  const nextRadius = RADIUS_OPTIONS.find((km) => km > filters.radius)
+  // With no distance chosen the server widens the search (5 → 10 → 25 km) and reports the radius it used.
+  const usedRadius = params.radius === undefined && data && !stale ? data.radiusKm : filters.radius
+  const widened = params.radius === undefined && usedRadius > filters.radius
+  const nextRadius = RADIUS_OPTIONS.find((km) => km > usedRadius)
   const place = params.place || 'the selected location'
   const minutes = hasWindow ? (new Date(params.end!).getTime() - new Date(params.start!).getTime()) / 60_000 : 0
 
@@ -96,6 +99,11 @@ function SearchResults({ params }: { params: SearchParams }) {
           <h1 className="text-lg font-semibold break-words">
             {data && !stale ? `${data.totalElements} parking ${data.totalElements === 1 ? 'spot' : 'spots'} near ${place}` : 'Searching for parking…'}
           </h1>
+          {widened && data && data.totalElements > 0 && (
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              {`No spots within ${filters.radius} km — showing spots within ${usedRadius} km.`}
+            </p>
+          )}
           {hasWindow && (
             <p className="text-sm text-slate-600 dark:text-slate-400">
               {`${formatWindow(params.start!, params.end!)} · ${durationLabel(minutes)}`}
@@ -197,7 +205,9 @@ function SearchResults({ params }: { params: SearchParams }) {
           ) : results.length === 0 ? (
             <div className="space-y-3 rounded-xl border border-dashed border-slate-300 p-6 text-center dark:border-slate-700">
               <p className="font-medium">
-                {hasWindow ? 'No parking found here for these times.' : 'No parking found here.'}
+                {widened
+                  ? `No parking within ${usedRadius} km${hasWindow ? ' for these times' : ''}.`
+                  : hasWindow ? 'No parking found here for these times.' : 'No parking found here.'}
               </p>
               <div className="flex flex-wrap justify-center gap-2">
                 {nextRadius !== undefined && (
@@ -233,7 +243,7 @@ function SearchResults({ params }: { params: SearchParams }) {
           <ResultsMap
             results={results}
             center={{ lat: params.lat, lng: params.lng }}
-            radiusKm={filters.radius}
+            radiusKm={usedRadius}
             highlightedId={highlightedId}
             loading={isPending || stale}
             onMarkerClick={showMarker}

@@ -150,6 +150,54 @@ class SearchControllerTest {
     }
 
     @Test
+    void widenGrowsTheRadiusUntilThereIsParking() throws Exception {
+        Long eight = listing("Eight km", 8, 30);
+        search("&widen=true").andExpect(status().isOk())
+                .andExpect(jsonPath("$.radiusKm").value(10.0))
+                .andExpect(jsonPath("$.content[*].id").value(contains(eight.intValue())));
+    }
+
+    @Test
+    void widenGoesUpToTwentyFiveKilometres() throws Exception {
+        Long eighteen = listing("Eighteen km", 18, 30);
+        search("&widen=true")
+                .andExpect(jsonPath("$.radiusKm").value(25.0))
+                .andExpect(jsonPath("$.content[*].id").value(contains(eighteen.intValue())));
+    }
+
+    @Test
+    void widenKeepsTheRequestedRadiusWhenItAlreadyHasEnoughParking() throws Exception {
+        listing("One", 1, 30);
+        listing("Two", 2, 30);
+        listing("Three", 3, 30);
+        Long far = listing("Eight", 8, 30);
+        search("&widen=true")
+                .andExpect(jsonPath("$.radiusKm").value(5.0))
+                .andExpect(jsonPath("$.totalElements").value(3))
+                .andExpect(jsonPath("$.content[*].id").value(org.hamcrest.Matchers.not(hasItem(far.intValue()))));
+    }
+
+    @Test
+    void widenStopsAtTheFirstRadiusWithEnoughParking() throws Exception {
+        listing("Near", 1, 30);
+        listing("Eight", 8, 30);
+        listing("Nine", 9, 30);
+        Long twenty = listing("Twenty", 20, 30);
+        search("&widen=true")
+                .andExpect(jsonPath("$.radiusKm").value(10.0))
+                .andExpect(jsonPath("$.totalElements").value(3))
+                .andExpect(jsonPath("$.content[*].id").value(org.hamcrest.Matchers.not(hasItem(twenty.intValue()))));
+    }
+
+    @Test
+    void widenWithNothingWithinTwentyFiveKilometresSaysSo() throws Exception {
+        listing("Forty", 40, 30);
+        search("&widen=true")
+                .andExpect(jsonPath("$.radiusKm").value(25.0))
+                .andExpect(jsonPath("$.content").value(empty()));
+    }
+
+    @Test
     void radiusExcludesFarListings() throws Exception {
         Long far = listing("Eight km", 8, 30);
         search("").andExpect(jsonPath("$.content").value(empty()));

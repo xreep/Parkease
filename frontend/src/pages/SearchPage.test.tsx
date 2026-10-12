@@ -73,6 +73,19 @@ describe('SearchPage', () => {
 
   const lastParams = () => mock.history.get.filter((r) => r.url === '/search').at(-1)!.params as Record<string, unknown>
 
+  it('says so when the search had to look further than 5 km', async () => {
+    mock.onGet('/search').reply(200, response([result()], { radiusKm: 10 }))
+    renderApp(SEARCH_URL)
+    expect(await screen.findByText(/No spots within 5 km — showing spots within 10 km/)).toBeInTheDocument()
+    expect(mock.history.get.at(-1)?.params.widen).toBe(true)
+  })
+
+  it('says when nothing was found even 25 km away', async () => {
+    mock.onGet('/search').reply(200, response([], { radiusKm: 25, totalElements: 0, totalPages: 0 }))
+    renderApp(SEARCH_URL)
+    expect(await screen.findByText(/No parking within 25 km/)).toBeInTheDocument()
+  })
+
   it('lists the results with prices, slots and the estimated total', async () => {
     mock.onGet('/search').reply(200, response([result(), second]))
     renderApp(SEARCH_URL)
