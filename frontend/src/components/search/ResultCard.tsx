@@ -93,7 +93,9 @@ export function ResultCard({ result: r, start, end, vehicle, highlighted, onHigh
 
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm">
           <span className="text-slate-600 dark:text-slate-400">
-            {r.freeSlots !== null ? `${r.freeSlots} of ${r.totalSlots} slots free` : `${r.totalSlots} slots`}
+            {r.freeSlots !== null
+              ? `${r.freeSlots} of ${r.totalSlots} ${r.totalSlots === 1 ? 'slot' : 'slots'} free`
+              : `${r.totalSlots} ${r.totalSlots === 1 ? 'slot' : 'slots'}`}
           </span>
           {r.quote && <span className="font-semibold">{`${formatINR(r.quote.totalAmount)} total`}</span>}
         </div>

@@ -80,6 +80,13 @@ describe('SearchPage', () => {
     expect(mock.history.get.at(-1)?.params.widen).toBe(true)
   })
 
+  it('uses the singular for a single slot', async () => {
+    mock.onGet('/search').reply(200, response([result({ totalSlots: 1, freeSlots: null }), result({ id: 8, totalSlots: 1, freeSlots: 1 })]))
+    renderApp(SEARCH_URL)
+    expect(await screen.findByText('1 slot')).toBeInTheDocument()
+    expect(screen.getByText('1 of 1 slot free')).toBeInTheDocument()
+  })
+
   it('says when nothing was found even 25 km away', async () => {
     mock.onGet('/search').reply(200, response([], { radiusKm: 25, totalElements: 0, totalPages: 0 }))
     renderApp(SEARCH_URL)
