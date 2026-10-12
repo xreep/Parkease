@@ -34,7 +34,7 @@
 - Secrets only from environment variables. Never commit `.env`.
 - Tests run against a local PostgreSQL database `smartparking_test` (Docker is not installed; H2 is not allowed because later phases need Postgres exclusion constraints).
 - Frontend brand name: **SmartPark**. Brand colour scale `brand-50…900` (emerald). Light + dark mode via `.dark` class on `<html>`.
-- Commits: conventional style (`feat:`, `test:`, `chore:`, `docs:`), each ending with the trailer `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+- Commits: conventional style (`feat:`, `test:`, `chore:`, `docs:`), authored by the repository owner.
 
 ## File Map (created in this phase)
 
@@ -488,9 +488,7 @@ Expected: `BUILD SUCCESS`, 1 test passing. (Write the test before the controller
 ```bash
 cd "/Users/adityaraj/my projects/smart parking slot rental & availability platform"
 git add .gitignore backend
-git commit -m "chore: scaffold Spring Boot backend with health endpoint
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git commit -m "chore: scaffold Spring Boot backend with health endpoint"
 ```
 
 ---
@@ -777,9 +775,7 @@ Expected: all tests PASS.
 
 ```bash
 git add backend
-git commit -m "feat: uniform ProblemDetail error handling with error codes
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git commit -m "feat: uniform ProblemDetail error handling with error codes"
 ```
 
 ---
@@ -1301,9 +1297,7 @@ Expected: all PASS (Flyway applies V1; Hibernate `validate` succeeds).
 
 ```bash
 git add backend
-git commit -m "feat: users, owner profiles and auth token schema
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git commit -m "feat: users, owner profiles and auth token schema"
 ```
 
 ---
@@ -1613,9 +1607,7 @@ Expected: all PASS.
 
 ```bash
 git add backend
-git commit -m "feat: JWT service and secure token utilities
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git commit -m "feat: JWT service and secure token utilities"
 ```
 
 ---
@@ -1960,9 +1952,7 @@ Expected: all PASS. (The `GlobalExceptionHandlerTest` still passes because `@Wit
 
 ```bash
 git add backend
-git commit -m "feat: stateless JWT security with role rules, CORS and Swagger
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git commit -m "feat: stateless JWT security with role rules, CORS and Swagger"
 ```
 
 ---
@@ -2497,9 +2487,7 @@ Expected: all PASS.
 
 ```bash
 git add backend
-git commit -m "feat: register, login, refresh-token rotation and logout
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git commit -m "feat: register, login, refresh-token rotation and logout"
 ```
 
 ---
@@ -3051,9 +3039,7 @@ Expected: all PASS.
 
 ```bash
 git add backend
-git commit -m "feat: email sender with console fallback, email verification and password reset
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git commit -m "feat: email sender with console fallback, email verification and password reset"
 ```
 
 ---
@@ -3342,9 +3328,7 @@ Expected: all PASS.
 
 ```bash
 git add backend
-git commit -m "feat: current-user profile, password change and resend verification
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git commit -m "feat: current-user profile, password change and resend verification"
 ```
 
 ---
@@ -3488,9 +3472,7 @@ Expected: all PASS (test profile allows 10000/min, so integration tests are unaf
 
 ```bash
 git add backend
-git commit -m "feat: per-IP rate limiting on auth endpoints
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git commit -m "feat: per-IP rate limiting on auth endpoints"
 ```
 
 ---
@@ -4087,9 +4069,7 @@ Expected: all PASS.
 
 ```bash
 git add backend
-git commit -m "feat: all-India states, union territories and 114 cities with public lookup API
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git commit -m "feat: all-India states, union territories and 114 cities with public lookup API"
 ```
 
 ---
@@ -4301,9 +4281,7 @@ Expected in log: Flyway applies V1 and V2 to `smartparking_dev`, `Demo accounts 
 
 ```bash
 git add backend
-git commit -m "feat: dev demo accounts and environment template
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git commit -m "feat: dev demo accounts and environment template"
 ```
 
 ---
@@ -4674,9 +4652,7 @@ Expected: tests PASS; build succeeds with no TypeScript errors.
 ```bash
 cd "/Users/adityaraj/my projects/smart parking slot rental & availability platform"
 git add frontend
-git commit -m "chore: scaffold React frontend with Tailwind v4, theme and UI primitives
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git commit -m "chore: scaffold React frontend with Tailwind v4, theme and UI primitives"
 ```
 
 ---
@@ -5058,9 +5034,7 @@ Expected: all PASS.
 
 ```bash
 git add frontend
-git commit -m "feat: API client with token refresh, error helpers and auth state
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git commit -m "feat: API client with token refresh, error helpers and auth state"
 ```
 
 ---
@@ -5807,9 +5781,7 @@ Expected: all tests PASS, build succeeds.
 
 ```bash
 git add frontend
-git commit -m "feat: app shell, role-guarded routes, login and registration
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git commit -m "feat: app shell, role-guarded routes, login and registration"
 ```
 
 ---
@@ -6289,9 +6261,7 @@ Expected: all PASS, build succeeds.
 
 ```bash
 git add frontend
-git commit -m "feat: password reset, email verification and account settings pages
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git commit -m "feat: password reset, email verification and account settings pages"
 ```
 
 ---
@@ -6630,9 +6600,7 @@ Expected: all PASS, build succeeds.
 
 ```bash
 git add frontend
-git commit -m "feat: home page with all-India browse and state pages
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git commit -m "feat: home page with all-India browse and state pages"
 ```
 
 ---
@@ -6773,9 +6741,7 @@ Stop both servers afterwards.
 
 ```bash
 git add README.md frontend/.env.example
-git commit -m "docs: README with setup, demo accounts and test instructions
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git commit -m "docs: README with setup, demo accounts and test instructions"
 ```
 
 ---
