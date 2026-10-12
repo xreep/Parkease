@@ -190,6 +190,15 @@ class SearchControllerTest {
     }
 
     @Test
+    void widenShowsEverythingFoundWhenNoRadiusHasEnough() throws Exception {
+        Long near = listing("Near", 1, 30);
+        Long eight = listing("Eight", 8, 30);
+        search("&widen=true")
+                .andExpect(jsonPath("$.radiusKm").value(10.0))
+                .andExpect(jsonPath("$.content[*].id").value(contains(near.intValue(), eight.intValue())));
+    }
+
+    @Test
     void widenWithNothingWithinTwentyFiveKilometresSaysSo() throws Exception {
         listing("Forty", 40, 30);
         search("&widen=true")

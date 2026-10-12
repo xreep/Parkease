@@ -94,8 +94,9 @@ public class SearchService {
     }
 
     /**
-     * The smallest of the requested radius and the wider steps that has enough results; failing that, the smallest
-     * that has any; failing that (nothing within the widest radius), the widest one, so the page can say so.
+     * The smallest of the requested radius and the wider steps that has enough results. When none has enough, the
+     * smallest one that still shows everything found within the widest radius (so a lone spot on the edge of town is
+     * not hidden behind one closer spot); with nothing found at all, the widest radius, so the page can say so.
      */
     private static double widenedRadius(double requested, List<Match> all) {
         List<Double> radii = new ArrayList<>(List.of(requested));
@@ -104,11 +105,11 @@ public class SearchService {
                 radii.add(step);
             }
         }
-        for (int enough : new int[] {SearchCriteria.WIDEN_ENOUGH, 1}) {
-            for (double r : radii) {
-                if (all.stream().filter(m -> m.distanceKm() <= r).count() >= enough) {
-                    return r;
-                }
+        long everything = all.size();
+        long target = Math.min(SearchCriteria.WIDEN_ENOUGH, everything);
+        for (double r : radii) {
+            if (target > 0 && all.stream().filter(m -> m.distanceKm() <= r).count() >= target) {
+                return r;
             }
         }
         return radii.get(radii.size() - 1);
